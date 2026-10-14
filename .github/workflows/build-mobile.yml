@@ -66,7 +66,7 @@ jobs:
         uses: cargo-bins/cargo-binstall@94dc7fe43d6ed7bfa6a6ea24f60f85e3f41dd104
 
       - name: Install Dioxus CLI
-        run: cargo binstall "dioxus-cli${DIOXUS_CLI_VERSION}" --no-confirm --force
+        run: cargo binstall "dioxus-cli@${DIOXUS_CLI_VERSION}" --no-confirm --force
 
       - name: Validate compiled configuration
         shell: bash
@@ -121,7 +121,7 @@ jobs:
         uses: cargo-bins/cargo-binstall@94dc7fe43d6ed7bfa6a6ea24f60f85e3f41dd104
 
       - name: Install Dioxus CLI
-        run: cargo binstall "dioxus-cli${DIOXUS_CLI_VERSION}" --no-confirm --force
+        run: cargo binstall "dioxus-cli@${DIOXUS_CLI_VERSION}" --no-confirm --force
 
       - name: Validate compiled configuration
         shell: bash

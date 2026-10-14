@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-FROM rust:1.89-bookworm AS builder
+FROM rust:1.95-bookworm AS builder
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -22,10 +22,8 @@ RUN rustup target add wasm32-unknown-unknown \
 WORKDIR /app
 COPY . .
 COPY --from=web-dependencies /app/node_modules /app/node_modules
-# Local development patches the three shared crates to sibling repositories
-# through .cargo/config.toml, which .dockerignore keeps out of the image. With
-# no patch here they resolve from crates.io, where they are published, like any
-# other dependency.
+# Local development uses sibling libraries through .cargo/config.toml.
+# .dockerignore excludes those overrides; this build uses crates.io.
 
 RUN dx build --web --fullstack --release
 
