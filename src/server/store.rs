@@ -224,7 +224,7 @@ impl AppServerState {
     ) -> usize {
         let rows: Vec<DbChannel> = match self
             .db
-            .query("SELECT channel_id, name, handle, avatar_url, subscriber_count, subscribed, subscription_content, description, banner_url FROM channel WHERE subscribed = true")
+            .query("SELECT channel_id, name, handle, avatar_url, subscriber_count, subscribed, subscription_content, description, banner_url FROM channel WHERE subscribed = true AND (subscriber_count_verified_at = NONE OR avatar_url = NONE)")
             .await
             .and_then(|mut response| response.take(0))
         {
@@ -239,9 +239,6 @@ impl AppServerState {
             .map(Channel::from)
             .filter(|channel| channel.id.starts_with("UC") && !channel.id.starts_with("UC-tawny"))
             .filter(|channel| only.is_none_or(|ids| ids.contains(&channel.id)))
-            .filter(|channel| {
-                channel.avatar_url.is_none() || channel.subscriber_count.trim().is_empty()
-            })
             .take(limit)
             .collect::<Vec<_>>();
         if candidates.is_empty() {
@@ -263,9 +260,40 @@ impl AppServerState {
                     return false;
                 }
             };
-            let discovered = rusty_channel_to_channel(&page, channel.subscribed);
+            let mut discovered = rusty_channel_to_channel(&page, channel.subscribed);
+            let info = youtube_call(
+                query.channel_info(&channel.id),
+                "extract channel subscriber metadata",
+            )
+            .await;
+            if let Ok(info) = &info {
+                discovered.subscriber_count = info
+                    .subscriber_count
+                    .map(|count| compact_count(count as i64, ""))
+                    .unwrap_or_default();
+            } else {
+                discovered.subscriber_count = channel.subscriber_count.clone();
+            }
             match self.store_channel_metadata(&channel, &discovered).await {
-                Ok(changed) => changed,
+                Ok(changed) => {
+                    if let Ok(info) = info {
+                        match self
+                            .store_subscriber_count(&channel.id, info.subscriber_count)
+                            .await
+                        {
+                            Ok(()) => true,
+                            Err(error) => {
+                                eprintln!(
+                                    "could not verify subscriber count for {}: {error:#}",
+                                    channel.id
+                                );
+                                changed
+                            }
+                        }
+                    } else {
+                        changed
+                    }
+                }
                 Err(error) => {
                     eprintln!("could not store metadata for {}: {error:#}", channel.id);
                     false
@@ -276,6 +304,20 @@ impl AppServerState {
         .filter(|changed| std::future::ready(*changed))
         .count()
         .await
+    }
+
+    /// About's named field is authoritative, including a hidden count. Mark
+    /// verified rows so the background worker repairs old header counts once.
+    pub(crate) async fn store_subscriber_count(
+        &self,
+        channel_id: &str,
+        count: Option<u64>,
+    ) -> Result<()> {
+        self.db.query("UPDATE channel SET subscriber_count = $count, subscriber_count_verified_at = time::now() WHERE channel_id = $channel_id")
+            .bind(("channel_id", channel_id.to_string()))
+            .bind(("count", count.map(|count| compact_count(count as i64, "")).unwrap_or_default()))
+            .await?.check()?;
+        Ok(())
     }
 
     /// Write fetched channel facts onto an existing row without touching who

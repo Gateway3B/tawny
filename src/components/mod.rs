@@ -4,6 +4,7 @@ mod durations;
 mod explore;
 mod feed;
 mod library;
+mod linkify;
 mod overlays;
 mod player;
 mod playlists;

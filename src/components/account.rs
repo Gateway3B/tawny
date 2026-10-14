@@ -13,12 +13,12 @@
 
 use dioxus::prelude::*;
 use g3_ui::{
-    Button, ButtonExpand, ButtonFill, Card, Color, Content, ContentWidth, Input, InputType, Space,
-    Stack, Text, TextTone, TextVariant,
+    AlertButton, AlertOptions, Button, ButtonExpand, ButtonFill, Card, Color, Content,
+    ContentWidth, Input, InputType, Space, Stack, Text, TextTone, TextVariant, use_alert,
 };
 
 use crate::{
-    api::{register_account, sign_in_to_account, sign_out_of_account},
+    api::{delete_account, register_account, sign_in_to_account, sign_out_of_account},
     auth::{SessionStatus, readable, use_session},
     models::{Credentials, validate_email, validate_password},
     server_url,
@@ -146,6 +146,7 @@ fn BackendSetupScreen(problem: Option<String>, on_saved: EventHandler<()>) -> El
 #[component]
 pub fn AccountSettings() -> Element {
     let app_state = use_context::<AppState>();
+    let alerts = use_alert();
     let mut session = use_session();
     let account = (session.account)();
 
@@ -276,6 +277,33 @@ pub fn AccountSettings() -> Element {
                         },
                         "Sign out"
                     }
+                }
+                Button {
+                    fill: ButtonFill::Outline,
+                    color: Color::Danger,
+                    expand: ButtonExpand::Block,
+                    disabled: busy(),
+                    onclick: move |_| async move {
+                        let buttons = vec![AlertButton::cancel("Cancel"), AlertButton::destructive("Delete account")];
+                        if !alerts.show(AlertOptions {
+                            title: "Delete account?".into(),
+                            message: Some("This permanently deletes your account, subscriptions, playlists, queue and history on every device.".into()),
+                            buttons: buttons.clone(),
+                            input: None,
+                        }).await.confirmed(&buttons) { return; }
+                        busy.set(true);
+                        match delete_account().await {
+                            Ok(()) => {
+                                app_state.forget_account();
+                                session.forget();
+                                g3_cache::set_cache_owner(None).await;
+                                reload_client();
+                            }
+                            Err(problem) => app_state.show_toast(readable(&problem.to_string()), Color::Danger),
+                        }
+                        busy.set(false);
+                    },
+                    "Delete account"
                 }
             }
         }

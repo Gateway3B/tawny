@@ -3,7 +3,7 @@ use crate::{
     app::Route,
     models::{
         Channel, ChannelDetails, ChannelMediaTab, FeedFilter, SubscriptionContent, Video,
-        queued_playlist_id,
+        compact_count_value, queued_playlist_id,
     },
     state::AppState,
 };
@@ -11,13 +11,13 @@ use dioxus::prelude::*;
 use dioxus_icons::lucide::{Check, History, ListVideo, Play, Trash2, Tv};
 use g3_route_transitions::{ROUTE_TRANSITION_OVERLAY_REGION_CLASS, animated_navigate};
 use g3_ui::{
-    Avatar, AvatarSize, BottomSheet, Button, ButtonFill, ButtonSize, Card, Color, Content,
-    EmptyState, InfiniteScroll, SegmentButton, SegmentGroup, Space, Spinner, Stack, StackAlign,
-    Text, TextTone, TextVariant,
+    Avatar, AvatarSize, BottomSheet, Button, ButtonFill, ButtonSize, Card, Chip, Color, Content,
+    EmptyState, InfiniteScroll, SegmentButton, SegmentGroup, Shelf, Space, Spinner, Stack,
+    StackAlign, Text, TextTone, TextVariant,
 };
 
 use super::{FeedFilterSegments, PageHeader, VideoGrid};
-use g3_cache::use_cached;
+use g3_cache::{update_cached, use_cached};
 
 /// How many history entries the page lays out before asking for more.
 const HISTORY_PAGE_SIZE: usize = 24;
@@ -340,11 +340,61 @@ fn ChannelHero(channel: ReadSignal<Channel>) -> Element {
     }
 }
 
+/// How a channel page orders its uploads.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+enum ChannelSort {
+    #[default]
+    Newest,
+    Oldest,
+    Popular,
+    Unpopular,
+}
+
+impl ChannelSort {
+    const ALL: [Self; 2] = [Self::Newest, Self::Popular];
+
+    fn picked(self, option: Self) -> Self {
+        match (self, option) {
+            (Self::Newest, Self::Newest) => Self::Oldest,
+            (Self::Popular, Self::Popular) => Self::Unpopular,
+            (_, option) => option,
+        }
+    }
+
+    fn family(self) -> Self {
+        match self {
+            Self::Oldest => Self::Newest,
+            Self::Unpopular => Self::Popular,
+            other => other,
+        }
+    }
+
+    fn upstream(self) -> &'static str {
+        match self {
+            Self::Newest => "newest",
+            Self::Oldest => "oldest",
+            Self::Popular => "popular",
+            Self::Unpopular => "unpopular",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Newest => "Newest",
+            Self::Oldest => "Oldest",
+            Self::Popular => "Popular",
+            Self::Unpopular => "Least popular",
+        }
+    }
+}
+
 /// A channel's uploads on `tab` (every tab together for `None`): the answer's
-/// plus the extra pages loaded since, newest first, each once.
+/// plus the extra pages loaded since, in `sort` order, each once. Server pages
+/// already follow that order; uploads with no view count stay last either way.
 fn channel_videos(
     details: &ChannelDetails,
     tab: Option<ChannelMediaTab>,
+    sort: ChannelSort,
     extra_videos: &[Video],
     extra_shorts: &[Video],
     extra_live: &[Video],
@@ -363,9 +413,37 @@ fn channel_videos(
         ],
     };
     let mut videos = lists.concat();
-    videos.sort_by_cached_key(|video| std::cmp::Reverse(video.published_epoch()));
     let mut seen_ids = std::collections::HashSet::new();
     videos.retain(|video| seen_ids.insert(video.id.clone()));
+    let views = |video: &Video| compact_count_value(&video.view_count);
+    match sort {
+        ChannelSort::Newest => {
+            videos.sort_by_cached_key(|video| std::cmp::Reverse(video.published_epoch()))
+        }
+        ChannelSort::Oldest => videos.sort_by_cached_key(|video| {
+            let epoch = video.published_epoch();
+            (epoch == 0, epoch)
+        }),
+        ChannelSort::Popular => videos.sort_by(|a, b| {
+            let (a_views, b_views) = (views(a), views(b));
+            match (a_views, b_views) {
+                (Some(a), Some(b)) => b.total_cmp(&a),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            }
+            .then_with(|| b.published_epoch().cmp(&a.published_epoch()))
+        }),
+        ChannelSort::Unpopular => videos.sort_by(|a, b| {
+            match (views(a), views(b)) {
+                (Some(a), Some(b)) => a.total_cmp(&b),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            }
+            .then_with(|| b.published_epoch().cmp(&a.published_epoch()))
+        }),
+    }
     videos
 }
 
@@ -379,12 +457,134 @@ fn media_tab(filter: FeedFilter) -> Option<ChannelMediaTab> {
     }
 }
 
+fn continuation_requests(
+    selected: Option<ChannelMediaTab>,
+    tokens: [Option<String>; 3],
+) -> Vec<(ChannelMediaTab, String)> {
+    [
+        ChannelMediaTab::Videos,
+        ChannelMediaTab::Shorts,
+        ChannelMediaTab::Live,
+    ]
+    .into_iter()
+    .zip(tokens)
+    .filter_map(|(tab, token)| {
+        selected
+            .is_none_or(|selected| selected == tab)
+            .then(|| token.map(|token| (tab, token)))
+            .flatten()
+    })
+    .collect()
+}
+
+#[cfg(test)]
+mod channel_tests {
+    use super::*;
+
+    fn video(id: &str, date: &str, views: &str) -> Video {
+        Video {
+            id: id.into(),
+            title: id.into(),
+            channel_id: "channel".into(),
+            channel_name: "Channel".into(),
+            thumbnail_url: String::new(),
+            published_at: date.into(),
+            duration_seconds: 60,
+            view_count: views.into(),
+            progress_seconds: 0,
+            watched: false,
+            is_live: false,
+            is_short: false,
+            audio_only: false,
+            channel_avatar_url: None,
+        }
+    }
+
+    #[test]
+    fn tapping_sort_chips_reverses_the_active_family() {
+        assert!(ChannelSort::Newest.picked(ChannelSort::Newest) == ChannelSort::Oldest);
+        assert!(ChannelSort::Oldest.picked(ChannelSort::Newest) == ChannelSort::Newest);
+        assert!(ChannelSort::Popular.picked(ChannelSort::Popular) == ChannelSort::Unpopular);
+        assert!(ChannelSort::Unpopular.picked(ChannelSort::Popular) == ChannelSort::Popular);
+        assert!(ChannelSort::Oldest.picked(ChannelSort::Popular) == ChannelSort::Popular);
+    }
+
+    #[test]
+    fn all_uploads_continue_every_non_exhausted_tab() {
+        let tokens = [Some("videos".into()), None, Some("live".into())];
+        assert_eq!(
+            continuation_requests(None, tokens.clone()),
+            vec![
+                (ChannelMediaTab::Videos, "videos".into()),
+                (ChannelMediaTab::Live, "live".into()),
+            ]
+        );
+        assert!(continuation_requests(Some(ChannelMediaTab::Shorts), tokens.clone()).is_empty());
+        assert_eq!(
+            continuation_requests(Some(ChannelMediaTab::Live), tokens),
+            vec![(ChannelMediaTab::Live, "live".into()),]
+        );
+    }
+
+    #[test]
+    fn channel_orders_merge_pages_deduplicate_and_keep_unknown_counts_last() {
+        let page = |tab, videos| crate::models::ChannelMediaPage {
+            channel_id: "channel".into(),
+            tab,
+            videos,
+            next_page: None,
+            source: "Test".into(),
+        };
+        let details = ChannelDetails {
+            channel: Channel {
+                id: "channel".into(),
+                name: "Channel".into(),
+                handle: String::new(),
+                avatar_url: None,
+                subscriber_count: String::new(),
+                subscribed: false,
+                description: String::new(),
+                banner_url: None,
+                subscription_content: SubscriptionContent::All,
+            },
+            videos: page(
+                ChannelMediaTab::Videos,
+                vec![
+                    video("a", "2026-01-01", "9.5K views"),
+                    video("b", "2026-03-01", "1.2M views"),
+                ],
+            ),
+            shorts: page(
+                ChannelMediaTab::Shorts,
+                vec![video("c", "2026-02-01", "88 views")],
+            ),
+            live: page(ChannelMediaTab::Live, vec![video("unknown", "", "")]),
+            remote_available: true,
+        };
+        let extra = vec![
+            video("a", "2026-01-01", "9.5K views"),
+            video("d", "2025-01-01", "2K views"),
+        ];
+        let ids = |sort| {
+            channel_videos(&details, None, sort, &extra, &[], &[])
+                .into_iter()
+                .map(|video| video.id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(ChannelSort::Newest), ["b", "c", "a", "d", "unknown"]);
+        assert_eq!(ids(ChannelSort::Oldest), ["d", "a", "c", "b", "unknown"]);
+        assert_eq!(ids(ChannelSort::Popular), ["b", "a", "d", "c", "unknown"]);
+        assert_eq!(ids(ChannelSort::Unpopular), ["c", "d", "a", "b", "unknown"]);
+    }
+}
+
 #[component]
 pub fn ChannelDetail(id: String) -> Element {
     let app_state = use_context::<AppState>();
 
     // Owned by the header segmented control.
     let tab = app_state.channel_tab;
+    let mut sort = use_signal(ChannelSort::default);
     let mut extra_videos = use_signal(Vec::<Video>::new);
     let mut extra_shorts = use_signal(Vec::<Video>::new);
     let mut extra_live = use_signal(Vec::<Video>::new);
@@ -409,18 +609,37 @@ pub fn ChannelDetail(id: String) -> Element {
     // Cached per channel: reopening one shows it at once and refreshes
     // behind it. The server falls back to what it has cached when YouTube
     // cannot be reached.
-    let details = use_cached(get_channel_details, (id.clone(),));
+    let upstream_order = use_memo(move || sort().upstream().to_string());
+    let details = use_cached(get_channel_details, (id.clone(), upstream_order()));
+    let channel_metadata = use_memo(move || match &*details.read() {
+        Some(Ok(details)) => Some(details.channel.clone()),
+        _ => None,
+    });
+    use_effect(move || {
+        if let Some(fresh) = channel_metadata() {
+            update_cached(crate::api::get_viewer, (), move |viewer| {
+                if let Some(channel) = viewer
+                    .subscriptions
+                    .iter_mut()
+                    .find(|channel| channel.id == fresh.id)
+                {
+                    channel.subscriber_count = fresh.subscriber_count.clone();
+                }
+            });
+        }
+    });
     // Each answer restarts the extra pages from its own continuations.
     let tokens = use_memo(move || match &*details.read() {
         Some(Ok(details)) => Some((
             details.videos.next_page.clone(),
             details.shorts.next_page.clone(),
             details.live.next_page.clone(),
+            upstream_order(),
         )),
         _ => None,
     });
     use_effect(move || {
-        if let Some((videos, shorts, live)) = tokens() {
+        if let Some((videos, shorts, live, _)) = tokens() {
             extra_videos.set(Vec::new());
             extra_shorts.set(Vec::new());
             extra_live.set(Vec::new());
@@ -439,6 +658,7 @@ pub fn ChannelDetail(id: String) -> Element {
         channel_videos(
             details,
             media_tab(tab()),
+            sort(),
             &extra_videos.read(),
             &extra_shorts.read(),
             &extra_live.read(),
@@ -451,44 +671,64 @@ pub fn ChannelDetail(id: String) -> Element {
     // Pull to refresh: refetch, keeping the channel on screen meanwhile.
     let refresh = use_callback(move |_: ()| details.refresh());
     let load_more = use_callback(move |_: ()| {
-        let selected_tab = media_tab(*tab.peek());
-        let next_page = match selected_tab {
-            Some(ChannelMediaTab::Videos) => videos_next.peek().clone(),
-            Some(ChannelMediaTab::Shorts) => shorts_next.peek().clone(),
-            Some(ChannelMediaTab::Live) => live_next.peek().clone(),
-            None => None,
-        };
-        let Some(token) = next_page else {
+        if *page_loading.peek() || details.pending() {
             return;
-        };
+        }
+        let selected_tab = media_tab(*tab.peek());
+        let requests = continuation_requests(
+            selected_tab,
+            [
+                videos_next.peek().clone(),
+                shorts_next.peek().clone(),
+                live_next.peek().clone(),
+            ],
+        );
+        if requests.is_empty() {
+            return;
+        }
+        let requested_order = upstream_order.peek().clone();
         let channel_id = match &*details.peek() {
             Some(Ok(details)) => details.channel.id.clone(),
             _ => return,
         };
         page_loading.set(true);
         spawn(async move {
-            let kind = match selected_tab {
-                Some(ChannelMediaTab::Shorts) => "shorts",
-                Some(ChannelMediaTab::Live) => "live",
-                _ => "videos",
-            };
-            match get_channel_media_page(channel_id, kind.into(), token).await {
-                Ok(page) => match selected_tab {
-                    Some(ChannelMediaTab::Videos) => {
-                        extra_videos.write().extend(page.videos);
-                        videos_next.set(page.next_page);
-                    }
-                    Some(ChannelMediaTab::Shorts) => {
-                        extra_shorts.write().extend(page.videos);
-                        shorts_next.set(page.next_page);
-                    }
-                    Some(ChannelMediaTab::Live) => {
-                        extra_live.write().extend(page.videos);
-                        live_next.set(page.next_page);
-                    }
-                    None => {}
-                },
-                Err(_) => app_state.show_toast("Could not load the next page", Color::Warning),
+            for (selected_tab, token) in requests {
+                let kind = match selected_tab {
+                    ChannelMediaTab::Shorts => "shorts",
+                    ChannelMediaTab::Live => "live",
+                    ChannelMediaTab::Videos => "videos",
+                };
+                let result =
+                    get_channel_media_page(channel_id.clone(), kind.into(), token.clone()).await;
+                // A sort change or refresh replaces the continuation this request belongs to.
+                let current_token = match selected_tab {
+                    ChannelMediaTab::Videos => videos_next.peek().clone(),
+                    ChannelMediaTab::Shorts => shorts_next.peek().clone(),
+                    ChannelMediaTab::Live => live_next.peek().clone(),
+                };
+                if *upstream_order.peek() != requested_order
+                    || current_token.as_ref() != Some(&token)
+                {
+                    break;
+                }
+                match result {
+                    Ok(page) => match selected_tab {
+                        ChannelMediaTab::Videos => {
+                            extra_videos.write().extend(page.videos);
+                            videos_next.set(page.next_page);
+                        }
+                        ChannelMediaTab::Shorts => {
+                            extra_shorts.write().extend(page.videos);
+                            shorts_next.set(page.next_page);
+                        }
+                        ChannelMediaTab::Live => {
+                            extra_live.write().extend(page.videos);
+                            live_next.set(page.next_page);
+                        }
+                    },
+                    Err(_) => app_state.show_toast("Could not load the next page", Color::Warning),
+                }
             }
             page_loading.set(false);
         });
@@ -524,7 +764,11 @@ pub fn ChannelDetail(id: String) -> Element {
         Some(ChannelMediaTab::Videos) => videos_next.read().is_some(),
         Some(ChannelMediaTab::Shorts) => shorts_next.read().is_some(),
         Some(ChannelMediaTab::Live) => live_next.read().is_some(),
-        None => false,
+        None => {
+            videos_next.read().is_some()
+                || shorts_next.read().is_some()
+                || live_next.read().is_some()
+        }
     };
 
     rsx! {
@@ -541,6 +785,16 @@ pub fn ChannelDetail(id: String) -> Element {
         Content { on_refresh: refresh, refreshing: details.pending(),
             Stack { gap: Space::Lg,
                 ChannelHero { channel }
+                Shelf { aria_label: "Sort by", gap: Space::Sm,
+                    for option in ChannelSort::ALL {
+                        Chip {
+                            key: "{option.label()}",
+                            selected: sort().family() == option,
+                            onclick: move |_| { let current = *sort.peek(); sort.set(current.picked(option)); },
+                            if sort().family() == option { "{sort().label()}" } else { "{option.label()}" }
+                        }
+                    }
+                }
                 VideoGrid {
                     videos,
                     empty_message: match selected_tab {
@@ -551,7 +805,7 @@ pub fn ChannelDetail(id: String) -> Element {
                     }
                 }
                 InfiniteScroll {
-                    loading: page_loading(),
+                    loading: page_loading() || details.pending(),
                     complete: !has_next_page,
                     on_load: load_more,
                 }

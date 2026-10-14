@@ -31,6 +31,18 @@ class CommandTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             server.build_channel_shorts_command("veritasium")
 
+    def test_upload_listing_keeps_dates_and_covers_the_complete_tab(self) -> None:
+        command = server.build_channel_uploads_command("UCsXVk37bltHxD1rDPwtNM8Q", "videos")
+        self.assertIn("--flat-playlist", command)
+        self.assertIn("youtubetab:approximate_date", command)
+        self.assertNotIn("--playlist-end", command)
+        self.assertTrue(command[-1].endswith("/videos"))
+
+    def test_upload_listing_rejects_unknown_tabs_and_channel_paths(self) -> None:
+        for channel, tab in [("../../secret", "videos"), ("UCsXVk37bltHxD1rDPwtNM8Q", "../videos")]:
+            with self.assertRaises(ValueError):
+                server.build_channel_uploads_command(channel, tab)
+
 
 if __name__ == "__main__":
     unittest.main()

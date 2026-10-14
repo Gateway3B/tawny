@@ -30,10 +30,6 @@ use dioxus::prelude::*;
 use g3_cache::{Cached, update_all_cached, update_cached, use_cached};
 use g3_ui::{Color, ToastOptions, Toaster};
 
-/// How close to the end counts as finished. YouTube stops short of the exact
-/// duration often enough that an exact match would rarely fire.
-const PROGRESS_WATCHED_TAIL_SECONDS: u64 = 15;
-
 /// What saving a video to a playlist did. A swipe that lands on a video the
 /// playlist already holds has changed nothing, and saying so in the same
 /// green as a save reads as though it saved again.
@@ -71,6 +67,11 @@ pub struct AppState {
     /// Where playback has reached, per video, since it was last sent. Ticks
     /// land here; [`Self::flush_progress`] sends them.
     pending_progress: Signal<HashMap<String, VideoProgress>>,
+    /// Positions already sent but not yet shown on the cached lists. Rewriting
+    /// every cached feed page and refetching the playlist previews on each
+    /// five-second tick was most of the work of watching a video, so the
+    /// lists catch up when playback pauses, hides or ends instead.
+    unshown_progress: Signal<HashMap<String, VideoProgress>>,
     /// g3-ui's toast queue. It belongs to the `AppWrapper`, which sits below
     /// this state, so a component inside the wrapper hands it over once it
     /// mounts. Until then a notice has nowhere to show and is dropped.
@@ -316,6 +317,23 @@ impl AppState {
         self.selected_audio_track.set(None);
     }
 
+    /// Discard account state without saving playback progress to a deleted
+    /// account. The persistent read cache is cleared by the caller.
+    pub fn forget_account(mut self) {
+        self.pending_progress.write().clear();
+        self.unshown_progress.write().clear();
+        self.stop_playback();
+        self.run_back_stack.write().clear();
+        self.explore_results.set(None);
+        self.playlist_picker_open.set(false);
+        self.playlist_picker_video.set(None);
+        self.video_actions_open.set(false);
+        self.video_actions_video.set(None);
+        self.video_actions_playlist.set(None);
+        self.share_open.set(false);
+        self.share_video.set(None);
+    }
+
     /// Remember where playback has reached.
     ///
     /// Called on a timer while a video plays, so it only updates the playing
@@ -332,9 +350,7 @@ impl AppState {
         active.progress_seconds = seconds;
         // Treated as watched once it is effectively over, which is what the
         // card's progress bar and the "hide watched" filter both key on.
-        if active.duration_seconds > 0
-            && seconds + PROGRESS_WATCHED_TAIL_SECONDS >= active.duration_seconds
-        {
+        if active.is_effectively_over(seconds) {
             active.watched = true;
         }
         self.pending_progress.write().insert(
@@ -352,19 +368,33 @@ impl AppState {
 
     /// Send the remembered positions to the server, and show them on every
     /// cached list holding those videos.
-    pub fn flush_progress(mut self) {
+    pub fn flush_progress(self) {
+        self.sync_progress(true);
+    }
+
+    /// Send the remembered positions to the server. With `show_in_lists`, the
+    /// cached lists holding those videos are updated too, along with any
+    /// positions sent earlier that they have not seen; without it, the
+    /// periodic tick costs one request and no cache writes.
+    pub fn sync_progress(mut self, show_in_lists: bool) {
         let pending = std::mem::take(&mut *self.pending_progress.write());
-        if pending.is_empty() {
-            return;
+        let mut to_show = HashMap::new();
+        if show_in_lists {
+            to_show = std::mem::take(&mut *self.unshown_progress.write());
+            to_show.extend(pending.clone());
+        } else {
+            self.unshown_progress.write().extend(pending.clone());
         }
-        let progress = pending.into_values().collect::<Vec<_>>();
-        for entry in &progress {
-            let entry = entry.clone();
+        for entry in to_show.into_values() {
             self.apply_to_videos(&entry.video_id.clone(), move |video| {
                 video.progress_seconds = entry.progress_seconds;
                 video.watched = entry.watched;
             });
         }
+        if pending.is_empty() {
+            return;
+        }
+        let progress = pending.into_values().collect::<Vec<_>>();
         // No invalidation: the lists already show what was sent.
         spawn(async move {
             if api::save_progress(progress).await.is_err() {
@@ -1362,6 +1392,7 @@ pub fn AppStateProvider(children: Element) -> Element {
         run_playlist,
         settings,
         pending_progress: Signal::new(HashMap::new()),
+        unshown_progress: Signal::new(HashMap::new()),
         toaster: Signal::new(None),
         playlist_picker_video: Signal::new(None),
         playlist_picker_open: Signal::new(false),

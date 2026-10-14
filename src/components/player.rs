@@ -28,7 +28,7 @@ use g3_ui::{
     Skeleton, SkeletonShape, Space, Spinner, Stack, StackAlign, Text, TextTone, TextVariant,
 };
 
-use super::VideoGrid;
+use super::{VideoGrid, linkify::Linkified};
 
 /// The player's transport fetches from the webview, not through the server
 /// functions, so it has to be told the backend the viewer chose in settings -
@@ -753,22 +753,33 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
         });
     });
     let progress_state = app_state;
+    // The reporter's JS disposes the previous video's timers itself, but its
+    // eval channel stays open, so without cancelling here each video left a
+    // receive loop suspended for the life of the page.
+    let progress_task =
+        use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None::<dioxus::core::Task>)));
     use_effect(move || {
+        if let Some(previous) = progress_task.take() {
+            previous.cancel();
+        }
         let Some(playing_id) = playing_id() else {
             return;
         };
-        spawn(async move {
+        progress_task.set(Some(spawn(async move {
             let mut eval = document::eval(PROGRESS_REPORTER_JS);
-            // The flag marks the page going away or playback stopping. Every
-            // position that moved is saved anyway - about every five seconds
+            // Every position that moved is sent - about every five seconds
             // while playing - so another device picks up close to where this
-            // one is; a position that did not move has nothing to save.
-            while let Ok((seconds, _going_away)) = eval.recv::<(u64, bool)>().await {
+            // one is; a position that did not move has nothing to save. The
+            // flag marks the page going away or playback pausing, and is when
+            // the cached lists are brought up to date as well.
+            while let Ok((seconds, going_away)) = eval.recv::<(u64, bool)>().await {
                 if progress_state.record_progress(&playing_id, seconds) {
+                    progress_state.sync_progress(going_away);
+                } else if going_away {
                     progress_state.flush_progress();
                 }
             }
-        });
+        })));
     });
 
     // Resume from the server's copy of the position, not only the one the
@@ -782,14 +793,12 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
         let Some(video_id) = playing_id() else {
             return;
         };
-        let opened_at = resume_state.active_video.peek().as_ref().map(|video| {
-            if video.watched {
-                0
-            } else {
-                video.progress_seconds
-            }
-        });
-        let Some(opened_at) = opened_at else {
+        let opened = resume_state
+            .active_video
+            .peek()
+            .as_ref()
+            .map(|video| (video.resume_seconds(), video.clone()));
+        let Some((opened_at, opened_video)) = opened else {
             return;
         };
         spawn(async move {
@@ -798,7 +807,10 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
             };
             // Finished elsewhere: opening it again means starting over, which
             // is what the player already did.
-            if saved.watched || saved.progress_seconds.abs_diff(opened_at) <= RESUME_DRIFT_SECONDS {
+            if saved.watched
+                || opened_video.is_effectively_over(saved.progress_seconds)
+                || saved.progress_seconds.abs_diff(opened_at) <= RESUME_DRIFT_SECONDS
+            {
                 return;
             }
             if playing_id.peek().as_deref() != Some(video_id.as_str()) {
@@ -818,11 +830,16 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
     // Keyed on the id for the same reason: this re-registered the reporter
     // every five seconds.
     let mut audio_state = app_state;
+    let audio_task =
+        use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None::<dioxus::core::Task>)));
     use_effect(move || {
+        if let Some(previous) = audio_task.take() {
+            previous.cancel();
+        }
         if playing_id.read().is_none() {
             return;
         }
-        spawn(async move {
+        audio_task.set(Some(spawn(async move {
             let mut eval = document::eval(AUDIO_TRACK_REPORTER_JS);
             while let Ok((tracks, active)) = eval.recv::<(Vec<(String, String)>, String)>().await {
                 audio_state.active_audio_tracks.set(
@@ -835,7 +852,7 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
                     .selected_audio_track
                     .set((!active.is_empty()).then_some(active));
             }
-        });
+        })));
     });
 
     // The transport gets the saved preference at attachment time. This effect
@@ -962,11 +979,7 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
     let attach_audio_only = video.audio_only;
     // Resume where this video was left, unless it already ran to the end - then
     // starting over is what replaying it means.
-    let attach_resume_seconds = if video.watched {
-        0
-    } else {
-        video.progress_seconds
-    };
+    let attach_resume_seconds = video.resume_seconds();
     let audio_only_active = video.audio_only;
     let audio_only_video_id = video.id.clone();
     let mut captions_enabled = app_state.captions_enabled;
@@ -2211,7 +2224,10 @@ fn VideoDetailInner(id: String) -> Element {
                         end: (!details_remote_available).then(|| rsx! { Badge { "Cached" } }),
                         Text {
                             class: if description_expanded() { "whitespace-pre-line break-words" } else { "line-clamp-4 whitespace-pre-line break-words" },
-                            "{details.description}"
+                            Linkified {
+                                text: details.description.clone(),
+                                on_seek: move |seconds| seek_player(seconds),
+                            }
                         }
                         Button {
                             fill: ButtonFill::Clear,

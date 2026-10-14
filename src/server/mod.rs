@@ -809,6 +809,77 @@ mod tests {
     use crate::models::{playlist_queue_entry, queued_playlist_id};
 
     use super::DbVideo;
+
+    #[test]
+    fn flat_channel_listings_sort_the_whole_catalog_with_real_counts() {
+        let dump =
+            serde_json::from_value::<super::YtdlpFlatPlaylist>(serde_json::json!({"entries": [
+                {"id": "new", "title": "Newest", "timestamp": 1791820800, "view_count": 27000},
+                {"id": "hit", "title": "Popular", "timestamp": 1789430400, "view_count": 1100000},
+                {"id": "unknown", "title": "Unknown"},
+                {"id": "old", "title": "Oldest", "view_count": 88}
+            ]}))
+            .unwrap();
+        let videos = super::ytdlp_flat_playlist_videos(dump, "channel", "Channel");
+        assert_eq!(videos[0].published_at, "2026-10-12");
+        let sorted = |order| {
+            let mut copy = videos.clone();
+            super::sort_channel_uploads(&mut copy, order);
+            copy.into_iter().map(|video| video.id).collect::<Vec<_>>()
+        };
+        assert_eq!(sorted("newest"), ["new", "hit", "unknown", "old"]);
+        assert_eq!(sorted("oldest"), ["old", "unknown", "hit", "new"]);
+        assert_eq!(sorted("popular"), ["hit", "new", "old", "unknown"]);
+        assert_eq!(sorted("unpopular"), ["old", "new", "hit", "unknown"]);
+    }
+
+    #[tokio::test]
+    async fn verified_subscribers_replace_header_counts_and_hidden_counts() {
+        let state = super::AppServerState::initialize().await.unwrap();
+        let mut channel = crate::models::DemoLibrary::demo().channels[0].clone();
+        channel.subscriber_count = "88".into();
+        state.upsert_channel(&channel).await.unwrap();
+        state
+            .store_subscriber_count(&channel.id, Some(482_000))
+            .await
+            .unwrap();
+        assert_eq!(
+            state
+                .catalog_channel(&channel.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .subscriber_count,
+            "482.0K"
+        );
+        // A verified smaller or hidden count must also replace a cached count.
+        state
+            .store_subscriber_count(&channel.id, Some(80))
+            .await
+            .unwrap();
+        assert_eq!(
+            state
+                .catalog_channel(&channel.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .subscriber_count,
+            "80"
+        );
+        state
+            .store_subscriber_count(&channel.id, None)
+            .await
+            .unwrap();
+        assert_eq!(
+            state
+                .catalog_channel(&channel.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .subscriber_count,
+            ""
+        );
+    }
     use super::{
         AppServerState, SegmentRangeKey, SegmentRanges, cached_segment_ranges, canonical_sort_key,
         center_vtt_cues, classify_ytdlp_error, ebml_vint, extract_chapters,
@@ -1767,7 +1838,10 @@ mod tests {
             .cloned()
             .expect("real YouTube channel search result");
 
-        let details = state.channel_details(&owner, &channel.id).await.unwrap();
+        let details = state
+            .channel_details(&owner, &channel.id, "newest")
+            .await
+            .unwrap();
         eprintln!(
             "live channel: {} ({}) videos={} shorts={} live={}",
             channel.name,

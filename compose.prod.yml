@@ -112,6 +112,7 @@ services:
     init: true
     environment:
       SURREALDB_HOST: ws://surrealdb:8000
+      CLIENT_IP_HEADER: ${CLIENT_IP_HEADER:-}
       SURREALDB_NAMESPACE: ${SURREALDB_NAMESPACE:-tawny}
       SURREALDB_NAME: ${SURREALDB_NAME:-main}
       SURREALDB_USER: ${SURREALDB_USER:-root}

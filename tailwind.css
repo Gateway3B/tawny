@@ -359,6 +359,9 @@ textarea {
 }
 
 .persistent-player.mini {
+  /* A vertical drag is the dismiss flick; without this the browser claims it
+     and cancels the pointer. */
+  touch-action: pan-x;
   position: fixed;
   z-index: 45;
   right: 0;

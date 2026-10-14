@@ -62,19 +62,21 @@ pub async fn get_comments_page(video_id: String, next_page: String) -> Result<Co
 }
 
 #[get(
-    "/api/v1/channels/{channel_id}",
+    "/api/v1/channels/{channel_id}?order",
     state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
     owner: crate::auth::Owner
 )]
-pub async fn get_channel_details(channel_id: String) -> Result<ChannelDetails> {
+pub async fn get_channel_details(channel_id: String, order: String) -> Result<ChannelDetails> {
     Ok(state
-        .channel_details(&owner.0, &channel_id)
+        .channel_details(&owner.0, &channel_id, &order)
         .await
         .map_err(|error| ServerFnError::new(error.to_string()))?)
 }
 
-#[get(
-    "/api/v1/channels/{channel_id}/media?tab&next_page",
+// A POST: the continuation token is several KB, which a query string
+// carries badly (proxies refuse long request lines).
+#[post(
+    "/api/v1/channels/{channel_id}/media",
     state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
     owner: crate::auth::Owner
 )]

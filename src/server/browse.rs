@@ -293,8 +293,15 @@ impl AppServerState {
         video
     }
 
-    pub async fn channel_details(&self, owner: &str, channel_id: &str) -> Result<ChannelDetails> {
-        let mut details = self.channel_details_unviewed(owner, channel_id).await?;
+    pub async fn channel_details(
+        &self,
+        owner: &str,
+        channel_id: &str,
+        order: &str,
+    ) -> Result<ChannelDetails> {
+        let mut details = self
+            .channel_details_unviewed(owner, channel_id, order)
+            .await?;
         for page in [&mut details.videos, &mut details.shorts, &mut details.live] {
             self.overlay_viewer(owner, &mut page.videos).await?;
         }
@@ -306,9 +313,10 @@ impl AppServerState {
         &self,
         owner: &str,
         channel_id: &str,
+        order: &str,
     ) -> Result<ChannelDetails> {
         let query = self.youtube.query();
-        let (rss_result, videos_result, shorts_result, live_result) = tokio::join!(
+        let (rss_result, videos_result, shorts_result, live_result, info_result) = tokio::join!(
             youtube_call(query.channel_rss(channel_id), "extract channel RSS"),
             youtube_call(query.channel_videos(channel_id), "extract channel videos"),
             youtube_call(
@@ -319,6 +327,10 @@ impl AppServerState {
                 query.channel_videos_tab(channel_id, ChannelVideoTab::Live),
                 "extract channel livestreams",
             ),
+            youtube_call(
+                query.channel_info(channel_id),
+                "extract channel subscriber metadata"
+            ),
         );
         if let Ok(videos_channel) = videos_result {
             // This account's follow, not the instance's - see `user_follows`.
@@ -327,6 +339,16 @@ impl AppServerState {
                 &videos_channel,
                 follow.is_some_and(|(subscribed, _)| subscribed),
             );
+            // The header parser uses metadata positions and can mistake the
+            // upload count for subscribers. About exposes a named field.
+            if let Ok(info) = &info_result {
+                channel.subscriber_count = info
+                    .subscriber_count
+                    .map(|count| compact_count(count as i64, ""))
+                    .unwrap_or_default();
+            } else if let Some(cached) = self.catalog_channel(channel_id).await? {
+                channel.merge_metadata_from(&cached);
+            }
             if let Some((_, content)) = follow {
                 channel.subscription_content = content;
             }
@@ -377,7 +399,7 @@ impl AppServerState {
                     }
                 }
             }
-            let live = live_result
+            let mut live = live_result
                 .ok()
                 .map(|result| {
                     rusty_page(
@@ -390,7 +412,22 @@ impl AppServerState {
                 .unwrap_or_else(|| {
                     empty_channel_page(channel_id, ChannelMediaTab::Live, "Direct YouTube")
                 });
+            // rustypipe's current channel parser loses dates/views and its
+            // synthesized sort tokens return newest for every order. Flat
+            // yt-dlp listings retain those facts, including for later pages.
+            for page in [&mut videos, &mut shorts, &mut live] {
+                if let Ok(listed) = self
+                    .channel_uploads_page(channel_id, &channel.name, page.tab, order, 0)
+                    .await
+                {
+                    *page = listed;
+                }
+            }
             self.upsert_discovered_channel(&channel).await?;
+            if let Ok(info) = info_result {
+                self.store_subscriber_count(channel_id, info.subscriber_count)
+                    .await?;
+            }
             for video in videos
                 .videos
                 .iter()
@@ -471,6 +508,24 @@ impl AppServerState {
         tab: ChannelMediaTab,
         next_page: &str,
     ) -> Result<ChannelMediaPage> {
+        if let Some(token) = next_page.strip_prefix("ytdlp-channel:") {
+            let (order, offset) = token
+                .split_once(':')
+                .ok_or_else(|| anyhow!("invalid channel continuation"))?;
+            let offset = offset.parse::<usize>()?;
+            let name = self
+                .catalog_channel(channel_id)
+                .await?
+                .map(|channel| channel.name)
+                .unwrap_or_default();
+            let page = self
+                .channel_uploads_page(channel_id, &name, tab, order, offset)
+                .await?;
+            for video in &page.videos {
+                self.upsert_feed_video(video, video_sort_key(video)).await?;
+            }
+            return Ok(page);
+        }
         if next_page.starts_with("local-channel:") {
             let paginator = decode_page::<RustyVideoItem>(next_page, "local-channel")?;
             let page = youtube_call(
@@ -491,6 +546,44 @@ impl AppServerState {
             return Ok(result);
         }
         Err(anyhow!("invalid channel continuation"))
+    }
+
+    async fn channel_uploads_page(
+        &self,
+        channel_id: &str,
+        name: &str,
+        tab: ChannelMediaTab,
+        order: &str,
+        offset: usize,
+    ) -> Result<ChannelMediaPage> {
+        static UPLOADS: ServerCache<(String, String), Vec<Video>> =
+            ServerCache::new(Duration::from_secs(600), 32);
+        let tab_key = match tab {
+            ChannelMediaTab::Videos => "videos",
+            ChannelMediaTab::Shorts => "shorts",
+            ChannelMediaTab::Live => "live",
+        };
+        let mut uploads = UPLOADS
+            .try_get_with(
+                (channel_id.into(), tab_key.into()),
+                self.ytdlp_channel_uploads(channel_id, name, tab),
+            )
+            .await
+            .map_err(|error| anyhow!("{error}"))?;
+        let order = match order {
+            "oldest" | "popular" | "unpopular" => order,
+            _ => "newest",
+        };
+        sort_channel_uploads(&mut uploads, order);
+        let next_offset = offset.saturating_add(30);
+        Ok(ChannelMediaPage {
+            channel_id: channel_id.into(),
+            tab,
+            videos: uploads.iter().skip(offset).take(30).cloned().collect(),
+            next_page: (next_offset < uploads.len())
+                .then(|| format!("ytdlp-channel:{order}:{next_offset}")),
+            source: "Direct YouTube · yt-dlp".into(),
+        })
     }
 
     pub async fn search_catalog(

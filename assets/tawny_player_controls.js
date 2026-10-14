@@ -126,17 +126,57 @@
       sheetFlick = null;
       if (!flick || flick.pointerId !== event.pointerId) return;
       const dy = event.clientY - flick.y;
-      if (dy <= 0 || !isVerticalFlick(event.clientX - flick.x, dy, Date.now() - flick.at)) return;
+      if (!isVerticalFlick(event.clientX - flick.x, dy, Date.now() - flick.at)) return;
+      const stage = document.getElementById("tawny-player");
+      if (!stage) return;
+      // Up is fullscreen, the same as on an attached player. The controller
+      // applies the window's bars and rotation when it attaches, because the
+      // bridges that do it only exist once a stream has resolved.
+      if (dy < 0) {
+        if (!fullscreenElement()) enterFullscreenFor(stage);
+        return;
+      }
+      if (fullscreenElement()) {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) exit.call(document);
+        return;
+      }
       // Whichever way out the stage has right now: the control bar's once a
       // stream is attached, the stage's Back while it is still resolving.
-      document
-        .getElementById("tawny-player")
-        ?.querySelector("[data-player-minimize], .player-stage-back")
-        ?.click();
+      stage.querySelector("[data-player-minimize], .player-stage-back")?.click();
     },
     true,
   );
   document.addEventListener("pointercancel", () => (sheetFlick = null), true);
+
+  // A downward flick on the mini bar closes it, the same as its X. Done in the
+  // page for the reason above, by clicking the X so there is one way to stop
+  // playback.
+  let miniFlick = null;
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      const mini =
+        event.target instanceof Element && event.target.closest(".persistent-player.mini");
+      miniFlick = mini
+        ? { pointerId: event.pointerId, x: event.clientX, y: event.clientY, at: Date.now(), mini }
+        : null;
+    },
+    true,
+  );
+  document.addEventListener(
+    "pointerup",
+    (event) => {
+      const flick = miniFlick;
+      miniFlick = null;
+      if (!flick || flick.pointerId !== event.pointerId) return;
+      const dy = event.clientY - flick.y;
+      if (dy <= 0 || !isVerticalFlick(event.clientX - flick.x, dy, Date.now() - flick.at)) return;
+      flick.mini.querySelector(".mini-player-close")?.click();
+    },
+    true,
+  );
+  document.addEventListener("pointercancel", () => (miniFlick = null), true);
 
   function attach(video) {
     if (!video) return;
@@ -1081,10 +1121,12 @@
         // bridge heard it, so the controls flashed and the player stayed put.
         if (!tapOpensControls || !event.isTrusted) return;
         tapOpensControls = false;
-        // A press on a button is the button's own. A flag left set by an
-        // earlier tap on the picture (the stream failed before its click, say)
-        // would otherwise eat the click on Back or Try again.
-        if (isPlayerChrome(event.target)) return;
+        // Whatever this click landed on, the press began on the picture with
+        // the bar down. The bar can come up before the finger lifts (any
+        // playback event raises it), and the click then hit-tests onto the
+        // button that appeared under the finger. A press that began on a
+        // button clears the flag at pointerdown, so Back and Try again keep
+        // their own clicks.
         event.preventDefault();
         event.stopPropagation();
         showControls(false);
@@ -1101,6 +1143,7 @@
       // play/pause at the same time.
       if (isPlayerChrome(event.target)) {
         gestureStart = null;
+        tapOpensControls = false;
         return;
       }
       gestureStart = {
@@ -1171,7 +1214,9 @@
         if (!fullscreen) enterFullscreenFor(root);
       } else if (fullscreen) {
         document.exitFullscreen && document.exitFullscreen();
-      } else if (!startedInDeadZone) {
+      } else if (!startedInDeadZone && !root.closest(".persistent-player.mini")) {
+        // Already minimized, a downward flick is the mini bar's dismiss, which
+        // the document-level handler above performs.
         controls.querySelector("[data-player-minimize]")?.click();
       }
     };
@@ -1443,6 +1488,9 @@
     // `resize` is the media element's own event for a change of intrinsic size.
     listen(video, "resize", applyFullscreenOrientation);
     listen(video, "loadedmetadata", applyFullscreenOrientation);
+    // Fullscreen can already be on: a swipe up while the stream was resolving
+    // entered it before there was a controller (or the bridges) to hear it.
+    if (isPlayerFullscreen()) syncFullscreen();
 
     root.tabIndex = 0;
     setPlaybackIntent(playbackIntent);

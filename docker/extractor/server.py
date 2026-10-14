@@ -78,6 +78,19 @@ def build_channel_shorts_command(channel_id: str) -> list[str]:
     ]
 
 
+def build_channel_uploads_command(channel_id: str, tab: str) -> list[str]:
+    if not CHANNEL_ID.fullmatch(channel_id) or tab not in ("videos", "shorts", "streams"):
+        raise ValueError("invalid YouTube channel listing")
+    # Flat entries avoid player extraction. Listing the complete tab lets
+    # Tawny sort least popular globally, then serve small cached pages.
+    return [
+        YTDLP_BINARY, "--flat-playlist", "-J", "--no-warnings",
+        "--socket-timeout", "15", "--extractor-args",
+        "youtubetab:approximate_date",
+        f"https://www.youtube.com/channel/{channel_id}/{tab}",
+    ]
+
+
 def provider_is_ready() -> bool:
     try:
         with urllib.request.urlopen(f"{PO_TOKEN_PROVIDER_URL}/ping", timeout=2) as response:
@@ -146,6 +159,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid channel id"})
                 return
             command = build_channel_shorts_command(resource_id)
+        elif path.startswith(shorts_prefix) and "/uploads/" in path:
+            resource_id, tab = path.removeprefix(shorts_prefix).split("/uploads/", 1)
+            try:
+                command = build_channel_uploads_command(resource_id, tab)
+            except ValueError:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid channel listing"})
+                return
         else:
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
             return

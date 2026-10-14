@@ -1,4 +1,14 @@
 use super::*;
+use std::sync::atomic::{AtomicI32, Ordering};
+
+/// The viewer's offset from UTC, east positive. Rust cannot find it reliably
+/// in a WebView (wasm has no zone database, Android hides it), so the shell
+/// asks the page once at startup. Until then times read as UTC.
+static LOCAL_UTC_OFFSET_MINUTES: AtomicI32 = AtomicI32::new(0);
+
+pub fn set_local_utc_offset_minutes(minutes: i32) {
+    LOCAL_UTC_OFFSET_MINUTES.store(minutes, Ordering::Relaxed);
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, SurrealValue)]
 pub struct Video {
@@ -47,6 +57,25 @@ impl Video {
         } else {
             (self.progress_seconds as f64 / self.duration_seconds as f64 * 100.0).min(100.0)
         }
+    }
+
+    /// Where opening this video should start. A finished video starts over,
+    /// and "finished" is judged from the position as well as the flag: the
+    /// copy a Back or a tap reopens can predate the flag being set, and
+    /// resuming a few seconds before the end only jumps on to the next video.
+    pub fn resume_seconds(&self) -> u64 {
+        if self.watched || self.is_effectively_over(self.progress_seconds) {
+            0
+        } else {
+            self.progress_seconds
+        }
+    }
+
+    /// Whether `seconds` is close enough to the end to count as finished.
+    /// YouTube stops short of the exact duration often enough that an exact
+    /// match would rarely fire.
+    pub fn is_effectively_over(&self, seconds: u64) -> bool {
+        self.duration_seconds > 0 && seconds + 15 >= self.duration_seconds
     }
 
     pub fn published_epoch(&self) -> i64 {
@@ -160,6 +189,28 @@ impl Video {
         // It is not a date, so it should not be rendered where one belongs.
         if value.is_empty() || value == "From YouTube" {
             return String::new();
+        }
+        // A real timestamp gets its time of day, in the viewer's zone. Midnight
+        // UTC is how a source with only a date writes it, so that stays a date.
+        if let Ok(timestamp) = OffsetDateTime::parse(value, &Rfc3339)
+            && timestamp.time() != time::Time::MIDNIGHT
+        {
+            let minutes = LOCAL_UTC_OFFSET_MINUTES.load(Ordering::Relaxed);
+            let offset =
+                time::UtcOffset::from_whole_seconds(minutes * 60).unwrap_or(time::UtcOffset::UTC);
+            let local = timestamp.to_offset(offset);
+            let hour = match local.hour() % 12 {
+                0 => 12,
+                hour => hour,
+            };
+            return format!(
+                "{} {}, {}, {hour}:{:02} {}",
+                short_month(local.month()),
+                local.day(),
+                local.year(),
+                local.minute(),
+                if local.hour() < 12 { "AM" } else { "PM" },
+            );
         }
         let date = OffsetDateTime::parse(value, &Rfc3339)
             .ok()

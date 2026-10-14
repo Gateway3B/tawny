@@ -5,6 +5,7 @@ DEFINE FIELD IF NOT EXISTS name ON channel TYPE string;
 DEFINE FIELD IF NOT EXISTS handle ON channel TYPE string;
 DEFINE FIELD IF NOT EXISTS avatar_url ON channel TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS subscriber_count ON channel TYPE string DEFAULT "";
+DEFINE FIELD IF NOT EXISTS subscriber_count_verified_at ON channel TYPE option<datetime>;
 DEFINE FIELD IF NOT EXISTS subscribed ON channel TYPE bool DEFAULT false;
 DEFINE FIELD IF NOT EXISTS subscription_content ON channel TYPE string DEFAULT "all";
 DEFINE FIELD IF NOT EXISTS description ON channel TYPE string DEFAULT "";

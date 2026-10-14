@@ -58,6 +58,11 @@ pub fn VideoGrid(
     } else {
         GRID_FIRST_SCREEN
     };
+    // Cards from RSS arrive without a length, and only the feed and playlists
+    // asked for it, so everywhere else the badge stayed missing. The server
+    // only answers for videos this account follows or saved.
+    let candidates = use_memo(move || super::duration_candidates(videos.read().iter(), usize::MAX));
+    super::use_duration_hydration(candidates);
     let videos = videos.read();
     rsx! {
         if videos.is_empty() {

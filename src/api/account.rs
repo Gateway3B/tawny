@@ -85,3 +85,21 @@ pub async fn current_account() -> Result<Account> {
         .await
         .map_err(|error| ServerFnError::new(error.to_string()))?)
 }
+
+/// Permanently remove the caller's account and library. Other devices lose
+/// access because their sessions can no longer resolve an account row.
+#[post(
+    "/api/v1/auth/delete",
+    state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
+    owner: crate::auth::Owner,
+    crate::auth::SessionContext { auth_session, .. }: crate::auth::SessionContext
+)]
+pub async fn delete_account() -> Result<()> {
+    state
+        .accounts()
+        .delete(&owner.0)
+        .await
+        .map_err(server_error)?;
+    auth_session.logout_user();
+    Ok(())
+}

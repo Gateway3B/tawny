@@ -164,6 +164,9 @@
   }
 }
 @layer utilities {
+  .\@container {
+    container-type: inline-size;
+  }
   .pointer-events-none {
     pointer-events: none;
   }
@@ -418,6 +421,9 @@
   }
   .text-\[var\(--g3-color-danger\)\] {
     color: var(--g3-color-danger);
+  }
+  .overline {
+    text-decoration-line: overline;
   }
   .shadow {
     --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
@@ -721,6 +727,7 @@ button, input, textarea {
   aspect-ratio: 16 / 9;
 }
 .persistent-player.mini {
+  touch-action: pan-x;
   position: fixed;
   z-index: 45;
   right: 0;
@@ -1436,6 +1443,9 @@ html[data-route-transition="present-sheet"][data-route-transition-to^="/watch/"]
 html[data-route-transition="present-sheet"]::view-transition-group(player), html[data-route-transition="dismiss-sheet"]::view-transition-group(player) {
   z-index: 10000;
 }
+html[data-route-transition="present-sheet"][data-route-transition-to^="/watch/"] {
+  touch-action: none;
+}
 html[data-route-transition-platform="ios"][data-route-transition="present-sheet"]::view-transition-group( player ), html[data-route-transition-platform="ios"][data-route-transition="dismiss-sheet"]::view-transition-group( player ) {
   animation-duration: var(--route-transition-sheet-duration) !important;
   animation-timing-function: var(--route-transition-ios-ease) !important;
@@ -1446,7 +1456,7 @@ html[data-route-transition-platform="material"][data-route-transition="present-s
 }
 html[data-route-transition-platform="material"][data-route-transition="dismiss-sheet"]::view-transition-group( player ) {
   animation-duration: var(--route-transition-material-sheet-dismiss-duration) !important;
-  animation-timing-function: var(--route-transition-material-accelerate) !important;
+  animation-timing-function: var(--route-transition-material-spatial-ease) !important;
 }
 html[data-route-transition="present-sheet"] .persistent-player-stage video, html[data-route-transition="dismiss-sheet"] .persistent-player-stage video, html[data-route-transition="present-sheet"] .persistent-player-stage iframe, html[data-route-transition="dismiss-sheet"] .persistent-player-stage iframe {
   transition: none !important;
@@ -1590,7 +1600,7 @@ html[data-android-pip="true"] .persistent-player-stage video, html[data-android-
 }
 #tawny-player:fullscreen .player-controls-bottom, #tawny-player.is-fullscreen .player-controls-bottom {
   padding-right: max(0.7rem, env(safe-area-inset-right));
-  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  padding-bottom: max(1.75rem, env(safe-area-inset-bottom));
   padding-left: max(0.7rem, env(safe-area-inset-left));
 }
 @container g3-app-shell (width <= 680px) {
@@ -1657,6 +1667,37 @@ html[data-android-pip="true"] .persistent-player-stage video, html[data-android-
     top: max(0.3rem, env(safe-area-inset-top));
     max-height: calc(100dvh - 0.6rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   }
+  .persistent-player.expanded .player-controls-bottom {
+    padding-bottom: max(1.75rem, env(safe-area-inset-bottom));
+  }
+}
+@container g3-app-shell (width < 48rem) {
+  .g3-app-shell:has(.tawny-shell:not(.tawny-shell-cover, .tawny-shell-auxiliary)) .g3-toast-bottom {
+    --tawny-nav-height: calc(3.625rem + 1px + max(0.375rem, env(safe-area-inset-bottom)));
+    --g3-toast-bottom: calc(var(--tawny-nav-height) + 0.75rem);
+  }
+  .g3-app-shell:has(.tawny-shell.has-mini-player) .g3-toast-bottom {
+    --g3-toast-bottom: calc(var(--tawny-nav-height) + 3.65rem + 0.75rem);
+  }
+}
+.thumbnail-badges .g3-badge-neutral {
+  border-color: transparent;
+  background: rgb(0 0 0 / 0.82);
+  color: #fff;
+}
+html[data-route-transition="forward"] .persistent-player.mini, html[data-route-transition="backward"] .persistent-player.mini, html[data-route-transition="cross-fade"] .persistent-player.mini {
+  view-transition-name: mini-player;
+}
+html[data-route-transition]::view-transition-group(mini-player) {
+  animation: none;
+  z-index: 10000;
+}
+html[data-route-transition]::view-transition-old(mini-player), html[data-route-transition]::view-transition-new(mini-player) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html[data-route-transition]::view-transition-old(mini-player):not(:only-child) {
+  opacity: 0;
 }
 @property --tw-space-x-reverse {
   syntax: "*";

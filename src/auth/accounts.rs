@@ -82,6 +82,25 @@ struct DbCredential {
 
 const ACCOUNT_COLUMNS: &str = "type::string(id) AS id, display_name, email, is_guest";
 
+// Delete relations before their source records; the shared YouTube catalogue
+// belongs to the server, not to this account.
+const DELETE_ACCOUNT_QUERY: &str = r#"
+    BEGIN TRANSACTION;
+    LET $channels = SELECT VALUE channel_id FROM user_subscription WHERE owner = type::record($owner);
+    DELETE playlist_item WHERE in IN (SELECT VALUE id FROM playlist WHERE owner = type::record($owner));
+    DELETE playlist WHERE owner = type::record($owner);
+    DELETE subscription_group WHERE owner = type::record($owner);
+    DELETE library_state WHERE owner = type::record($owner);
+    DELETE video_progress WHERE owner = type::record($owner);
+    DELETE user_subscription WHERE owner = type::record($owner);
+    DELETE subscription WHERE in = type::record($owner);
+    FOR $channel_id IN $channels {
+        UPDATE channel SET subscribed = count(SELECT id FROM user_subscription WHERE channel_id = $channel_id AND subscribed = true) > 0 WHERE channel_id = $channel_id;
+    };
+    DELETE type::record($owner);
+    COMMIT TRANSACTION;
+"#;
+
 fn hash_password(password: &str) -> Result<String> {
     let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
@@ -106,6 +125,15 @@ pub struct Accounts<'db> {
 impl<'db> Accounts<'db> {
     pub fn new(db: &'db Surreal<Any>) -> Self {
         Self { db }
+    }
+
+    pub async fn delete(&self, account_id: &str) -> Result<()> {
+        self.db
+            .query(DELETE_ACCOUNT_QUERY)
+            .bind(("owner", account_id.to_string()))
+            .await?
+            .check()?;
+        Ok(())
     }
 
     pub async fn create_guest(&self) -> Result<Account> {
@@ -137,7 +165,8 @@ impl<'db> Accounts<'db> {
             return Err(AuthError::Credential(CredentialProblem::EmailTaken).into());
         }
 
-        let password_hash = hash_password(password)?;
+        let password = password.to_string();
+        let password_hash = tokio::task::spawn_blocking(move || hash_password(&password)).await??;
         let updated: Vec<DbAccount> = self
             .db
             .query(format!(
@@ -173,10 +202,11 @@ impl<'db> Accounts<'db> {
         let Some(candidate) = candidates.into_iter().next() else {
             return Err(AuthError::InvalidLogin.into());
         };
-        let Some(encoded) = candidate.password_hash.as_deref() else {
+        let Some(encoded) = candidate.password_hash else {
             return Err(AuthError::InvalidLogin.into());
         };
-        if !password_matches(password, encoded) {
+        let password = password.to_string();
+        if !tokio::task::spawn_blocking(move || password_matches(&password, &encoded)).await? {
             return Err(AuthError::InvalidLogin.into());
         }
         Ok(Account {
@@ -230,6 +260,38 @@ impl g3_auth::AuthUser for AppUser {
 /// that sign in or out.
 pub type SessionContext = g3_auth::SessionContext<AppUser, Any>;
 pub type AuthSession = g3_auth::AuthSession<AppUser, Any>;
+
+pub fn account_rate_limits() -> g3_auth::rate_limit::RateLimits {
+    use g3_auth::rate_limit::{KeyBy, Limit, RateLimits};
+    RateLimits::new()
+        .client_ip_header_from_env("CLIENT_IP_HEADER")
+        .limit(Limit::per_hour(
+            &["/api/v1/auth/guest"],
+            KeyBy::ClientIp,
+            10,
+        ))
+        .limit(Limit::per_hour(
+            &["/api/v1/auth/register"],
+            KeyBy::ClientIp,
+            10,
+        ))
+        .limit(Limit::per_minute(
+            &["/api/v1/auth/sign-in"],
+            KeyBy::ClientIp,
+            5,
+        ))
+        // Dioxus does not expose the peer address. This bounds work even when
+        // no trusted proxy header exists or an attacker rotates cookies.
+        .limit(Limit::per_minute(
+            &[
+                "/api/v1/auth/guest",
+                "/api/v1/auth/register",
+                "/api/v1/auth/sign-in",
+            ],
+            KeyBy::Global,
+            60,
+        ))
+}
 
 /// The signed-in account as the `app_user:<key>` record id that every
 /// owner-scoped query binds with `type::record($owner)`.
@@ -288,6 +350,122 @@ fn record_key(id: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deletion_covers_every_owner_table_in_the_schema() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("database/schema");
+        for entry in std::fs::read_dir(root).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|extension| extension.to_str()) != Some("surql") {
+                continue;
+            }
+            let schema = std::fs::read_to_string(&path).unwrap();
+            if schema.contains("DEFINE FIELD IF NOT EXISTS owner ON") {
+                let table = path.file_stem().unwrap().to_str().unwrap();
+                assert!(
+                    DELETE_ACCOUNT_QUERY.contains(&format!("DELETE {table} WHERE owner")),
+                    "{table} needs account deletion"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn account_endpoints_return_429_at_their_separate_limits() {
+        use axum::{body::Body, http::Request, routing::post};
+        use tower::ServiceExt;
+        let app = account_rate_limits().client_ip_header("x-client-ip").apply(
+            axum::Router::new()
+                .route("/api/v1/auth/guest", post(|| async { "ok" }))
+                .route("/api/v1/auth/register", post(|| async { "ok" }))
+                .route("/api/v1/auth/sign-in", post(|| async { "ok" })),
+        );
+        for (path, allowed) in [
+            ("/api/v1/auth/guest", 10),
+            ("/api/v1/auth/register", 10),
+            ("/api/v1/auth/sign-in", 5),
+        ] {
+            for attempt in 0..=allowed {
+                let request = Request::builder()
+                    .method("POST")
+                    .uri(path)
+                    .header("x-client-ip", "198.51.100.1")
+                    .header("cookie", format!("session={attempt}"))
+                    .body(Body::empty())
+                    .unwrap();
+                let response = app.clone().oneshot(request).await.unwrap();
+                assert_eq!(
+                    response.status(),
+                    if attempt < allowed {
+                        StatusCode::OK
+                    } else {
+                        StatusCode::TOO_MANY_REQUESTS
+                    },
+                    "{path}: {attempt}"
+                );
+                if attempt == allowed {
+                    assert!(response.headers().contains_key("retry-after"));
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn deleting_an_account_removes_its_library_and_revokes_other_devices() {
+        use axum_session_auth::Authentication;
+        let state = crate::server::AppServerState::initialize().await.unwrap();
+        let first = state.accounts().create_guest().await.unwrap();
+        let second = state.accounts().create_guest().await.unwrap();
+        for account in [&first, &second] {
+            state.seed_new_account(&account.id).await.unwrap();
+            state.db.query("CREATE video_progress SET owner = type::record($owner), video_id = 'one'; CREATE user_subscription SET owner = type::record($owner), channel_id = 'UCtest'; CREATE subscription_group SET owner = type::record($owner), group_id = 'group', name = 'Group';")
+                .bind(("owner", account.id.clone())).await.unwrap().check().unwrap();
+            state.db.query("LET $playlist = array::first(SELECT VALUE id FROM playlist WHERE owner = type::record($owner)); RELATE $playlist->playlist_item->video:example SET position = 0;")
+                .bind(("owner", account.id.clone())).await.unwrap().check().unwrap();
+        }
+        state.db.query("CREATE channel:shared SET channel_id = 'UCtest', name = 'Shared', handle = '@shared', subscribed = true; CREATE channel:exclusive SET channel_id = 'UCexclusive', name = 'Exclusive', handle = '@exclusive', subscribed = true; CREATE user_subscription SET owner = type::record($owner), channel_id = 'UCexclusive';")
+            .bind(("owner", first.id.clone())).await.unwrap().check().unwrap();
+        state.accounts().delete(&first.id).await.unwrap();
+        let mut response = state.db.query("SELECT VALUE subscribed FROM ONLY channel:shared; SELECT VALUE subscribed FROM ONLY channel:exclusive; RETURN count(SELECT id FROM playlist_item);")
+            .await.unwrap().check().unwrap();
+        assert!(response.take::<Option<bool>>(0).unwrap().unwrap());
+        assert!(!response.take::<Option<bool>>(1).unwrap().unwrap());
+        assert_eq!(response.take::<Option<i64>>(2).unwrap(), Some(1));
+        assert!(state.accounts().find(&first.id).await.is_err());
+        assert!(
+            <g3_auth::SessionUser<AppUser> as Authentication<
+                g3_auth::SessionUser<AppUser>,
+                String,
+                std::sync::Arc<Surreal<Any>>,
+            >>::load_user(record_key(&first.id).into(), Some(&state.db))
+            .await
+            .is_err()
+        );
+        assert!(state.accounts().find(&second.id).await.is_ok());
+        for table in [
+            "playlist",
+            "subscription_group",
+            "library_state",
+            "video_progress",
+            "user_subscription",
+        ] {
+            for (account, expected_empty) in [(&first, true), (&second, false)] {
+                let ids: Vec<surrealdb_types::RecordId> = state
+                    .db
+                    .query(format!(
+                        "SELECT VALUE id FROM {table} WHERE owner = type::record($owner)"
+                    ))
+                    .bind(("owner", account.id.clone()))
+                    .await
+                    .unwrap()
+                    .check()
+                    .unwrap()
+                    .take(0)
+                    .unwrap();
+                assert_eq!(ids.is_empty(), expected_empty, "{table}: {}", account.id);
+            }
+        }
+    }
 
     #[test]
     fn a_password_verifies_only_against_itself() {

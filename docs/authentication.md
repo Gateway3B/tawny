@@ -17,6 +17,7 @@ Sessions name their account by its record key. Sessions written before g3-auth n
 | `sign_in_to_account` | yes | Email and password (argon2 hashes, in `auth/accounts.rs`); replaces the session's account |
 | `sign_out_of_account` | yes | Ends the session; the client starts a new guest |
 | `current_account` | no | Who is signed in |
+| `delete_account` | no | Permanently removes the caller's account and owned library; other devices can no longer authenticate |
 
 Credentials are checked by `validate_email` and `validate_password` in
 `src/models/account.rs`, shared by the form and the server.
@@ -31,3 +32,17 @@ requests can therefore log `401` before the cookie lands; they are retried.
 
 The client cache is keyed to the signed-in account and emptied when it
 changes (`g3_cache::set_cache_owner`).
+
+Deletion requires confirmation in Settings, removes playlist relations and
+account-owned tables in one transaction, and keeps the shared YouTube catalog.
+The client discards pending playback progress, stops playback and clears its
+cache before reloading. Auth user caching is disabled so another device cannot
+keep using a deleted row.
+
+Guest creation and registration allow ten requests an hour per client;
+sign-in allows five a minute. The three endpoints also share a sixty-per-minute
+ceiling to bound work when clients rotate cookies. Password hashing and
+verification run on blocking workers. Set `CLIENT_IP_HEADER` only when the
+app is reachable exclusively through a trusted proxy that overwrites that
+header with the real client address. Without it, per-client limits use the
+session cookie; the shared ceiling still applies.

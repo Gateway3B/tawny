@@ -55,6 +55,7 @@ fn main() {
         // guest from whichever page they opened. Server functions are not,
         // unless marked `#[g3_auth::public]`.
         let guard = AuthGuard::for_routes(app::Route::Feed {});
+        let rate_limits = auth::account_rate_limits().shared();
 
         // Routes that answer without a session, outside the session layers.
         // Probes should not allocate a viewer session; YouTube's hub has no
@@ -73,6 +74,10 @@ fn main() {
             .layer(Extension(state.clone()));
 
         Ok(dioxus::server::router(App)
+            .layer(from_fn_with_state(
+                rate_limits,
+                g3_auth::rate_limit::enforce,
+            ))
             .layer(Extension(state))
             .layer(Extension(Arc::clone(&db)))
             .layer(from_fn_with_state(
@@ -81,7 +86,7 @@ fn main() {
             ))
             .layer(
                 AuthSessionLayer::<auth::AppUser, Any>::new(Some(db))
-                    .with_config(AuthConfig::<String>::default()),
+                    .with_config(AuthConfig::<String>::default().set_cache(false)),
             )
             .layer(SessionLayer::new(session_store))
             .layer(g3_cache::cdn_cache_guard("/api"))

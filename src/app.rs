@@ -173,6 +173,11 @@ pub fn App() -> Element {
         // Declared rather than left to the browser, which otherwise probes
         // /favicon.ico on every load and takes a 404 for it.
         document::Link { rel: "icon", r#type: "image/svg+xml", href: FAVICON_SVG }
+        // Tawny has its own dark theme, and Dark Reader leaks on the player:
+        // each write to the seek bar's inline custom properties makes it wrap
+        // its own previous rewrite in another `--darkreader-bgimg--` layer, and
+        // a long-lived tab grew past 2 GB of those strings.
+        document::Meta { name: "darkreader-lock" }
         document::Link { rel: "stylesheet", href: TAILWIND_CSS }
         document::Script { src: SHAKA_PLAYER_JS }
         document::Script { src: TAWNY_TRANSPORT_JS }
@@ -259,6 +264,18 @@ fn ThemedApp() -> Element {
             );
             let mut eval = document::eval(&script);
             let _ = eval.recv::<bool>().await;
+        });
+    });
+
+    // Card times are shown in the viewer's zone. The effect reads no signal, so
+    // it asks once; cards drawn before the answer lands show UTC until their
+    // next render.
+    use_effect(move || {
+        spawn(async move {
+            let mut eval = document::eval("dioxus.send(-new Date().getTimezoneOffset());");
+            if let Ok(minutes) = eval.recv::<i32>().await {
+                crate::models::set_local_utc_offset_minutes(minutes);
+            }
         });
     });
 

@@ -48,7 +48,14 @@
   function rememberPosition(video, options) {
     if (!options.videoId) return;
     const position = playbackPosition(video);
-    if (position > 0) resumePositions.set(options.videoId, position);
+    // Within the last few seconds the video is over; remembering that spot
+    // would reopen it at the end, and straight on to the next video.
+    const duration = Number(video.duration);
+    if (Number.isFinite(duration) && duration > 0 && position + 15 >= duration) {
+      resumePositions.delete(options.videoId);
+    } else if (position > 0) {
+      resumePositions.set(options.videoId, position);
+    }
   }
 
   function emit(video, name, detail) {
@@ -681,10 +688,20 @@
     return document.visibilityState === "hidden" && !options.audioOnly;
   }
 
+  function cancelRestoreWhenVisible(video) {
+    video.__tawnyCancelRestore?.();
+    video.__tawnyCancelRestore = null;
+  }
+
   function restoreVideoWhenVisible(video, session, options, generation) {
+    // A listener that only removes itself once the page is visible would hold
+    // this video and its session for as long as the page stayed hidden, and
+    // forever if the generation moved on first. Whoever replaces or detaches
+    // this generation takes it down instead.
+    cancelRestoreWhenVisible(video);
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
-      document.removeEventListener("visibilitychange", onVisible);
+      cancelRestoreWhenVisible(video);
       if (video.__tawnyGeneration !== generation || !video.isConnected) return;
       const resume = !video.paused;
       recordTransportEvent({ phase: "restoring-video", position: playbackPosition(video) });
@@ -704,12 +721,14 @@
         });
     };
     document.addEventListener("visibilitychange", onVisible);
+    video.__tawnyCancelRestore = () => document.removeEventListener("visibilitychange", onVisible);
   }
 
   async function attach(video, session, options) {
     if (!video) throw new Error("Player element is missing");
     const generation = nextGeneration++;
     video.__tawnyGeneration = generation;
+    cancelRestoreWhenVisible(video);
     const attachOptions = options || {};
     attachOptions.startTime = rememberedPosition(video, attachOptions);
     recordTransportEvent({
@@ -727,6 +746,7 @@
   async function detach(video) {
     if (!video) return;
     video.__tawnyGeneration = nextGeneration++;
+    cancelRestoreWhenVisible(video);
     await destroyRuntime(video);
   }
 

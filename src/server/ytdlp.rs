@@ -223,6 +223,8 @@ pub(crate) struct YtdlpFlatEntry {
     pub(crate) duration: Option<f64>,
     #[serde(default)]
     pub(crate) view_count: Option<i64>,
+    #[serde(default)]
+    pub(crate) timestamp: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -245,7 +247,11 @@ pub(crate) fn ytdlp_flat_playlist_videos(
             title: entry.title.unwrap_or_default(),
             channel_id: channel_id.to_string(),
             channel_name: channel_name.to_string(),
-            published_at: String::new(),
+            published_at: entry
+                .timestamp
+                .and_then(|stamp| time::OffsetDateTime::from_unix_timestamp(stamp).ok())
+                .map(|date| date.date().to_string())
+                .unwrap_or_default(),
             duration_seconds: entry.duration.unwrap_or(0.0) as u64,
             view_count: entry
                 .view_count
@@ -262,6 +268,63 @@ pub(crate) fn ytdlp_flat_playlist_videos(
 }
 
 impl AppServerState {
+    pub(crate) async fn ytdlp_channel_uploads(
+        &self,
+        channel_id: &str,
+        channel_name: &str,
+        tab: ChannelMediaTab,
+    ) -> Result<Vec<Video>> {
+        let kind = match tab {
+            ChannelMediaTab::Videos => "videos",
+            ChannelMediaTab::Shorts => "shorts",
+            ChannelMediaTab::Live => "streams",
+        };
+        let dump = if let Some(service_url) = &self.ytdlp_service_url {
+            let mut url = reqwest::Url::parse(service_url)?;
+            url.path_segments_mut()
+                .map_err(|_| anyhow!("invalid extractor URL"))?
+                .extend(["v1", "channels", channel_id, "uploads", kind]);
+            self.ytdlp_http
+                .get(url)
+                .send()
+                .await?
+                .error_for_status()?
+                .json::<YtdlpFlatPlaylist>()
+                .await?
+        } else {
+            let binary = self
+                .ytdlp_bin
+                .as_ref()
+                .ok_or_else(|| anyhow!("channel extractor is unavailable"))?;
+            let output = tokio::time::timeout(
+                Duration::from_secs(40),
+                tokio::process::Command::new(binary)
+                    .args([
+                        "--flat-playlist",
+                        "-J",
+                        "--no-warnings",
+                        "--socket-timeout",
+                        "15",
+                        "--extractor-args",
+                        "youtubetab:approximate_date",
+                        &format!("https://www.youtube.com/channel/{channel_id}/{kind}"),
+                    ])
+                    .stdin(std::process::Stdio::null())
+                    .output(),
+            )
+            .await??;
+            if !output.status.success() {
+                return Err(anyhow!("channel listing failed"));
+            }
+            serde_json::from_slice(&output.stdout)?
+        };
+        let mut videos = ytdlp_flat_playlist_videos(dump, channel_id, channel_name);
+        for video in &mut videos {
+            video.is_short = tab == ChannelMediaTab::Shorts;
+            video.is_live = false;
+        }
+        Ok(videos)
+    }
     pub(crate) async fn adaptive_tail_is_available(&self, source: &PlaybackSource) -> bool {
         if source.tracks.is_empty()
             || !matches!(

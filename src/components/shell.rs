@@ -113,9 +113,26 @@ fn NativeMediaCoordinator() -> Element {
     });
     // Pausing keeps the system media controls so they can resume playback;
     // closing the player is what takes them away.
-    use_effect(move || {
-        if app_state.active_video().is_none() {
+    //
+    // Opening a video also claims playback at once, before there is a media
+    // element to play. The host pauses the WebView when the screen goes off,
+    // and it only keeps it running for playback it knows about: a video still
+    // resolving when the screen turned off never rendered, so it never began,
+    // and waited for the next unlock. Keyed on the id so the metadata filling
+    // in does not re-claim playback that was paused since.
+    let active_id = use_memo(move || app_state.active_video().map(|video| video.id));
+    use_effect(move || match active_id() {
+        None => {
             let _ = plugins.media.write().clear_playback();
+        }
+        Some(_) => {
+            let title = app_state
+                .active_video
+                .peek()
+                .as_ref()
+                .map(|video| video.title.clone())
+                .unwrap_or_default();
+            let _ = plugins.media.write().set_playback_active(true, title);
         }
     });
     rsx! {}

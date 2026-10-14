@@ -141,7 +141,12 @@ pub(crate) fn rusty_video_item_to_video(
 
 pub(crate) fn encode_page<T: Serialize>(prefix: &str, paginator: &Paginator<T>) -> Option<String> {
     paginator.ctoken.as_ref()?;
-    serde_json::to_vec(paginator)
+    // The token travels in a GET query string. The items already shown are
+    // no use to the next fetch and, for comments, made it long enough to be
+    // refused, so only what continues the list is kept.
+    let mut value = serde_json::to_value(paginator).ok()?;
+    value["items"] = serde_json::Value::Array(Vec::new());
+    serde_json::to_vec(&value)
         .ok()
         .map(|json| format!("{prefix}:{}", URL_SAFE_NO_PAD.encode(json)))
 }
@@ -479,6 +484,26 @@ pub(crate) fn compact_count(value: i64, suffix: &str) -> String {
         format!("{}", value as i64)
     };
     format!("{}{}", count.trim_end_matches(".0"), suffix)
+}
+
+pub(crate) fn sort_channel_uploads(videos: &mut [Video], order: &str) {
+    match order {
+        // The channel listing is chronological even where YouTube omits dates.
+        "oldest" => videos.reverse(),
+        "popular" | "unpopular" => videos.sort_by(|a, b| {
+            match (
+                crate::models::compact_count_value(&a.view_count),
+                crate::models::compact_count_value(&b.view_count),
+            ) {
+                (Some(a), Some(b)) if order == "popular" => b.total_cmp(&a),
+                (Some(a), Some(b)) => a.total_cmp(&b),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            }
+        }),
+        _ => {}
+    }
 }
 
 pub(crate) fn handle_for(name: &str, url: &str) -> String {
