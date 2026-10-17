@@ -77,7 +77,12 @@ async function expectResponsiveNavigation(page, labels) {
   expect(boxes.every(Boolean)).toBe(true);
 
   if (viewport.width >= 768) {
-    expect(tablistBox.width).toBeLessThan(100);
+    // A rail down the left edge. g3-ui rails start expanded, labels beside
+    // the icons, and collapse to icons from the toggle at their foot.
+    await expect(
+      tablist.getByRole("button", { name: "Collapse navigation", exact: true }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(tablistBox.width).toBeLessThan(viewport.width / 4);
     expect(
       Math.max(...boxes.map((box) => box.x)) - Math.min(...boxes.map((box) => box.x)),
     ).toBeLessThan(8);

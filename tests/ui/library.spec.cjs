@@ -15,16 +15,23 @@ test.describe("Tawny library interactions", () => {
     await create.click();
 
     await expect(dialog).toBeHidden();
-    await expect(appPage.getByText("UI test playlist", { exact: true })).toBeVisible();
+    const card = appPage.locator(".g3-card", { hasText: "UI test playlist" });
+    await expect(card.locator(".g3-card-subtitle")).toHaveText("0 videos");
 
     await appPage.getByText("UI test playlist", { exact: true }).click();
-    await expect(appPage.locator("header").getByText("0 videos", { exact: true })).toBeVisible();
+    await expect(
+      appPage.locator("header").getByText("UI test playlist", { exact: true }),
+    ).toBeVisible();
+    await expect(appPage.getByText("Add videos from the buttons on a card.")).toBeVisible();
+    await expect(appPage.getByRole("button", { name: "Play all", exact: true })).toBeDisabled();
     await expectNoHorizontalScroll(appPage);
   });
 
   test("renames and reorders a playlist from its card menu", async ({ appPage }) => {
     await openApp(appPage, "/playlists");
     const names = () => appPage.locator(".g3-card-title").allInnerTexts();
+    // The cards follow the viewer request a moment later.
+    await expect(appPage.locator(".g3-card-title").nth(1)).toBeVisible();
     const before = await names();
     expect(before.length).toBeGreaterThan(1);
     const first = before[0];
@@ -47,7 +54,8 @@ test.describe("Tawny library interactions", () => {
     await dialog.getByLabel("Playlist name", { exact: true }).fill("Renamed by test");
     await dialog.getByRole("button", { name: "Rename", exact: true }).click();
     await expect(appPage.getByText("Renamed by test", { exact: true })).toBeVisible();
-    await expect(appPage.getByText(first, { exact: true })).toHaveCount(0);
+    // The closed actions sheet stays mounted, hidden, under the old name.
+    await expect.poll(names).not.toContain(first);
   });
 
   test("starts with useful duration defaults and a differentiated light theme", async ({
@@ -142,25 +150,27 @@ test.describe("Tawny library interactions", () => {
     appPage,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium", "desktop pointer behavior");
-    await openApp(appPage);
+    // A fresh account's feed can be empty; every account starts with this.
+    await openApp(appPage, "/playlists/deep-dives");
 
-    // A mouse reaches the swipe actions through the row's actions button.
-    const row = appPage.locator(".g3-swipe-item").first();
-    const showActions = row.getByRole("button", { name: "Show actions" });
-    const action = row.locator(".g3-swipe-actions-end .g3-swipe-action");
-    await expect
-      .poll(() => row.evaluate((element) => element.style.getPropertyValue("--g3-swipe-offset")))
-      .toBe("0px");
+    // A mouse reaches the swipe actions through the thumbnail's edge buttons,
+    // which stand in for g3-ui's "Show actions" button on a fine pointer.
+    const frame = appPage.locator(".video-card-frame").first();
+    const row = frame.locator(".g3-swipe-item");
+    const action = frame.locator(".video-card-edge-action-end");
+    // Computed, not inline: the gesture script writes the offset only once a
+    // row moves, and the stylesheet supplies the resting 0px.
+    const offset = () =>
+      row.evaluate((element) =>
+        getComputedStyle(element).getPropertyValue("--g3-swipe-offset").trim(),
+      );
+    await expect.poll(offset).toBe("0px");
 
-    await row.hover();
-    await showActions.click();
     await action.click();
     const toast = appPage.locator(".g3-toast");
     await expect(toast).toHaveAttribute("data-state", "open");
     const firstToast = await toast.elementHandle();
 
-    await row.hover();
-    await showActions.click();
     await action.click();
     await expect.poll(() => firstToast.evaluate((element) => element.isConnected)).toBe(false);
 
@@ -169,14 +179,13 @@ test.describe("Tawny library interactions", () => {
     await appPage.mouse.down();
     await appPage.mouse.move(box.x + box.width / 2 + 160, box.y + box.height / 2);
     await appPage.mouse.up();
-    await expect
-      .poll(() => row.evaluate((element) => element.style.getPropertyValue("--g3-swipe-offset")))
-      .toBe("0px");
+    await expect.poll(offset).toBe("0px");
   });
 
   test("prevents native dragging of desktop card thumbnails", async ({ appPage }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium", "desktop pointer behavior");
-    await openApp(appPage);
+    // A fresh account's feed can be empty; every account starts with this.
+    await openApp(appPage, "/playlists/deep-dives");
 
     const thumbnails = appPage.locator(".g3-card .g3-card-media img");
     const thumbnail = thumbnails.first();
@@ -201,9 +210,12 @@ test.describe("Tawny library interactions", () => {
 
   test("repeated player edge clicks accumulate ten-second seeks", async ({ appPage }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium", "desktop pointer behavior");
-    await openApp(appPage);
+    // Straight to a watch page, as the media-session spec does, with the
+    // stream held open: the test sets the time itself, and a stream that
+    // loaded part way through would move it.
+    await appPage.route("**/api/v1/playback/proxy/**", () => new Promise(() => {}));
+    await openApp(appPage, "/watch/dQw4w9WgXcQ");
 
-    await appPage.locator(".g3-card .g3-card-action").first().click();
     const player = appPage.locator("#tawny-player");
     const media = appPage.locator("#tawny-player-media");
     await expect(player).toBeVisible();
