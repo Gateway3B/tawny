@@ -14,7 +14,8 @@
 use dioxus::prelude::*;
 use g3_ui::{
     AlertButton, AlertOptions, Button, ButtonExpand, ButtonFill, Card, Color, Content,
-    ContentWidth, Input, InputType, Space, Stack, Text, TextTone, TextVariant, use_alert,
+    ContentWidth, HeadingLevel, Input, InputType, Space, Stack, Text, TextTone, TextVariant,
+    use_alert,
 };
 
 use crate::{
@@ -108,7 +109,7 @@ fn BackendSetupScreen(problem: Option<String>, on_saved: EventHandler<()>) -> El
         Content { width: ContentWidth::Readable,
             Card {
                 title: "Connect to a Tawny server",
-                heading_level: 1,
+                heading_level: HeadingLevel::H1,
                 Stack {
                     Text { tone: TextTone::Secondary,
                         "Tawny stores your subscriptions and history on a server you or someone you trust runs. Enter its address to begin."

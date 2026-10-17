@@ -24,8 +24,9 @@ use g3_route_transitions::{
 };
 use g3_ui::{
     Avatar, AvatarSize, Badge, BottomSheet, Button, ButtonExpand, ButtonFill, ButtonSize, Card,
-    CardVariant, Chip, Color, Content, EmptyState, Item, List, ListLines, SheetBackdrop, Shelf,
-    Skeleton, SkeletonShape, Space, Spinner, Stack, StackAlign, Text, TextTone, TextVariant,
+    CardVariant, Chip, Color, Content, EmptyState, HeadingLevel, Item, List, ListLines,
+    SheetBackdrop, Shelf, Skeleton, SkeletonShape, Space, Spinner, Stack, StackAlign, Text,
+    TextTone, TextVariant,
 };
 
 use super::{VideoGrid, linkify::Linkified};
@@ -2226,7 +2227,7 @@ fn VideoDetailInner(id: String) -> Element {
                             class: if description_expanded() { "whitespace-pre-line break-words" } else { "line-clamp-4 whitespace-pre-line break-words" },
                             Linkified {
                                 text: details.description.clone(),
-                                on_seek: move |seconds| seek_player(seconds),
+                                on_seek: seek_player,
                             }
                         }
                         Button {
@@ -2423,7 +2424,7 @@ fn CommentCard(comment: VideoComment) -> Element {
         Card {
             variant: if comment.pinned { CardVariant::Flat } else { CardVariant::Filled },
             title: comment.author.clone(),
-            heading_level: 3,
+            heading_level: HeadingLevel::H3,
             subtitle: comment.published_at.clone(),
             start: rsx! {
                 Avatar { name: comment.author.clone(), src: comment.author_avatar_url.clone(), size: AvatarSize::Sm }
