@@ -9,7 +9,7 @@ use crate::{
 use dioxus::prelude::*;
 use g3_native_plugins::NativePluginsProvider;
 use g3_route_transitions::{
-    Platform as TransitionPlatform, RouteTransitions, init_auto_platform, set_platform,
+    Platform as TransitionPlatform, RouteTransitions, detect_platform, set_platform,
     use_browser_history_transitions,
 };
 use g3_ui::{AppWrapper, ComponentMode, Theme};
@@ -239,7 +239,7 @@ fn ThemedApp() -> Element {
     // runs exactly once: it applied the default and never saw the saved style,
     // so the components switched to iOS while every transition stayed Material.
     use_effect(move || match app_state.settings.read().platform_style {
-        PlatformStyle::Auto => init_auto_platform(),
+        PlatformStyle::Auto => set_platform(detect_platform()),
         PlatformStyle::Ios => set_platform(TransitionPlatform::Ios),
         PlatformStyle::Material => set_platform(TransitionPlatform::Material),
     });

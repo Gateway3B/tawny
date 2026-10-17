@@ -12,7 +12,7 @@ repository = "https://github.com/g3techhq/tawny"
 dioxus = { version = "=0.7.9", features = ["router", "fullstack"] }
 dioxus-fullstack = "=0.7.9"
 dioxus-icons = "0.1.0"
-g3-route-transitions = { version = "0.4.3", features = ["native-back"] }
+g3-route-transitions = { version = "0.5", features = ["native-back"] }
 g3-native-plugins = { version = "0.4.3", features = ["appearance", "back-button", "clipboard", "media", "storage"] }
 g3-ui = { version = "0.6", features = ["transitions"] }
 g3-auth = "0.1.3"

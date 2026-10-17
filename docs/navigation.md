@@ -9,7 +9,7 @@ and the route decides whether that is a push, a sheet or a cross-fade.
 ## The shell
 
 `AppShell` (`components/shell.rs`) is the one layout: the page in a
-`RouteTransitionPage`, g3-ui's `AdaptiveNav` (bottom tabs on a phone, a rail on
+`RouteTransitionPageRegion`, g3-ui's `AdaptiveNav` (bottom tabs on a phone, a rail on
 a wide screen), and the persistent player, which lives here so the media
 element survives navigation. `PageHeader` is each page's header: Back (or the
 brand), the title, the page's toolbar, and the Queue, History and Settings

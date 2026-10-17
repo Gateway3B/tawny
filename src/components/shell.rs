@@ -6,8 +6,8 @@ use dioxus_icons::lucide::{
 #[cfg(target_os = "android")]
 use g3_native_plugins::NativePlugins;
 use g3_route_transitions::{
-    ROUTE_TRANSITION_PERSISTENT_CLASS, RouteTransitionPage, animated_back_or_navigate,
-    animated_navigate, use_native_back_navigation_with_interception,
+    ROUTE_TRANSITION_PERSISTENT_REGION_CLASS, RouteTransitionPageRegion, animated_back_or_navigate,
+    animated_navigate, use_native_back_navigation_with_layer,
 };
 use g3_ui::{
     AdaptiveNav, BackButton, Button, ButtonFill, Color, Header, NavItem, Space, Stack, StackAlign,
@@ -36,8 +36,8 @@ fn NativeBackCoordinator() -> Element {
     // signal - comments, captions, audio, a channel's description. Listing app
     // state by hand missed those, so Back at a history-less root fell through
     // to Android and closed the app instead of the sheet. Share is a modal.
-    let overlay_open = g3_ui::open_sheet_count() > 0 || (app_state.share_open)();
-    use_native_back_navigation_with_interception::<Route>(overlay_open);
+    let overlay_open = use_memo(move || g3_ui::open_sheet_count() > 0 || (app_state.share_open)());
+    use_native_back_navigation_with_layer::<Route>(overlay_open);
 
     #[cfg(target_os = "android")]
     let _native_back_behavior = use_hook(|| {
@@ -365,13 +365,13 @@ pub fn AppShell() -> Element {
             } else {
                 // The page's own header and body, captured as one image, so
                 // the bar slides with the page it belongs to.
-                RouteTransitionPage { Outlet::<Route> {} }
+                RouteTransitionPageRegion { Outlet::<Route> {} }
             }
             // Always rendered: the wide-layout rail is permanent chrome, and
             // only the compact bottom bar gets out of a sheet's way. Hiding it
             // in CSS keeps that a layout decision rather than a routing one.
             AdaptiveNav {
-                class: ROUTE_TRANSITION_PERSISTENT_CLASS,
+                class: ROUTE_TRANSITION_PERSISTENT_REGION_CLASS,
                 aria_label: "Primary navigation",
                 NavItem {
                     label: "Feed",
