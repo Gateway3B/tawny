@@ -74,8 +74,7 @@ pub fn VideoGrid(
         } else {
             // Shorts are portrait, so more of them fit across.
             Grid {
-                columns: GridColumns::Count(if shorts { 2 } else { 1 }),
-                wide_columns: GridColumns::Count(if shorts { 6 } else { 4 }),
+                columns: GridColumns::Fit(if shorts { 10.0 } else { 18.0 }),
                 gap: Space::Lg,
                 for video in videos.iter().take(limit) {
                     VideoCard { key: "{video.id}", video: video.clone(), playlist_id: playlist_id.clone(), short: shorts }
@@ -88,15 +87,15 @@ pub fn VideoGrid(
 /// Where a [`VideoGrid`] will be, laid out the same way, while the page works
 /// out what goes in it.
 #[component]
-pub fn VideoGridSkeleton(count: usize) -> Element {
+pub fn VideoGridSkeleton(count: usize, shorts_layout: Option<bool>) -> Element {
+    let shorts = shorts_layout.unwrap_or(false);
     rsx! {
         Grid {
-            columns: GridColumns::Count(1),
-            wide_columns: GridColumns::Count(4),
+            columns: GridColumns::Fit(if shorts { 10.0 } else { 18.0 }),
             gap: Space::Lg,
             for index in 0..count {
                 div { key: "{index}", class: "flex flex-col gap-2",
-                    Skeleton { shape: SkeletonShape::Block, class: "aspect-video rounded-lg" }
+                    Skeleton { shape: SkeletonShape::Block, class: if shorts { "aspect-[9/16] rounded-lg" } else { "aspect-video rounded-lg" } }
                     Skeleton { width: "85%" }
                     Skeleton { width: "50%" }
                 }
