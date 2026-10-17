@@ -1,26 +1,26 @@
 use super::*;
 
 #[cfg_attr(not(feature = "server"), allow(dead_code))]
-/// What a new account starts with: a few real channels and videos, so the
-/// feed is not empty on first launch, and the playlists the default swipes
-/// save to. The server seeds the catalog with it on first start.
+/// The seed catalog: a few videos and their channels, which the server writes
+/// on first start, and the playlists the default swipes save to. A new
+/// account follows none of the channels, so its feed starts empty.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DemoLibrary {
     pub channels: Vec<Channel>,
     pub videos: Vec<Video>,
     pub playlists: Vec<Playlist>,
-    pub subscription_groups: Vec<SubscriptionGroup>,
     pub queue: Vec<String>,
 }
 
 #[cfg_attr(not(feature = "server"), allow(dead_code))]
-/// The demo channels, playlists and groups a new account starts with.
+/// What a new account starts with: the default playlists and a queue, and no
+/// follows or groups.
 pub fn demo_viewer() -> Viewer {
     let demo = DemoLibrary::demo();
     Viewer {
-        subscriptions: demo.channels,
+        subscriptions: Vec::new(),
         playlists: demo.playlists,
-        subscription_groups: demo.subscription_groups,
+        subscription_groups: Vec::new(),
         queue: demo.queue,
         history: Vec::new(),
     }
@@ -193,24 +193,10 @@ impl DemoLibrary {
             },
         ];
 
-        let subscription_groups = vec![
-            SubscriptionGroup {
-                id: "makers".into(),
-                name: "Makers".into(),
-                channel_ids: vec![channels[0].id.clone(), channels[1].id.clone()],
-            },
-            SubscriptionGroup {
-                id: "outside".into(),
-                name: "Outside".into(),
-                channel_ids: vec![channels[2].id.clone(), channels[3].id.clone()],
-            },
-        ];
-
         Self {
             channels,
             videos,
             playlists,
-            subscription_groups,
             queue: vec!["M7lc1UVf-VE".into(), "ysz5S6PUM-U".into()],
         }
     }

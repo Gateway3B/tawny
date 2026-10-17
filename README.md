@@ -22,7 +22,7 @@ This repository currently contains a working vertical slice:
 - responsive mobile, web, and desktop navigation using `g3-ui`;
 - server-side playback resolution for SABR, HLS, DASH, progressive streams, and per-video PO tokens.
 
-A new account starts with a few demo channels and the default playlists, so the first launch is not empty. Library actions show on the device at once and are then saved to SurrealDB; the screens refetch what the change affected. See [docs/architecture.md](docs/architecture.md#data-on-the-client).
+A new account starts with the default playlists and follows no one, so its feed is empty until you follow a channel. Library actions show on the device at once and are then saved to SurrealDB; the screens refetch what the change affected. See [docs/architecture.md](docs/architecture.md#data-on-the-client).
 
 ## Quick start
 

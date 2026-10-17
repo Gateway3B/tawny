@@ -835,25 +835,13 @@ impl AppServerState {
         Ok(())
     }
 
-    /// What a new account starts with: the demo channels followed, so the
-    /// feed has something in it, and the playlists the default swipes save
-    /// to.
+    /// What a new account starts with: the playlists the default swipes save
+    /// to, and a queue. It follows nothing, so its feed starts empty.
     pub async fn seed_new_account(&self, owner: &str) -> Result<()> {
         let demo = crate::models::demo_viewer();
-        let changes = demo
-            .subscriptions
-            .into_iter()
-            .map(|channel| SubscriptionChange {
-                content: channel.subscription_content,
-                subscribed: true,
-                channel,
-            })
-            .collect();
-        self.set_subscriptions(owner, changes).await?;
         for playlist in &demo.playlists {
             self.upsert_playlist(owner, playlist).await?;
         }
-        self.save_groups(owner, &demo.subscription_groups).await?;
         self.set_queue(owner, &demo.queue).await?;
         Ok(())
     }
@@ -1234,12 +1222,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_new_account_starts_with_the_default_playlists() {
+    async fn a_new_account_starts_with_the_default_playlists_and_no_follows() {
         let (state, owner) = state_and_owner().await;
         state.seed_new_account(&owner).await.unwrap();
         let viewer = state.viewer(&owner).await.unwrap();
         assert!(viewer.playlist("watch-later").is_some());
         assert!(viewer.playlist("deep-dives").is_some());
-        assert!(!viewer.subscriptions.is_empty());
+        assert!(viewer.subscriptions.is_empty());
+        assert!(viewer.subscription_groups.is_empty());
+        let feed = state.feed_page(&owner, &query(), 0).await.unwrap();
+        assert!(feed.videos.is_empty());
     }
 }

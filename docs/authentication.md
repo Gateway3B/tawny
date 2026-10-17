@@ -2,7 +2,7 @@
 
 Sessions, guests and accounts. The code is `src/auth/` (`accounts.rs` on the server, `session.rs` on the client) and the guard in `src/main.rs`.
 
-Sessions come from `g3-auth`, the same stack as Greenside Partee and Media Mancer: cookie sessions stored in SurrealDB, resolved to an `app_user` (`auth::AppUser`) on every request. First launch creates a guest account, seeded with the demo follows and the default playlists; registration promotes that row in place. Native clients initialize the Dioxus cookie runtime before launch, so the cookie stays outside application state.
+Sessions come from `g3-auth`, the same stack as Greenside Partee and Media Mancer: cookie sessions stored in SurrealDB, resolved to an `app_user` (`auth::AppUser`) on every request. First launch creates a guest account, seeded with the default playlists and no follows; registration promotes that row in place. Native clients initialize the Dioxus cookie runtime before launch, so the cookie stays outside application state.
 
 The guard (`g3_auth::require_session`) refuses every server function without a signed-in account unless it is marked `#[g3_auth::public]`: only guest creation, sign-in and sign-out are, and a test pins that list. Every page is public, because the client signs a first visit in from whichever page it opened. Health, the playback proxy and the WebSub callback sit outside the session layers: probes and YouTube's hub have no cookie, and a proxy token is itself the capability, fetched by native media elements without the app's cookie.
 
@@ -12,7 +12,7 @@ Sessions name their account by its record key. Sessions written before g3-auth n
 
 | Server function | Public | Does |
 | --- | --- | --- |
-| `create_guest_account` | yes | Makes a guest, seeded with the demo follows and default playlists, and signs it in |
+| `create_guest_account` | yes | Makes a guest, seeded with the default playlists and no follows, and signs it in |
 | `register_account` | no | Promotes the signed-in guest to an email account, in place |
 | `sign_in_to_account` | yes | Email and password (argon2 hashes, in `auth/accounts.rs`); replaces the session's account |
 | `sign_out_of_account` | yes | Ends the session; the client starts a new guest |
