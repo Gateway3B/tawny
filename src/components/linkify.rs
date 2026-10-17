@@ -76,19 +76,20 @@ pub(super) fn linkify(text: &str) -> Vec<Piece> {
                 continue;
             }
         }
-        if c.is_ascii_digit() && !previous.is_some_and(|p| p.is_alphanumeric() || p == ':') {
-            if let Some((len, seconds)) = time_at(rest) {
-                if !plain.is_empty() {
-                    pieces.push(Piece::Text(std::mem::take(&mut plain)));
-                }
-                pieces.push(Piece::Time {
-                    label: rest[..len].to_string(),
-                    seconds,
-                });
-                previous = rest[..len].chars().next_back();
-                rest = &rest[len..];
-                continue;
+        if c.is_ascii_digit()
+            && !previous.is_some_and(|p| p.is_alphanumeric() || p == ':')
+            && let Some((len, seconds)) = time_at(rest)
+        {
+            if !plain.is_empty() {
+                pieces.push(Piece::Text(std::mem::take(&mut plain)));
             }
+            pieces.push(Piece::Time {
+                label: rest[..len].to_string(),
+                seconds,
+            });
+            previous = rest[..len].chars().next_back();
+            rest = &rest[len..];
+            continue;
         }
         plain.push(c);
         previous = Some(c);
