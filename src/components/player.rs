@@ -2081,21 +2081,21 @@ fn VideoDetailInner(id: String) -> Element {
 
                 // Captions and chapters are chips that open their own sheet,
                 // so the page is not padded out with two panels that are mostly
-                // idle. Chapters lead, being what most people reach for. One
-                // row that scrolls, like the actions below, rather than
-                // wrapping into a second line on a phone.
+                // idle. Likes first, then chapters, being what most people
+                // reach for. One row that scrolls, like the actions below,
+                // rather than wrapping into a second line on a phone.
                 if details.like_count > 0 || details.dislike_count > 0 || !caption_tracks.is_empty() || !chapters.is_empty() || audio_tracks().len() > 1 {
                     Shelf { aria_label: "Video details", gap: Space::Sm,
+                        if details.like_count > 0 {
+                            Chip { start: rsx! { ThumbsUp { size: 15 } },
+                                "{compact_number(details.like_count)}"
+                            }
+                        }
                         if !chapters.is_empty() {
                             Chip {
                                 start: rsx! { ListVideo { size: 15 } },
                                 onclick: move |_| chapters_open.set(true),
                                 "{chapters.len()} chapters"
-                            }
-                        }
-                        if details.like_count > 0 {
-                            Chip { start: rsx! { ThumbsUp { size: 15 } },
-                                "{compact_number(details.like_count)}"
                             }
                         }
                         if details.dislike_count > 0 {
