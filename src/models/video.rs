@@ -10,6 +10,37 @@ pub fn set_local_utc_offset_minutes(minutes: i32) {
     LOCAL_UTC_OFFSET_MINUTES.store(minutes, Ordering::Relaxed);
 }
 
+/// Leads a stored publish date that is only approximate: the moment a
+/// relative date such as "3 months ago" stood for when it was read, written
+/// `~2026-07-19T04:00:00Z`. Stored as the text it was read as, "3 months ago"
+/// stayed three months ago for as long as the row lived; stored as a moment, it
+/// is shown relative to now and so ages, while still ranking below an exact
+/// date.
+const APPROXIMATE_MARK: char = '~';
+
+fn now_epoch() -> i64 {
+    use web_time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64
+}
+
+/// How long ago something `seconds` old was, as YouTube writes it ("2 years
+/// ago").
+pub fn age_label(seconds: i64) -> String {
+    let (count, unit) = match seconds.max(0) {
+        s if s < 3_600 => ((s / 60).max(1), "minute"),
+        s if s < 86_400 => (s / 3_600, "hour"),
+        s if s < 7 * 86_400 => (s / 86_400, "day"),
+        s if s < 30 * 86_400 => (s / (7 * 86_400), "week"),
+        s if s < 365 * 86_400 => (s / (30 * 86_400), "month"),
+        s => (s / (365 * 86_400), "year"),
+    };
+    let plural = if count == 1 { "" } else { "s" };
+    format!("{count} {unit}{plural} ago")
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, SurrealValue)]
 pub struct Video {
     pub id: String,
@@ -78,11 +109,48 @@ impl Video {
         self.duration_seconds > 0 && seconds + 15 >= self.duration_seconds
     }
 
+    /// `published_at` for a date known only roughly, at `timestamp`: see
+    /// [`APPROXIMATE_MARK`].
+    #[cfg_attr(not(feature = "server"), allow(dead_code))]
+    pub fn approximate_published_at(timestamp: i64) -> String {
+        // Written out by hand: the web client builds `time` without its
+        // formatting feature.
+        time::OffsetDateTime::from_unix_timestamp(timestamp)
+            .map(|moment| {
+                format!(
+                    "{APPROXIMATE_MARK}{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+                    moment.year(),
+                    u8::from(moment.month()),
+                    moment.day(),
+                    moment.hour(),
+                    moment.minute(),
+                    moment.second()
+                )
+            })
+            .unwrap_or_default()
+    }
+
+    /// Store relative text such as "3 months ago" as the moment it stands
+    /// for, marked approximate, so it reads correctly later. Anything else is
+    /// left as it is: a date already pins the day, and "Streaming now" or
+    /// "Yesterday" are not worth the guess.
+    #[cfg_attr(not(feature = "server"), allow(dead_code))]
+    pub fn settle_relative_date(&mut self) {
+        let value = self.published_at.trim();
+        if value.starts_with(APPROXIMATE_MARK)
+            || self.publish_precision() != 1
+            || !value.to_ascii_lowercase().ends_with(" ago")
+        {
+            return;
+        }
+        self.published_at = Self::approximate_published_at(self.published_epoch());
+    }
+
     pub fn published_epoch(&self) -> i64 {
         use time::{Date, OffsetDateTime, format_description::well_known::Rfc3339};
-        use web_time::{SystemTime, UNIX_EPOCH};
 
         let value = self.published_at.trim();
+        let value = value.strip_prefix(APPROXIMATE_MARK).unwrap_or(value);
         if let Ok(timestamp) = OffsetDateTime::parse(value, &Rfc3339) {
             return timestamp.unix_timestamp();
         }
@@ -98,10 +166,7 @@ impl Video {
         }
 
         let lower = value.to_ascii_lowercase();
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
+        let now = now_epoch();
         if lower.contains("streaming now") || lower == "live" || lower.contains("just now") {
             return now;
         }
@@ -143,11 +208,15 @@ impl Video {
 
     #[cfg_attr(not(feature = "server"), allow(dead_code))]
     /// How exactly `published_at` pins the upload down: 3 for a timestamp, 2 for
-    /// a calendar date, 1 for relative text ("3 days ago"), 0 for nothing usable.
-    fn publish_precision(&self) -> u8 {
+    /// a calendar date, 1 for relative text ("3 days ago") or an approximate
+    /// moment, 0 for nothing usable.
+    pub(crate) fn publish_precision(&self) -> u8 {
         use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
         let value = self.published_at.trim();
+        if value.starts_with(APPROXIMATE_MARK) {
+            return if self.published_epoch() != 0 { 1 } else { 0 };
+        }
         if OffsetDateTime::parse(value, &Rfc3339).is_ok() {
             return 3;
         }
@@ -189,6 +258,15 @@ impl Video {
         // It is not a date, so it should not be rendered where one belongs.
         if value.is_empty() || value == "From YouTube" {
             return String::new();
+        }
+        // Only roughly known, so it says how long ago, as of now.
+        if value.starts_with(APPROXIMATE_MARK) {
+            let epoch = self.published_epoch();
+            return if epoch == 0 {
+                String::new()
+            } else {
+                age_label(now_epoch() - epoch)
+            };
         }
         // A real timestamp gets its time of day, in the viewer's zone. Midnight
         // UTC is how a source with only a date writes it, so that stays a date.

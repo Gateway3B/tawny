@@ -55,6 +55,9 @@ impl AppServerState {
     }
 
     pub(crate) async fn upsert_video(&self, video: &Video, published_sort: String) -> Result<()> {
+        let mut video = video.clone();
+        video.settle_relative_date();
+        let video = &video;
         let published_sort = canonical_sort_key(&published_sort);
         self.db
             .query(
@@ -94,8 +97,9 @@ impl AppServerState {
         Ok(())
     }
 
-    /// `video` as it should be stored: with the stored publish date kept when
-    /// that is more exact, and the sort key belonging to whichever date wins.
+    /// `video` as it should be stored: a relative date settled into an
+    /// approximate moment, the stored publish date kept when that is more
+    /// exact, and the sort key belonging to whichever date wins.
     ///
     /// The same upload reaches the feed from several sources: RSS with a
     /// timestamp, the watch page with a day, a channel tab or shelf with "2
@@ -107,13 +111,20 @@ impl AppServerState {
         video: &Video,
         published_sort: String,
     ) -> Result<(Video, String)> {
+        let mut kept = video.clone();
+        kept.settle_relative_date();
+        // A timestamp is as exact as a date gets, so nothing stored can beat
+        // it. That is RSS, most of what a refresh writes, so most writes skip
+        // the read.
+        if kept.publish_precision() == 3 {
+            return Ok((kept, published_sort));
+        }
         let stored: Option<String> = self
             .db
             .query("SELECT VALUE published_at FROM type::record('video', $record_key)")
             .bind(("record_key", video.id.clone()))
             .await?
             .take(0)?;
-        let mut kept = video.clone();
         if let Some(stored) = stored.filter(|stored| !stored.trim().is_empty()) {
             kept.keep_finer_publish_date(&Video {
                 published_at: stored,

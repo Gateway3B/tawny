@@ -175,6 +175,40 @@ mod tests {
         assert_eq!(fresh.published_at, "2024-02-01T15:30:00Z");
     }
 
+    /// "3 months ago" is stored as the moment it meant, so it still reads
+    /// right months later, and still loses to any real date.
+    #[test]
+    fn a_relative_date_is_kept_as_an_approximate_moment() {
+        let mut shelf = video("a", "A", "3 months ago", 0);
+        shelf.settle_relative_date();
+        assert!(
+            shelf.published_at.starts_with('~'),
+            "{}",
+            shelf.published_at
+        );
+        assert_eq!(shelf.published_label(), "3 months ago");
+
+        let year_old = Video {
+            published_at: Video::approximate_published_at(shelf.published_epoch() - 365 * 86_400),
+            ..shelf.clone()
+        };
+        assert_eq!(year_old.published_label(), "1 year ago");
+
+        let mut dated = video("a", "A", "Feb 1, 2024", 0);
+        dated.keep_finer_publish_date(&shelf);
+        assert_eq!(dated.published_at, "Feb 1, 2024");
+        shelf.keep_finer_publish_date(&dated);
+        assert_eq!(shelf.published_at, "Feb 1, 2024");
+
+        // Only "... ago" is settled: the rest is either exact or not a guess
+        // worth keeping.
+        for text in ["Streaming now", "Yesterday", "Feb 1, 2024", ""] {
+            let mut other = video("a", "A", text, 0);
+            other.settle_relative_date();
+            assert_eq!(other.published_at, text);
+        }
+    }
+
     #[test]
     fn duration_sorts_longest_first_when_descending() {
         let mut videos = sample();

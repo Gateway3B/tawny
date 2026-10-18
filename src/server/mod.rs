@@ -812,9 +812,8 @@ mod tests {
     use crate::models::{playlist_queue_entry, queued_playlist_id};
 
     #[test]
-    fn an_approximate_date_reads_as_youtube_writes_it() {
-        let now = 1_800_000_000;
-        let label = |seconds_ago| super::approximate_age_label(now - seconds_ago, now);
+    fn an_age_reads_as_youtube_writes_it() {
+        let label = crate::models::age_label;
         assert_eq!(label(30), "1 minute ago");
         assert_eq!(label(3 * 3_600), "3 hours ago");
         assert_eq!(label(86_400), "1 day ago");
@@ -836,8 +835,9 @@ mod tests {
             ]}))
             .unwrap();
         let videos = super::ytdlp_flat_playlist_videos(dump, "channel", "Channel");
-        // An approximate date stays relative, so it never passes for exact.
-        assert!(videos[0].published_at.ends_with(" ago"));
+        // An approximate date stays marked as one, so it never passes for exact.
+        assert!(videos[0].published_at.starts_with('~'));
+        assert!(videos[0].published_label().ends_with(" ago"));
         assert!(videos[2].published_at.is_empty());
         let sorted = |order| {
             let mut copy = videos.clone();

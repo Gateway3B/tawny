@@ -557,6 +557,8 @@ pub(crate) fn video_published_epoch(value: &str) -> i64 {
     use time::{Date, OffsetDateTime, format_description::well_known::Rfc3339};
 
     let value = value.trim();
+    // An approximate moment (`~` and a timestamp; see `Video::settle_relative_date`).
+    let value = value.strip_prefix('~').unwrap_or(value);
     if let Ok(timestamp) = OffsetDateTime::parse(value, &Rfc3339) {
         return timestamp.unix_timestamp();
     }

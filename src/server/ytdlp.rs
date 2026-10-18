@@ -233,37 +233,19 @@ pub(crate) struct YtdlpFlatPlaylist {
     pub(crate) entries: Vec<YtdlpFlatEntry>,
 }
 
-/// How long ago `timestamp` was, as YouTube writes it ("2 years ago").
+/// A channel tab's uploads, from yt-dlp's flat listing.
 ///
 /// A channel tab lists uploads with relative times, and yt-dlp's
 /// `approximate_date` turns those into timestamps. Written as a calendar date,
 /// "2 years ago" became today's date two years back and looked exact: it
 /// outranked a real date, displayed a day the video was not posted, and sorted
-/// among exact timestamps by that guess. Kept relative, it reads as the
-/// approximation it is, and a finer date from RSS or the watch page wins.
-pub(crate) fn approximate_age_label(timestamp: i64, now: i64) -> String {
-    let seconds = now.saturating_sub(timestamp).max(0);
-    let (count, unit) = match seconds {
-        s if s < 3_600 => ((s / 60).max(1), "minute"),
-        s if s < 86_400 => (s / 3_600, "hour"),
-        s if s < 7 * 86_400 => (s / 86_400, "day"),
-        s if s < 30 * 86_400 => (s / (7 * 86_400), "week"),
-        s if s < 365 * 86_400 => (s / (30 * 86_400), "month"),
-        s => (s / (365 * 86_400), "year"),
-    };
-    let plural = if count == 1 { "" } else { "s" };
-    format!("{count} {unit}{plural} ago")
-}
-
+/// among exact timestamps by that guess. Kept approximate, it reads as how long
+/// ago, and a finer date from RSS or the watch page wins.
 pub(crate) fn ytdlp_flat_playlist_videos(
     dump: YtdlpFlatPlaylist,
     channel_id: &str,
     channel_name: &str,
 ) -> Vec<Video> {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64;
     dump.entries
         .into_iter()
         .filter(|entry| !entry.id.is_empty())
@@ -275,7 +257,7 @@ pub(crate) fn ytdlp_flat_playlist_videos(
             channel_name: channel_name.to_string(),
             published_at: entry
                 .timestamp
-                .map(|stamp| approximate_age_label(stamp, now))
+                .map(Video::approximate_published_at)
                 .unwrap_or_default(),
             duration_seconds: entry.duration.unwrap_or(0.0) as u64,
             view_count: entry
