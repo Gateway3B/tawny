@@ -34,12 +34,6 @@ body {
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-button,
-input,
-textarea {
-  font: inherit;
-}
-
 .video-card-swipe {
   min-height: 100%;
 }
