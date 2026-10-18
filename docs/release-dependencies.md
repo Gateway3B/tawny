@@ -12,8 +12,9 @@ staged .cargo/config.toml containing shared-library overrides. Install the
 hooks with lefthook install in a fresh checkout. Hooks can be bypassed with
 --no-verify; they protect normal commits, not deliberate bypasses.
 
-Local builds can change Cargo.lock. Before releasing, publish g3-auth 0.1.3,
-g3-cache 0.2.1 and g3-native-plugins 0.4.4 through their gated workflows.
+Local builds can change Cargo.lock. Before releasing, publish g3-native-plugins 0.4.5,
+g3-route-transitions 0.5.0, g3-ui 0.6.0 and g3-auth 0.2.0 through their gated
+workflows (g3-cache stays at 0.2.1).
 Temporarily rename the parent Cargo configuration, update the application
 lockfile from crates.io, and run the locked release checks. Restore the parent
 configuration afterward. Do not fabricate registry checksums.
