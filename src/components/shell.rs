@@ -269,7 +269,11 @@ pub fn PageHeader(
                     style: "background: var(--g3-color-accent); color: var(--g3-color-on-accent);",
                     Play { size: 15, fill: "currentColor" }
                 }
-                Text { variant: TextVariant::Overline, color: Color::Accent, "{section_label(&route)}" }
+                // A tab's root page has no title in the bar, so the section
+                // name beside the brand mark is the page's heading.
+                h1 { class: "m-0 flex",
+                    Text { variant: TextVariant::Overline, color: Color::Accent, "{section_label(&route)}" }
+                }
             }
         },
     };

@@ -13,6 +13,22 @@ test.describe("Tawny application shell", () => {
     await openApp(appPage);
   });
 
+  // A tab's root page has no title in its bar; the section name beside the
+  // brand mark is its one heading, rather than an empty one.
+  test("each tab's root page has one heading naming it", async ({ appPage }) => {
+    for (const [path, name] of [
+      ["/", "Feed"],
+      ["/playlists", "Playlists"],
+      ["/explore", "Search"],
+      ["/subscriptions", "Subscriptions"],
+    ]) {
+      await openApp(appPage, path);
+      const headings = appPage.locator("h1");
+      await expect(headings).toHaveCount(1);
+      await expect(headings).toHaveText(name, { ignoreCase: true });
+    }
+  });
+
   test("adapts primary navigation to the viewport", async ({ appPage }) => {
     await expectResponsiveNavigation(appPage, primaryTabs);
     await expectNoHorizontalScroll(appPage);
