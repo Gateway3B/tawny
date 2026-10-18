@@ -550,6 +550,31 @@ impl AppServerState {
         }
         self.refresh_channel_interest(&changed).await?;
 
+        // The feed reloads as soon as this returns. Without the new channel's
+        // latest uploads it showed whatever the catalog held for it, such as
+        // the Popular tab just browsed, until the background fetch below, and
+        // nothing reloaded it then. RSS is one quick request with exact
+        // times, so a few new follows wait for it; a bulk import does not.
+        let newly_subscribed = changes
+            .iter()
+            .filter(|change| change.subscribed && changed.contains(&change.channel.id))
+            .filter(|change| {
+                change.channel.id.starts_with("UC") && !change.channel.id.starts_with("UC-tawny")
+            })
+            .map(|change| change.channel.clone())
+            .collect::<Vec<_>>();
+        if newly_subscribed.len() <= FIRST_FETCH_WAIT_MAX {
+            use futures_util::{StreamExt, stream};
+            let _ = stream::iter(
+                newly_subscribed
+                    .into_iter()
+                    .map(|channel| self.refresh_channel_rss_fast(channel)),
+            )
+            .buffer_unordered(FIRST_FETCH_WAIT_MAX)
+            .collect::<Vec<_>>()
+            .await;
+        }
+
         // Subscribing starts WebSub and a first fetch; unsubscribing the last
         // follower ends them. That side needs the instance-wide answer.
         let changed_channels = changes

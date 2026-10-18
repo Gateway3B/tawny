@@ -135,6 +135,9 @@ const PLAYBACK_SESSION_TTL: Duration = Duration::from_secs(60 * 60);
 const PLAYBACK_SESSION_LIMIT: usize = 64;
 
 const FEED_RECONCILE_BATCH_SIZE: usize = 48;
+/// New follows that make subscribing wait for their RSS, so the feed that
+/// reloads right after already has their latest uploads.
+const FIRST_FETCH_WAIT_MAX: usize = 4;
 const FEED_RSS_CONCURRENCY: usize = 32;
 /// How many channels one refresh will ask for video lengths, at most.
 ///
@@ -808,6 +811,18 @@ impl AppServerState {
 mod tests {
     use crate::models::{playlist_queue_entry, queued_playlist_id};
 
+    #[test]
+    fn an_approximate_date_reads_as_youtube_writes_it() {
+        let now = 1_800_000_000;
+        let label = |seconds_ago| super::approximate_age_label(now - seconds_ago, now);
+        assert_eq!(label(30), "1 minute ago");
+        assert_eq!(label(3 * 3_600), "3 hours ago");
+        assert_eq!(label(86_400), "1 day ago");
+        assert_eq!(label(15 * 86_400), "2 weeks ago");
+        assert_eq!(label(65 * 86_400), "2 months ago");
+        assert_eq!(label(800 * 86_400), "2 years ago");
+    }
+
     use super::DbVideo;
 
     #[test]
@@ -821,7 +836,9 @@ mod tests {
             ]}))
             .unwrap();
         let videos = super::ytdlp_flat_playlist_videos(dump, "channel", "Channel");
-        assert_eq!(videos[0].published_at, "2026-10-12");
+        // An approximate date stays relative, so it never passes for exact.
+        assert!(videos[0].published_at.ends_with(" ago"));
+        assert!(videos[2].published_at.is_empty());
         let sorted = |order| {
             let mut copy = videos.clone();
             super::sort_channel_uploads(&mut copy, order);

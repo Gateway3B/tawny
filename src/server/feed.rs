@@ -448,11 +448,28 @@ impl AppServerState {
             )
             .await?
             .take(0)?;
-        let real_channels = channels
+        let mut real_channels = channels
             .into_iter()
             .map(Channel::from)
             .filter(|channel| channel.id.starts_with("UC") && !channel.id.starts_with("UC-tawny"))
             .collect::<Vec<_>>();
+        // The person pulling to refresh wants their own follows current. The
+        // list above is every follow on the instance, stalest first, and a
+        // capped reconciliation could leave theirs out entirely, so theirs
+        // go first and always fit. The sort is stable: staleness orders the
+        // rest.
+        let own = self
+            .user_subscriptions(owner)
+            .await?
+            .into_iter()
+            .filter(|(_, (subscribed, _))| *subscribed)
+            .map(|(channel_id, _)| channel_id)
+            .collect::<HashSet<_>>();
+        real_channels.sort_by_key(|channel| !own.contains(&channel.id));
+        let own_count = real_channels
+            .iter()
+            .filter(|channel| own.contains(&channel.id))
+            .count();
         let channel_ids = real_channels
             .iter()
             .map(|channel| channel.id.clone())
@@ -470,7 +487,7 @@ impl AppServerState {
         // Without a push subscription there is no accelerated source, so every
         // subscribed channel is reconciled over RSS rather than a capped slice.
         let accelerated = self.websub_callback_url.is_some();
-        let reconciliation_count = reconciliation_limit(total_channels, accelerated);
+        let reconciliation_count = reconciliation_limit(total_channels, accelerated).max(own_count);
         let rss_ids = real_channels
             .iter()
             .take(reconciliation_count)

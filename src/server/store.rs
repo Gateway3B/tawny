@@ -94,11 +94,47 @@ impl AppServerState {
         Ok(())
     }
 
+    /// `video` as it should be stored: with the stored publish date kept when
+    /// that is more exact, and the sort key belonging to whichever date wins.
+    ///
+    /// The same upload reaches the feed from several sources: RSS with a
+    /// timestamp, the watch page with a day, a channel tab or shelf with "2
+    /// years ago". Taking whichever arrived last let browsing a channel's
+    /// Oldest or Popular tab overwrite exact feed dates with guesses, which
+    /// mislabelled and reordered the feed until the next refresh.
+    async fn with_finer_publish_date(
+        &self,
+        video: &Video,
+        published_sort: String,
+    ) -> Result<(Video, String)> {
+        let stored: Option<String> = self
+            .db
+            .query("SELECT VALUE published_at FROM type::record('video', $record_key)")
+            .bind(("record_key", video.id.clone()))
+            .await?
+            .take(0)?;
+        let mut kept = video.clone();
+        if let Some(stored) = stored.filter(|stored| !stored.trim().is_empty()) {
+            kept.keep_finer_publish_date(&Video {
+                published_at: stored,
+                ..video.clone()
+            });
+        }
+        let sort = if kept.published_at == video.published_at {
+            published_sort
+        } else {
+            video_sort_key(&kept)
+        };
+        Ok((kept, sort))
+    }
+
     pub(crate) async fn upsert_feed_video(
         &self,
         video: &Video,
         published_sort: String,
     ) -> Result<()> {
+        let (video, published_sort) = self.with_finer_publish_date(video, published_sort).await?;
+        let video = &video;
         let published_sort = canonical_sort_key(&published_sort);
         self.db
             .query(
@@ -137,6 +173,8 @@ impl AppServerState {
         video: &Video,
         published_sort: String,
     ) -> Result<()> {
+        let (video, published_sort) = self.with_finer_publish_date(video, published_sort).await?;
+        let video = &video;
         let published_sort = canonical_sort_key(&published_sort);
         self.db
             .query(
