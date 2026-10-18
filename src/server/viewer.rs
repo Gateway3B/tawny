@@ -595,17 +595,42 @@ impl AppServerState {
         name: &str,
     ) -> Result<Playlist> {
         let _guard = self.sync_lock.lock().await;
-        let mut playlist = self
-            .find_playlist(owner, playlist_id)
-            .await?
-            .unwrap_or_else(|| Playlist {
-                id: playlist_id.to_string(),
-                name: String::new(),
-                video_ids: Vec::new(),
-            });
+        let existing = self.find_playlist(owner, playlist_id).await?;
+        let created = existing.is_none();
+        let mut playlist = existing.unwrap_or_else(|| Playlist {
+            id: playlist_id.to_string(),
+            name: String::new(),
+            video_ids: Vec::new(),
+        });
         playlist.name = name.to_string();
-        self.upsert_playlist(owner, &playlist).await?;
+        if created {
+            // A new playlist goes last. The rest are numbered as they show
+            // now first, since one never arranged has no position, and a
+            // newcomer numbered after the arranged ones would land above it.
+            let mut order = self.playlist_order(owner).await?;
+            self.upsert_playlist(owner, &playlist).await?;
+            order.push(playlist.id.clone());
+            self.write_playlist_order(owner, &order).await?;
+        } else {
+            self.upsert_playlist(owner, &playlist).await?;
+        }
         Ok(playlist)
+    }
+
+    /// The owner's playlist ids, in the order they are shown.
+    async fn playlist_order(&self, owner: &str) -> Result<Vec<String>> {
+        let mut playlists: Vec<DbPlaylist> = self
+            .db
+            .query("SELECT playlist_id, name, video_ids, sort_order FROM playlist WHERE owner = type::record($owner)")
+            .bind(("owner", owner.to_string()))
+            .await?
+            .check()?
+            .take(0)?;
+        sort_playlists(&mut playlists);
+        Ok(playlists
+            .into_iter()
+            .map(|playlist| playlist.playlist_id)
+            .collect())
     }
 
     /// Put a video in a playlist (at the top) or take it out. Returns whether
@@ -665,6 +690,11 @@ impl AppServerState {
     /// and falls in after the ones that have one, rather than being lost.
     pub async fn reorder_playlists(&self, owner: &str, playlist_ids: &[String]) -> Result<()> {
         let _guard = self.sync_lock.lock().await;
+        self.write_playlist_order(owner, playlist_ids).await
+    }
+
+    /// [`Self::reorder_playlists`], for a caller already holding the lock.
+    async fn write_playlist_order(&self, owner: &str, playlist_ids: &[String]) -> Result<()> {
         for (position, playlist_id) in playlist_ids.iter().enumerate() {
             self.db
                 .query(
@@ -860,14 +890,15 @@ impl AppServerState {
         Ok(())
     }
 
-    /// What a new account starts with: the playlists the default swipes save
-    /// to, and a queue. It follows nothing, so its feed starts empty.
+    /// What a new account starts with: Watch Later and Favorites, both
+    /// empty. Its queue is empty and it follows nothing, so its feed starts
+    /// empty too.
     pub async fn seed_new_account(&self, owner: &str) -> Result<()> {
-        let demo = crate::models::demo_viewer();
-        for playlist in &demo.playlists {
-            self.upsert_playlist(owner, playlist).await?;
+        // Created one after another, so each takes the next place.
+        for playlist in crate::models::demo_viewer().playlists {
+            self.save_playlist(owner, &playlist.id, &playlist.name)
+                .await?;
         }
-        self.set_queue(owner, &demo.queue).await?;
         Ok(())
     }
 }
@@ -1136,7 +1167,7 @@ mod tests {
     #[tokio::test]
     async fn playlists_keep_the_order_they_were_put_in() {
         let (state, owner) = state_and_owner().await;
-        for (id, name) in [("a", "Alpha"), ("b", "Bravo"), ("c", "Charlie")] {
+        for (id, name) in [("b", "Bravo"), ("a", "Alpha"), ("c", "Charlie")] {
             state.save_playlist(&owner, id, name).await.unwrap();
         }
         let names = |viewer: Viewer| {
@@ -1147,8 +1178,8 @@ mod tests {
                 .map(|playlist| playlist.id)
                 .collect::<Vec<_>>()
         };
-        // Never arranged: by name.
-        assert_eq!(names(state.viewer(&owner).await.unwrap()), ["a", "b", "c"]);
+        // Never arranged: in the order they were made, not by name.
+        assert_eq!(names(state.viewer(&owner).await.unwrap()), ["b", "a", "c"]);
 
         state
             .reorder_playlists(&owner, &["c".into(), "a".into(), "b".into()])
@@ -1172,6 +1203,32 @@ mod tests {
             names(state.viewer(&owner).await.unwrap()),
             ["c", "a", "b", "d"]
         );
+    }
+
+    /// Playlists made before they had a position list by name. A new one
+    /// still goes after them, rather than above them for being the only one
+    /// with a number.
+    #[tokio::test]
+    async fn a_new_playlist_goes_after_ones_that_never_had_a_place() {
+        let (state, owner) = state_and_owner().await;
+        for (id, name) in [("y", "Yankee"), ("x", "Xray")] {
+            let playlist = Playlist {
+                id: id.into(),
+                name: name.into(),
+                video_ids: Vec::new(),
+            };
+            state.upsert_playlist(&owner, &playlist).await.unwrap();
+        }
+        state.save_playlist(&owner, "n", "New").await.unwrap();
+        let ids = state
+            .viewer(&owner)
+            .await
+            .unwrap()
+            .playlists
+            .into_iter()
+            .map(|playlist| playlist.id)
+            .collect::<Vec<_>>();
+        assert_eq!(ids, ["x", "y", "n"]);
     }
 
     #[tokio::test]
@@ -1247,12 +1304,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_new_account_starts_with_the_default_playlists_and_no_follows() {
+    async fn a_new_account_starts_with_two_empty_playlists_and_nothing_else() {
         let (state, owner) = state_and_owner().await;
         state.seed_new_account(&owner).await.unwrap();
         let viewer = state.viewer(&owner).await.unwrap();
-        assert!(viewer.playlist("watch-later").is_some());
-        assert!(viewer.playlist("deep-dives").is_some());
+        let playlists = viewer
+            .playlists
+            .iter()
+            .map(|playlist| (playlist.name.as_str(), playlist.video_ids.len()))
+            .collect::<Vec<_>>();
+        assert_eq!(playlists, [("Watch Later", 0), ("Favorites", 0)]);
+        assert!(viewer.queue.is_empty());
         assert!(viewer.subscriptions.is_empty());
         assert!(viewer.subscription_groups.is_empty());
         let feed = state.feed_page(&owner, &query(), 0).await.unwrap();

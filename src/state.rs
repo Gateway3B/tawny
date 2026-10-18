@@ -23,7 +23,8 @@ use crate::{
         AppSettings, AudioTrackOption, CaptionTrack, Channel, FeedFilter, HISTORY_LIMIT,
         HistoryEntry, PlaylistContents, PlaylistView, SponsorSegment, SubscriptionChange,
         SubscriptionContent, SubscriptionGroup, Video, VideoChapter, VideoList, VideoPreviewFrames,
-        VideoProgress, Viewer, playlist_queue_entry, preferred_caption_index, queued_playlist_id,
+        VideoProgress, Viewer, WATCH_LATER_PLAYLIST_ID, playlist_queue_entry,
+        preferred_caption_index, queued_playlist_id,
     },
 };
 use dioxus::prelude::*;
@@ -592,10 +593,10 @@ impl AppState {
         });
         let mut settings = self.settings.write();
         if settings.swipe_right_playlist_id == playlist_id {
-            settings.swipe_right_playlist_id = "watch-later".into();
+            settings.swipe_right_playlist_id = WATCH_LATER_PLAYLIST_ID.into();
         }
         if settings.swipe_left_playlist_id == playlist_id {
-            settings.swipe_left_playlist_id = "deep-dives".into();
+            settings.swipe_left_playlist_id = WATCH_LATER_PLAYLIST_ID.into();
         }
         settings.playlist_views.remove(playlist_id);
         drop(settings);

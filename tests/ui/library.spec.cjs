@@ -1,4 +1,10 @@
-const { test, expect, openApp, expectNoHorizontalScroll } = require("./fixtures/app.cjs");
+const {
+  test,
+  expect,
+  openApp,
+  openPlaylistWithVideos,
+  expectNoHorizontalScroll,
+} = require("./fixtures/app.cjs");
 
 test.describe("Tawny library interactions", () => {
   test("validates and creates a local playlist", async ({ appPage }) => {
@@ -25,6 +31,27 @@ test.describe("Tawny library interactions", () => {
     await expect(appPage.getByText("Add videos from the buttons on a card.")).toBeVisible();
     await expect(appPage.getByRole("button", { name: "Play all", exact: true })).toBeDisabled();
     await expectNoHorizontalScroll(appPage);
+  });
+
+  test("a new account starts with two empty playlists it can rearrange", async ({ appPage }) => {
+    await openApp(appPage, "/playlists");
+    const names = () => appPage.locator(".g3-card-title").allInnerTexts();
+    await expect.poll(names).toEqual(["Watch Later", "Favorites"]);
+    await expect(appPage.locator(".g3-card-subtitle")).toHaveText(["0 videos", "0 videos"]);
+
+    // The grips appear only while arranging, and the arrow keys move a cover too.
+    const grip = appPage.getByRole("button", { name: "Move Watch Later", exact: true });
+    await expect(grip).toHaveCount(0);
+    await appPage.getByRole("button", { name: "Arrange playlists", exact: true }).click();
+    await grip.focus();
+    await appPage.keyboard.press("ArrowRight");
+    await expect.poll(names).toEqual(["Favorites", "Watch Later"]);
+
+    await appPage.getByRole("button", { name: "Done arranging", exact: true }).click();
+    await expect(grip).toHaveCount(0);
+    // The order was saved, not just shown.
+    await openApp(appPage, "/playlists");
+    await expect.poll(names).toEqual(["Favorites", "Watch Later"]);
   });
 
   test("renames and reorders a playlist from its card menu", async ({ appPage }) => {
@@ -115,7 +142,7 @@ test.describe("Tawny library interactions", () => {
   // to end the gesture, so the card never moved.
   test("a finger swipes a card and runs its action", async ({ appPage }, testInfo) => {
     test.skip(testInfo.project.name !== "mobile-chromium", "touch behavior");
-    await openApp(appPage, "/playlists/deep-dives");
+    await openPlaylistWithVideos(appPage);
 
     const row = appPage.locator(".video-card-swipe").first();
     await expect(row).toBeVisible();
@@ -150,8 +177,7 @@ test.describe("Tawny library interactions", () => {
     appPage,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium", "desktop pointer behavior");
-    // A fresh account's feed can be empty; every account starts with this.
-    await openApp(appPage, "/playlists/deep-dives");
+    await openPlaylistWithVideos(appPage);
 
     // A mouse reaches the swipe actions through the thumbnail's edge buttons,
     // which stand in for g3-ui's "Show actions" button on a fine pointer.
@@ -184,8 +210,7 @@ test.describe("Tawny library interactions", () => {
 
   test("prevents native dragging of desktop card thumbnails", async ({ appPage }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium", "desktop pointer behavior");
-    // A fresh account's feed can be empty; every account starts with this.
-    await openApp(appPage, "/playlists/deep-dives");
+    await openPlaylistWithVideos(appPage);
 
     const thumbnails = appPage.locator(".g3-card .g3-card-media img");
     const thumbnail = thumbnails.first();

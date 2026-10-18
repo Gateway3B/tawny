@@ -1,5 +1,9 @@
 @import "tailwindcss";
 @source "./src/**/*.{rs,html,css}";
+/* Extractor reports are saved YouTube pages, full of words that look like
+   class names; scanned, they put stray utilities in the stylesheet. */
+@source not "./.tawny-data";
+@source not "./rustypipe_reports";
 
 :root {
   --tawny-amber: #f5a524;
@@ -119,6 +123,20 @@ textarea {
 .video-card-edge-action,
 .video-card-remove-desktop {
   display: none;
+}
+
+/* The grip that drags a playlist cover while arranging, drawn as the round control
+   the cover's delete button is, opposite it. */
+.g3-reorder-handle.playlist-grip {
+  width: 2rem;
+  height: 2rem;
+  min-height: 0;
+  margin: 0;
+  border-radius: 9999px;
+  background: var(--g3-color-card);
+  color: var(--g3-color-text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  cursor: grab;
 }
 
 @media (hover: hover) and (pointer: fine) {

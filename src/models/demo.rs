@@ -2,26 +2,25 @@ use super::*;
 
 #[cfg_attr(not(feature = "server"), allow(dead_code))]
 /// The seed catalog: a few videos and their channels, which the server writes
-/// on first start, and the playlists the default swipes save to. A new
+/// on first start, and the empty playlists every account starts with. A new
 /// account follows none of the channels, so its feed starts empty.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DemoLibrary {
     pub channels: Vec<Channel>,
     pub videos: Vec<Video>,
     pub playlists: Vec<Playlist>,
-    pub queue: Vec<String>,
 }
 
 #[cfg_attr(not(feature = "server"), allow(dead_code))]
-/// What a new account starts with: the default playlists and a queue, and no
-/// follows or groups.
+/// What a new account starts with: the two default playlists, empty, and no
+/// queue, follows or groups.
 pub fn demo_viewer() -> Viewer {
     let demo = DemoLibrary::demo();
     Viewer {
         subscriptions: Vec::new(),
         playlists: demo.playlists,
         subscription_groups: Vec::new(),
-        queue: demo.queue,
+        queue: Vec::new(),
         history: Vec::new(),
     }
 }
@@ -175,21 +174,18 @@ impl DemoLibrary {
             },
         ];
 
+        // Empty: what goes in them is the viewer's to choose. Watch Later is
+        // where the default left swipe saves.
         let playlists = vec![
             Playlist {
-                id: "watch-later".into(),
-                name: "Watch later".into(),
-                video_ids: vec![videos[1].id.clone(), videos[2].id.clone()],
+                id: WATCH_LATER_PLAYLIST_ID.into(),
+                name: "Watch Later".into(),
+                video_ids: Vec::new(),
             },
             Playlist {
-                id: "deep-dives".into(),
-                name: "Deep dives".into(),
-                video_ids: vec![videos[3].id.clone(), videos[5].id.clone()],
-            },
-            Playlist {
-                id: "weekend-queue".into(),
-                name: "Weekend queue".into(),
-                video_ids: vec![videos[0].id.clone()],
+                id: "favorites".into(),
+                name: "Favorites".into(),
+                video_ids: Vec::new(),
             },
         ];
 
@@ -197,7 +193,6 @@ impl DemoLibrary {
             channels,
             videos,
             playlists,
-            queue: vec!["M7lc1UVf-VE".into(), "ysz5S6PUM-U".into()],
         }
     }
 }

@@ -418,6 +418,7 @@ mod tests {
         let second = state.accounts().create_guest().await.unwrap();
         for account in [&first, &second] {
             state.seed_new_account(&account.id).await.unwrap();
+            state.set_queue(&account.id, &["one".into()]).await.unwrap();
             state.db.query("CREATE video_progress SET owner = type::record($owner), video_id = 'one'; CREATE user_subscription SET owner = type::record($owner), channel_id = 'UCtest'; CREATE subscription_group SET owner = type::record($owner), group_id = 'group', name = 'Group';")
                 .bind(("owner", account.id.clone())).await.unwrap().check().unwrap();
             state.db.query("LET $playlist = array::first(SELECT VALUE id FROM playlist WHERE owner = type::record($owner)); RELATE $playlist->playlist_item->video:example SET position = 0;")

@@ -6,16 +6,17 @@ use crate::{
 };
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{
-    ArrowDown, ArrowUp, CheckCheck, ChevronsDown, ChevronsUp, EllipsisVertical, ListPlus, Pencil,
-    Play, Plus, Shuffle, Trash2,
+    ArrowDown, ArrowUp, ArrowUpDown, Check, CheckCheck, ChevronsDown, ChevronsUp, EllipsisVertical,
+    ListPlus, Pencil, Play, Plus, Shuffle, Trash2,
 };
 use g3_cache::use_cached;
 use g3_route_transitions::animated_navigate;
 use g3_ui::{
     BottomSheet, Button, ButtonFill, ButtonSize, Card, Chip, Color, ConfirmModal, Content, Divider,
     DividerOrientation, EmptyState, Grid, GridColumns, Img, InfiniteScroll, Input, Item, List,
-    ListLines, ListVariant, Modal, SegmentButton, SegmentGroup, Shelf, Space, Spinner, Stack,
-    StackAlign, Text, TextTone,
+    ListLines, ListVariant, Modal, ReorderEvent, ReorderHandle, ReorderItem, ReorderLayout,
+    ReorderList, SegmentButton, SegmentGroup, Shelf, Space, Spinner, Stack, StackAlign, Text,
+    TextTone,
 };
 
 use super::{
@@ -176,6 +177,9 @@ pub fn Playlists() -> Element {
     let mut menu_open = use_signal(|| false);
     let mut rename_open = use_signal(|| false);
     let mut rename_name = use_signal(String::new);
+    // Arranging shows a grip on each cover to drag it into place. Off by default,
+    // so a swipe across the grid scrolls the page rather than starting a drag.
+    let mut editing = use_signal(|| false);
     // No filters here. The index is a set of covers to pick from, not a list to
     // work through - filtering it hides the playlist you came to open.
     let previews = use_cached(get_playlist_previews, ());
@@ -212,6 +216,13 @@ pub fn Playlists() -> Element {
     // which decides the moves it offers.
     let ordered_ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
     let playlist_count = ordered_ids.len();
+    let arranging = editing() && playlist_count > 1;
+    let dragged_ids = ordered_ids.clone();
+    let reorder = move |moved: ReorderEvent| {
+        let mut ids = dragged_ids.clone();
+        moved.apply(&mut ids);
+        app_state.reorder_playlists(ids);
+    };
     let menu_name = menu_target().map(|(_, name)| name).unwrap_or_default();
     let menu_name_for_rename = menu_name.clone();
     let menu_index = menu_target()
@@ -229,6 +240,20 @@ pub fn Playlists() -> Element {
     rsx! {
         PageHeader {
             end_slot: rsx! {
+                if playlist_count > 1 {
+                    // An icon like the header's other buttons: a word here
+                    // crowded the title on a phone.
+                    Button {
+                        fill: ButtonFill::Clear,
+                        aria_label: if arranging { "Done arranging" } else { "Arrange playlists" },
+                        onclick: move |_| editing.toggle(),
+                        if arranging {
+                            Check { size: 22 }
+                        } else {
+                            ArrowUpDown { size: 22 }
+                        }
+                    }
+                }
                 Button {
                     fill: ButtonFill::Clear,
                     aria_label: "New playlist",
@@ -248,60 +273,71 @@ pub fn Playlists() -> Element {
                     "Swipe a video, or use its menu, to save it to one."
                 }
             }
-            Grid { columns: GridColumns::Fit(16.0),
-                for row in rows {
-                    {
-                        let playlist_id = row.id.clone();
-                        let remove_id = row.id.clone();
-                        let remove_name = row.name.clone();
-                        let menu_id = row.id.clone();
-                        let menu_label = row.name.clone();
-                        // The count that answers "is there anything left in
-                        // here", which is the reason to open one.
-                        let subtitle = if row.unwatched > 0 && row.unwatched < row.count {
-                            format!("{} · {} unwatched", video_count(row.count), row.unwatched)
-                        } else {
-                            video_count(row.count)
-                        };
-                        rsx! {
-                            Card {
-                                key: "{row.id}",
-                                title: row.name.clone(),
-                                subtitle,
-                                media: rsx! {
-                                    // Delete sits where a video card's remove
-                                    // does, so the two read as the same control.
-                                    div { class: "relative",
-                                        PlaylistCollage { thumbnails: row.thumbnails }
-                                        div { class: "absolute top-2 right-2",
+            ReorderList {
+                layout: ReorderLayout::Grid,
+                disabled: !arranging,
+                on_reorder: reorder,
+                Grid { columns: GridColumns::Fit(16.0),
+                    for (index, row) in rows.into_iter().enumerate() {
+                        {
+                            let playlist_id = row.id.clone();
+                            let remove_id = row.id.clone();
+                            let remove_name = row.name.clone();
+                            let menu_id = row.id.clone();
+                            let menu_label = row.name.clone();
+                            // The count that answers "is there anything left in
+                            // here", which is the reason to open one.
+                            let subtitle = if row.unwatched > 0 && row.unwatched < row.count {
+                                format!("{} · {} unwatched", video_count(row.count), row.unwatched)
+                            } else {
+                                video_count(row.count)
+                            };
+                            rsx! {
+                                ReorderItem { key: "{row.id}", index,
+                                    Card {
+                                        title: row.name.clone(),
+                                        subtitle,
+                                        media: rsx! {
+                                            // Delete sits where a video card's remove
+                                            // does, so the two read as the same control.
+                                            div { class: "relative",
+                                                PlaylistCollage { thumbnails: row.thumbnails }
+                                                if arranging {
+                                                    div { class: "absolute top-2 left-2",
+                                                        ReorderHandle { label: "Move {row.name}", class: "playlist-grip" }
+                                                    }
+                                                }
+                                                div { class: "absolute top-2 right-2",
+                                                    Button {
+                                                        size: ButtonSize::Sm,
+                                                        color: Color::Neutral,
+                                                        aria_label: "Delete {row.name}",
+                                                        onclick: move |event: MouseEvent| {
+                                                            event.stop_propagation();
+                                                            delete_target.set(Some((remove_id.clone(), remove_name.clone())));
+                                                            delete_open.set(true);
+                                                        },
+                                                        Trash2 { size: 15 }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        onclick: move |_| { spawn(animated_navigate(Route::PlaylistDetail { id: playlist_id.clone() })); },
+                                        end: rsx! {
                                             Button {
+                                                fill: ButtonFill::Clear,
                                                 size: ButtonSize::Sm,
-                                                color: Color::Neutral,
-                                                aria_label: "Delete {row.name}",
+                                                aria_label: "Actions for {row.name}",
                                                 onclick: move |event: MouseEvent| {
                                                     event.stop_propagation();
-                                                    delete_target.set(Some((remove_id.clone(), remove_name.clone())));
-                                                    delete_open.set(true);
+                                                    menu_target.set(Some((menu_id.clone(), menu_label.clone())));
+                                                    menu_open.set(true);
                                                 },
-                                                Trash2 { size: 15 }
+                                                EllipsisVertical { size: 20 }
                                             }
-                                        }
-                                    }
-                                },
-                                onclick: move |_| { spawn(animated_navigate(Route::PlaylistDetail { id: playlist_id.clone() })); },
-                                end: rsx! {
-                                    Button {
-                                        fill: ButtonFill::Clear,
-                                        size: ButtonSize::Sm,
-                                        aria_label: "Actions for {row.name}",
-                                        onclick: move |event: MouseEvent| {
-                                            event.stop_propagation();
-                                            menu_target.set(Some((menu_id.clone(), menu_label.clone())));
-                                            menu_open.set(true);
                                         },
-                                        EllipsisVertical { size: 20 }
                                     }
-                                },
+                                }
                             }
                         }
                     }

@@ -1,5 +1,9 @@
 use super::*;
 
+/// The playlist every account starts with, and where the default left swipe
+/// saves a video.
+pub const WATCH_LATER_PLAYLIST_ID: &str = "watch-later";
+
 /// How a playlist's videos are ordered on its page.
 ///
 /// `Added` is the playlist's own order and is the default, because a hand-built

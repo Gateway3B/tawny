@@ -50,6 +50,21 @@ async function openApp(page, path = "/") {
   await viewerLoaded;
 }
 
+// A new account's playlists start empty and its feed has nothing, so a spec
+// that needs video cards saves a seeded catalog video to Favorites first, then
+// opens that playlist. Favorites rather than Watch Later, so the default left
+// swipe, which saves to Watch Later, really adds the video.
+async function openPlaylistWithVideos(page) {
+  await openApp(page, "/playlists");
+  for (const videoId of ["M7lc1UVf-VE", "ysz5S6PUM-U"]) {
+    const response = await page.request.post("/api/v1/playlists/membership", {
+      data: { playlist_id: "favorites", video_id: videoId, member: true },
+    });
+    expect(response.ok(), await response.text()).toBe(true);
+  }
+  await openApp(page, "/playlists/favorites");
+}
+
 async function expectNoHorizontalScroll(page) {
   const sizes = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,
@@ -94,4 +109,11 @@ async function expectResponsiveNavigation(page, labels) {
   }
 }
 
-module.exports = { test, expect, openApp, expectNoHorizontalScroll, expectResponsiveNavigation };
+module.exports = {
+  test,
+  expect,
+  openApp,
+  openPlaylistWithVideos,
+  expectNoHorizontalScroll,
+  expectResponsiveNavigation,
+};

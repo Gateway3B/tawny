@@ -204,10 +204,13 @@ impl Default for AppSettings {
             platform_style: PlatformStyle::Auto,
             playback_speed: 1.0,
             shorts_playback_speed: 1.0,
-            swipe_right_action: SwipeActionKind::AddToPlaylist,
+            // Right plays next; left saves to Watch Later. The right
+            // playlist only matters if that swipe is changed to "Add to
+            // playlist", and Watch Later is the one every account has.
+            swipe_right_action: SwipeActionKind::PlayNext,
             swipe_left_action: SwipeActionKind::AddToPlaylist,
-            swipe_right_playlist_id: "watch-later".to_string(),
-            swipe_left_playlist_id: "deep-dives".to_string(),
+            swipe_right_playlist_id: WATCH_LATER_PLAYLIST_ID.to_string(),
+            swipe_left_playlist_id: WATCH_LATER_PLAYLIST_ID.to_string(),
             hide_watched: false,
             autoplay: true,
             shorts_autoplay: true,
