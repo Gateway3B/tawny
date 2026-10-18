@@ -24,9 +24,9 @@ use g3_route_transitions::{
 };
 use g3_ui::{
     Avatar, AvatarSize, Badge, BottomSheet, Button, ButtonExpand, ButtonFill, ButtonSize, Card,
-    CardVariant, Chip, Color, Content, EmptyState, HeadingLevel, Item, List, ListLines,
+    CardVariant, Chip, Color, Content, EmptyState, HeadingLevel, Item, LayoutSize, List, ListLines,
     SheetBackdrop, Shelf, Skeleton, SkeletonShape, Space, Spinner, Stack, StackAlign, Text,
-    TextTone, TextVariant,
+    TextTone, TextVariant, use_layout_size,
 };
 
 use super::{VideoGrid, linkify::Linkified};
@@ -1804,6 +1804,7 @@ fn VideoDetailInner(id: String) -> Element {
     let audio_tracks = app_state.active_audio_tracks;
     let selected_audio = app_state.selected_audio_track;
     let mut comments_open = use_signal(|| false);
+    let layout_size = use_layout_size();
     use_effect(move || {
         let _ = document::eval(if comments_open() {
             COMMENTS_SHEET_FIT_JS
@@ -2080,10 +2081,18 @@ fn VideoDetailInner(id: String) -> Element {
 
                 // Captions and chapters are chips that open their own sheet,
                 // so the page is not padded out with two panels that are mostly
-                // idle. The counts are not actions, so they are badges rather
-                // than chips that do nothing.
+                // idle. Chapters lead, being what most people reach for. One
+                // row that scrolls, like the actions below, rather than
+                // wrapping into a second line on a phone.
                 if details.like_count > 0 || details.dislike_count > 0 || !caption_tracks.is_empty() || !chapters.is_empty() || audio_tracks().len() > 1 {
-                    Stack { horizontal: true, wrap: true, gap: Space::Sm, align: StackAlign::Center,
+                    Shelf { aria_label: "Video details", gap: Space::Sm,
+                        if !chapters.is_empty() {
+                            Chip {
+                                start: rsx! { ListVideo { size: 15 } },
+                                onclick: move |_| chapters_open.set(true),
+                                "{chapters.len()} chapters"
+                            }
+                        }
                         if details.like_count > 0 {
                             Chip { start: rsx! { ThumbsUp { size: 15 } },
                                 "{compact_number(details.like_count)}"
@@ -2108,13 +2117,6 @@ fn VideoDetailInner(id: String) -> Element {
                                 start: rsx! { Languages { size: 15 } },
                                 onclick: move |_| audio_open.set(true),
                                 "{audio_track_label(&audio_tracks(), &selected_audio())}"
-                            }
-                        }
-                        if !chapters.is_empty() {
-                            Chip {
-                                start: rsx! { ListVideo { size: 15 } },
-                                onclick: move |_| chapters_open.set(true),
-                                "{chapters.len()} chapters"
                             }
                         }
                     }
@@ -2310,12 +2312,19 @@ fn VideoDetailInner(id: String) -> Element {
         // No heading and no running count: the button that opened this already
         // said "Comments", so the sheet is just the list. Load-more lives at the
         // end of the scrolled list rather than pinned above it.
-        // No backdrop: the video above stays untinted and usable while the
-        // thread is open, and dragging the handle down is how it closes.
+        // On a phone, no backdrop: the sheet sits under the video, which stays
+        // untinted and usable while the thread is open, and dragging the
+        // handle down closes it. From a medium layout up the sheet is a
+        // floating panel over the page, where a click outside it is the
+        // expected way out, so it gets the dismissing backdrop.
         BottomSheet {
             open: comments_open,
             aria_label: "Comments",
-            backdrop: SheetBackdrop::None,
+            backdrop: if layout_size == LayoutSize::Compact {
+                SheetBackdrop::None
+            } else {
+                SheetBackdrop::Dismiss
+            },
             class: "player-sheet comments-sheet",
             max_height: "var(--tawny-comments-sheet-height, 60dvh)",
             // Same as the chapter list, and the heaviest of the two: twenty
