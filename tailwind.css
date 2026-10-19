@@ -363,7 +363,7 @@ body {
   /* The watch page has no page header, so the player is what meets the
      Android status bar. The strip takes the header's colour rather than the
      player's black so the status bar icons stay legible in either theme. */
-  border-top: env(safe-area-inset-top) solid var(--g3-color-card);
+  border-top: var(--g3-safe-area-top, env(safe-area-inset-top)) solid var(--g3-color-card);
 }
 
 .persistent-player.expanded .persistent-player-stage {
@@ -377,7 +377,7 @@ body {
   position: fixed;
   z-index: 45;
   right: 0;
-  bottom: calc(4rem + env(safe-area-inset-bottom));
+  bottom: calc(4rem + var(--g3-safe-area-bottom, env(safe-area-inset-bottom)));
   left: 0;
   display: grid;
   grid-template-columns: 7.4rem minmax(0, 1fr) 2.6rem;
@@ -1667,20 +1667,20 @@ html[data-android-pip="true"] .persistent-player-stage iframe {
 
 #tawny-player:fullscreen .player-controls-top,
 #tawny-player.is-fullscreen .player-controls-top {
-  padding-top: max(0.45rem, env(safe-area-inset-top));
-  padding-right: max(0.65rem, env(safe-area-inset-right));
-  padding-left: max(0.65rem, env(safe-area-inset-left));
+  padding-top: max(0.45rem, var(--g3-safe-area-top, env(safe-area-inset-top)));
+  padding-right: max(0.65rem, var(--g3-safe-area-right, env(safe-area-inset-right)));
+  padding-left: max(0.65rem, var(--g3-safe-area-left, env(safe-area-inset-left)));
 }
 
 #tawny-player:fullscreen .player-controls-bottom,
 #tawny-player.is-fullscreen .player-controls-bottom {
-  padding-right: max(0.7rem, env(safe-area-inset-right));
+  padding-right: max(0.7rem, var(--g3-safe-area-right, env(safe-area-inset-right)));
   /* The seek bar is the lowest thing on screen, and a drag along it that
      strays to the edge is the system's own gesture (Android's app switcher
      swipe), not a scrub. WebViews do not report that strip as a safe area, so
      the bar is lifted clear of it by a fixed amount. */
-  padding-bottom: max(1.75rem, env(safe-area-inset-bottom));
-  padding-left: max(0.7rem, env(safe-area-inset-left));
+  padding-bottom: max(1.75rem, var(--g3-safe-area-bottom, env(safe-area-inset-bottom)));
+  padding-left: max(0.7rem, var(--g3-safe-area-left, env(safe-area-inset-left)));
 }
 
 @container g3-app-shell (width <= 680px) {
@@ -1733,7 +1733,11 @@ html[data-android-pip="true"] .persistent-player-stage iframe {
   /* Rests on the bottom navigation bar: g3's bar is a 3.25rem item with
      0.375rem of padding above it and at least that below, plus its hairline. */
   .persistent-player.mini {
-    bottom: calc(3.625rem + 1px + max(0.375rem, env(safe-area-inset-bottom)));
+    bottom: calc(
+      3.625rem +
+      1px +
+      max(0.375rem, var(--g3-safe-area-bottom, env(safe-area-inset-bottom)))
+    );
     grid-template-columns: 6.45rem minmax(0, 1fr) 2.5rem;
     min-height: 3.65rem;
   }
@@ -1756,19 +1760,24 @@ html[data-android-pip="true"] .persistent-player-stage iframe {
 
   .persistent-player.expanded .persistent-player-stage {
     width: 100%;
-    height: calc(100dvh - env(safe-area-inset-top));
+    height: calc(100dvh - var(--g3-safe-area-top, env(safe-area-inset-top)));
     aspect-ratio: auto;
   }
 
   .player-options-menu {
-    top: max(0.3rem, env(safe-area-inset-top));
-    max-height: calc(100dvh - 0.6rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    top: max(0.3rem, var(--g3-safe-area-top, env(safe-area-inset-top)));
+    max-height: calc(
+      100dvh -
+      0.6rem -
+      var(--g3-safe-area-top, env(safe-area-inset-top)) -
+      var(--g3-safe-area-bottom, env(safe-area-inset-bottom))
+    );
   }
 
   /* On its side the stage is the whole screen, so the same applies without
      the fullscreen API being involved. */
   .persistent-player.expanded .player-controls-bottom {
-    padding-bottom: max(1.75rem, env(safe-area-inset-bottom));
+    padding-bottom: max(1.75rem, var(--g3-safe-area-bottom, env(safe-area-inset-bottom)));
   }
 }
 
@@ -1779,7 +1788,11 @@ html[data-android-pip="true"] .persistent-player-stage iframe {
    `--g3-toast-bottom`; the bar's height is the one the mini bar rests on. */
 @container g3-app-shell (width < 48rem) {
   .g3-app-shell:has(.tawny-shell:not(.tawny-shell-cover, .tawny-shell-auxiliary)) .g3-toast-bottom {
-    --tawny-nav-height: calc(3.625rem + 1px + max(0.375rem, env(safe-area-inset-bottom)));
+    --tawny-nav-height: calc(
+      3.625rem +
+      1px +
+      max(0.375rem, var(--g3-safe-area-bottom, env(safe-area-inset-bottom)))
+    );
     --g3-toast-bottom: calc(var(--tawny-nav-height) + 0.75rem);
   }
 
