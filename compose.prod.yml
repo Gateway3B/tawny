@@ -82,7 +82,7 @@ services:
     restart: unless-stopped
 
   extractor:
-    image: ghcr.io/g3techhq/tawny-extractor:${TAWNY_IMAGE_TAG:-latest}
+    image: ghcr.io/gateway3b/tawny-extractor:${TAWNY_IMAGE_TAG:-latest}
     container_name: tawny-extractor
     pull_policy: always
     environment:
@@ -106,7 +106,7 @@ services:
     restart: unless-stopped
 
   tawny:
-    image: ghcr.io/g3techhq/tawny:${TAWNY_IMAGE_TAG:-latest}
+    image: ghcr.io/gateway3b/tawny:${TAWNY_IMAGE_TAG:-latest}
     container_name: tawny
     pull_policy: always
     init: true

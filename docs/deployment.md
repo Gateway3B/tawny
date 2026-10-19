@@ -4,8 +4,8 @@ Tawny is a Rust full-stack server plus three supporting containers. GitHub
 Actions publishes two image tags each for the two images Tawny itself owns,
 after a successful build on `main`:
 
-- `ghcr.io/g3techhq/tawny:latest` and `:sha-<commit>`
-- `ghcr.io/g3techhq/tawny-extractor:latest` and `:sha-<commit>`
+- `ghcr.io/gateway3b/tawny:latest` and `:sha-<commit>`
+- `ghcr.io/gateway3b/tawny-extractor:latest` and `:sha-<commit>`
 
 The sidecar is published too, not just the app: `compose.yml` at the repository
 root builds it from `docker/extractor`, so a pull-only deployment with only the
@@ -21,8 +21,8 @@ SurrealDB, and the bgutil PO-token provider.
 ## One-time GitHub setup
 
 1. Merge the deployment workflow and let its first `main` run finish.
-2. In the GitHub organization, open **Packages**, then each of **tawny** and
-   **tawny-extractor**.
+2. On the gateway3B GitHub profile, open **Packages**, then each of **tawny**
+   and **tawny-extractor**.
 3. Open **Package settings** and change the package visibility to **Public**.
 
 Public GHCR packages can be pulled without credentials. Package visibility is

@@ -21,8 +21,8 @@ script = []
 script = []
 
 [bundle]
-identifier = "com.G3Tech.Tawny"
-publisher = "G3Tech"
+identifier = "net.gateway3.tawny"
+publisher = "Gateway3"
 category = "Entertainment"
 short_description = "A calm, local-first YouTube client."
 long_description = "Tawny is a privacy-minded, local-first YouTube client for mobile, web, and desktop."

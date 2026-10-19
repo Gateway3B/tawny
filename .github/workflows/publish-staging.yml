@@ -45,11 +45,11 @@ jobs:
       matrix:
         include:
           - title: Tawny server
-            image: ghcr.io/g3techhq/tawny
+            image: ghcr.io/gateway3b/tawny
             context: .
             dockerfile: Dockerfile
           - title: Extractor sidecar
-            image: ghcr.io/g3techhq/tawny-extractor
+            image: ghcr.io/gateway3b/tawny-extractor
             context: ./docker/extractor
             dockerfile: ./docker/extractor/Dockerfile
 
