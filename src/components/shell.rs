@@ -174,31 +174,87 @@ const SCROLL_MEMORY_JS: &str = r#"
 const path = __PATH__;
 const key = Symbol.for('tawny.scroll-memory');
 if (!window[key]) {
+    // Per path: how far it was scrolled, and the card at the top of the view.
     const saved = new Map();
     let current = null;
     let token = 0;
     let restoring = false;
+    // The card the view is held to, and how far below the top of the scroll
+    // area it sat: `{ id, offset }`. A list that changes above it - the feed
+    // refetched with new uploads on top, a playlist another device added to -
+    // would otherwise push the reader's place down the page. Native scroll
+    // anchoring cannot do this: a refetch moves cards from one page's grid to
+    // the next, so the card is a new element, and WebKit has none anyway.
+    let anchor = null;
+    // Off while something other than the reader takes the page to the top,
+    // so holding the view does not fight it. See `release`.
+    let following = true;
     // Not the page kept hidden beneath a sheet.
     const scroller = () => document.querySelector('.g3-content-scroll:not(.tawny-covered-page *)');
+    // The first card still showing at the top. Cards are in reading order, so
+    // their bottoms never decrease, and a binary search reads a few boxes
+    // rather than every card above the fold on every scroll event.
+    const anchorOf = (element) => {
+        // At the top, new uploads are what the reader should see.
+        if (element.scrollTop <= 0) return null;
+        const top = element.getBoundingClientRect().top;
+        const cards = element.querySelectorAll('[data-scroll-anchor]');
+        let low = 0;
+        let high = cards.length;
+        while (low < high) {
+            const middle = (low + high) >> 1;
+            if (cards[middle].getBoundingClientRect().bottom > top + 1) high = middle;
+            else low = middle + 1;
+        }
+        const card = cards[low];
+        if (!card) return null;
+        return { id: card.dataset.scrollAnchor, offset: card.getBoundingClientRect().top - top };
+    };
+    // How far the view must move to put the anchor back where it sat. Null
+    // while the anchor is not drawn: a refetch can draw the page a card moved
+    // to a moment after the page it left.
+    const anchorShift = (element) => {
+        if (!anchor) return null;
+        const card = element.querySelector(`[data-scroll-anchor="${CSS.escape(anchor.id)}"]`);
+        if (!card) return null;
+        return card.getBoundingClientRect().top - element.getBoundingClientRect().top - anchor.offset;
+    };
+    const remember = (element) => {
+        if (following) anchor = anchorOf(element);
+        if (element.scrollTop <= 0) following = true;
+        saved.set(current, { top: element.scrollTop, anchor });
+    };
     document.addEventListener('scroll', (event) => {
         const element = event.target;
         if (restoring || !current || !(element instanceof Element)) return;
         if (!element.matches('.g3-content-scroll')) return;
         if (document.documentElement.dataset.routeTransition) return;
-        saved.set(current, element.scrollTop);
+        remember(element);
     }, true);
     // Whoever scrolls for themselves while a position is being put back wins.
-    const yield_to_user = () => { token += 1; restoring = false; };
+    const yield_to_user = () => { token += 1; restoring = false; following = true; };
     for (const name of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
         document.addEventListener(name, yield_to_user, { capture: true, passive: true });
     }
+    // Hold the view to its anchor whenever cards are added or removed. Only
+    // structure: the player's ticking clock changes text, which is not watched.
+    new MutationObserver(() => {
+        if (restoring || !anchor || document.documentElement.dataset.routeTransition) return;
+        const element = scroller();
+        if (!element) return;
+        const shift = anchorShift(element);
+        if (shift !== null && Math.abs(shift) > 1) element.scrollTop += shift;
+    }).observe(document.body, { childList: true, subtree: true });
     window[key] = {
         arrive(next, restore) {
             current = next;
             const mine = ++token;
             restoring = false;
-            const target = restore ? (saved.get(next) || 0) : 0;
+            following = true;
+            const entry = restore ? saved.get(next) : null;
             if (!restore) saved.delete(next);
+            anchor = entry?.anchor ?? null;
+            const target = entry?.top || 0;
             if (!target) return;
             restoring = true;
             const started = Date.now();
@@ -207,22 +263,33 @@ if (!window[key]) {
                 const element = scroller();
                 const elapsed = Date.now() - started;
                 if (element) {
-                    if (Math.abs(element.scrollTop - target) > 1) element.scrollTop = target;
+                    // Where the card left at the top is now, if the list has
+                    // changed since; the old offset until it is drawn.
+                    const shift = anchorShift(element);
+                    const goal = shift === null ? target : element.scrollTop + shift;
+                    if (Math.abs(element.scrollTop - goal) > 1) element.scrollTop = goal;
                     // Lists arrive in stages, so a page too short to hold the
                     // offset yet is given a moment to grow.
-                    if (Math.abs(element.scrollTop - target) <= 1 && elapsed > 250) {
+                    if (Math.abs(element.scrollTop - goal) <= 1 && elapsed > 250) {
                         restoring = false;
                         return;
                     }
                 }
                 if (elapsed > 2500) {
-                    if (element) saved.set(next, element.scrollTop);
                     restoring = false;
+                    if (element) remember(element);
                     return;
                 }
                 setTimeout(step, 50);
             };
             step();
+        },
+        // The page is being taken to the top on purpose (the Feed tab tapped
+        // again): stop holding the view until it gets there or the reader
+        // scrolls.
+        release() {
+            anchor = null;
+            following = false;
         },
     };
 }

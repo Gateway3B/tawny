@@ -97,7 +97,7 @@ pub fn Feed() -> Element {
         answered.set(taps);
         spawn(async move {
             let mut eval = document::eval(
-                "document.querySelector('.g3-content-scroll')?.scrollTo({ top: 0, behavior: 'smooth' }); dioxus.send(true);",
+                "window[Symbol.for('tawny.scroll-memory')]?.release?.(); document.querySelector('.g3-content-scroll')?.scrollTo({ top: 0, behavior: 'smooth' }); dioxus.send(true);",
             );
             let _ = eval.recv::<bool>().await;
         });

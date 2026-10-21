@@ -599,7 +599,7 @@ pub fn ChannelDetail(id: String) -> Element {
             previous_tab.set(current);
             spawn(async move {
                 let mut eval = document::eval(
-                    "document.querySelector('.g3-content-scroll')?.scrollTo({ top: 0, behavior: 'instant' }); dioxus.send(true);",
+                    "window[Symbol.for('tawny.scroll-memory')]?.release?.(); document.querySelector('.g3-content-scroll')?.scrollTo({ top: 0, behavior: 'instant' }); dioxus.send(true);",
                 );
                 let _ = eval.recv::<bool>().await;
             });

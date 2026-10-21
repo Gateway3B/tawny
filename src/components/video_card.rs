@@ -182,6 +182,9 @@ pub fn VideoCard(
             } else {
                 "video-card-frame h-full rounded-[inherit]"
             },
+            // What the scroll memory holds the view to when the list above it
+            // changes: see `SCROLL_MEMORY_JS` in the shell.
+            "data-scroll-anchor": "{video.id}",
             SwipeItem {
                 class: "video-card-swipe h-full rounded-[inherit]",
                 start_behavior: SwipeBehavior::Activate,
