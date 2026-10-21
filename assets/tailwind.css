@@ -1366,6 +1366,9 @@ body {
 html.tawny-comments-open .g3-app-shell .g3-tab-layout.tawny-shell-cover {
   overflow-y: hidden;
 }
+.route-transition-page-region.tawny-covered-page {
+  display: none;
+}
 .tawny-shell-auxiliary .persistent-player.mini {
   visibility: hidden;
   pointer-events: none;

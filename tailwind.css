@@ -1217,6 +1217,14 @@ html.tawny-comments-open .g3-app-shell .g3-tab-layout.tawny-shell-cover {
   overflow-y: hidden;
 }
 
+/* The page a sheet was opened over stays mounted beneath it so dismissing the
+   sheet does not rebuild it. `display: none`, not `visibility`: an unrendered
+   element is never captured, so the sheet side still has no `page` snapshot
+   and takes no space in the column the watch sheet scrolls. */
+.route-transition-page-region.tawny-covered-page {
+  display: none;
+}
+
 /* Queue, History and Settings are sheets over the page that launched them, and
    the mini bar belongs to that page: the sheet slides up across it and back
    down to reveal it. Hidden, not unmounted, so playback carries on underneath. */

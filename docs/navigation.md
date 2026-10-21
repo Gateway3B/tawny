@@ -15,6 +15,18 @@ element survives navigation. `PageHeader` is each page's header: Back (or the
 brand), the title, the page's toolbar, and the Queue, History and Settings
 buttons.
 
+Pages are not rendered through `Outlet`. The shell renders the last route that
+is not a sheet in a fixed slot (`BasePage`), and a sheet route renders through
+`Outlet` beside it. Under a sheet the page is `display: none`
+(`tawny-covered-page`) but stays mounted, so closing the sheet reveals it
+instead of rebuilding it: its state, its loaded results and its DOM are all
+still there. `display: none` matters: an unrendered page is never captured,
+so the sheet transitions still see at most one `page` region, as
+g3-route-transitions requires. The scroll offset does not survive it;
+`ScrollMemory` restores it on dismiss. Inside the kept page `use_route()`
+returns the sheet, so `PageHeader` reads the page's own route from the
+`BaseRoute` context instead.
+
 ## Layers
 
 | Layer | Routes | Motion |
@@ -43,6 +55,7 @@ catch-all redirect sends an unknown path to the feed.
 - Build `Route` variants; never parse a path string back into one.
 - Per-screen filters that should survive leaving the screen live in
   `AppState` (`feed_filter`, `explore_filter`, `channel_tab`); ones that belong
-  to one visit are local signals.
+  to one visit are local signals. Opening a sheet over a page and closing it
+  is still the same visit: the page's local signals survive it.
 - The appearance (Material or iOS) drives both g3-ui's look and the transition
   platform; change it through settings, never one alone.

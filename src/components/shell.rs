@@ -13,6 +13,7 @@ use g3_ui::{
     AdaptiveNav, BackButton, Button, ButtonFill, Color, Header, NavItem, Space, Stack, StackAlign,
     TabLayout, Text, TextVariant, use_toast,
 };
+use std::{cell::RefCell, rc::Rc};
 
 use super::PersistentPlayer;
 
@@ -147,8 +148,9 @@ fn NativeMediaCoordinator() -> Element {
 /// returns: by Back, by closing the player over it, or by tapping its tab.
 ///
 /// A page that is pushed from another starts at the top, as it should; so does
-/// a page opened afresh. The pages are rebuilt on every visit, so without this
-/// every return to the feed was a return to its first screen.
+/// a page opened afresh. A page is rebuilt on every visit, so without this
+/// every return to the feed was a return to its first screen. One kept beneath
+/// a sheet is not rebuilt, but `display: none` still drops its offset.
 ///
 /// Mounted once per route, keyed by it, so arriving is what runs it. The work
 /// is JS because the scroll area is a DOM element the framework does not own,
@@ -176,7 +178,8 @@ if (!window[key]) {
     let current = null;
     let token = 0;
     let restoring = false;
-    const scroller = () => document.querySelector('.g3-content-scroll');
+    // Not the page kept hidden beneath a sheet.
+    const scroller = () => document.querySelector('.g3-content-scroll:not(.tawny-covered-page *)');
     document.addEventListener('scroll', (event) => {
         const element = event.target;
         if (restoring || !current || !(element instanceof Element)) return;
@@ -245,7 +248,11 @@ pub fn PageHeader(
     /// Page-specific content beside the header's trailing controls.
     end_slot: Option<Element>,
 ) -> Element {
-    let route: Route = use_route();
+    let router_route: Route = use_route();
+    // A page kept beneath a sheet describes itself, not the sheet.
+    let route = try_use_context::<BaseRoute>()
+        .map(|base| base.0.borrow().clone())
+        .unwrap_or(router_route);
     let app_state = use_context::<AppState>();
     // All three are one group of peers presented over the page that launched
     // them. Once any of them is up, offering the group again from inside
@@ -347,7 +354,15 @@ pub fn AppShell() -> Element {
     }
     // A sheet route carries the overlay region itself and therefore does not
     // render a page region as well.
-    let is_sheet = player_expanded || is_auxiliary;
+    let is_sheet = is_sheet_route(&route);
+    // The page a sheet was opened over stays mounted beneath it, hidden, so
+    // dismissing the sheet reveals it instead of rebuilding it: on a phone
+    // that rebuild was a ~30 KB edit batch and ~100 ms before the sheet could
+    // start to fall. A plain cell, not a signal: the shell re-renders on every
+    // route change anyway, and this only carries the answer to the next one.
+    let remembered = use_hook(|| Rc::new(RefCell::new(None::<Route>)));
+    let base_route = page_beneath(&route, remembered.borrow().clone());
+    remembered.borrow_mut().clone_from(&base_route);
 
     rsx! {
         NativeMediaCoordinator {}
@@ -364,12 +379,13 @@ pub fn AppShell() -> Element {
             // navigation. Minimized it is fixed and out of flow; expanded it is
             // in flow above the watch page's own body.
             PersistentPlayer { expanded: player_expanded }
+            // Always in this slot and always rendered the same way, so moving
+            // between the page and a sheet over it never remounts the page.
+            if let Some(base) = base_route {
+                BasePage { route: base, covered: is_sheet }
+            }
             if is_sheet {
                 Outlet::<Route> {}
-            } else {
-                // The page's own header and body, captured as one image, so
-                // the bar slides with the page it belongs to.
-                RouteTransitionPageRegion { Outlet::<Route> {} }
             }
             // Always rendered: the wide-layout rail is permanent chrome, and
             // only the compact bottom bar gets out of a sheet's way. Hiding it
@@ -412,6 +428,33 @@ pub fn AppShell() -> Element {
     }
 }
 
+/// The route a page in the base slot belongs to. Beneath a sheet the router's
+/// current route is the sheet, so the page's own header reads this instead.
+/// Not reactive: the header follows the router through `use_route`, so it
+/// re-renders on every route change, after `BasePage` has updated this.
+#[derive(Clone)]
+struct BaseRoute(Rc<RefCell<Route>>);
+
+/// The last non-sheet route, rendered in place of the router's outlet.
+///
+/// Beneath a sheet it is `display: none`: the browser drops its boxes, so it
+/// is never captured as a second `page` snapshot and costs no layout or paint,
+/// but its DOM and every component's state stay. Dismissing the sheet only
+/// removes the sheet and the class. Scroll offsets do not survive
+/// `display: none`; `ScrollMemory` puts them back as it does after any return.
+#[component]
+fn BasePage(route: Route, covered: bool) -> Element {
+    let current = use_context_provider(|| BaseRoute(Rc::new(RefCell::new(route.clone()))));
+    *current.0.borrow_mut() = route.clone();
+    let class = covered.then(|| "tawny-covered-page".to_string());
+    rsx! {
+        // The page's own header and body, captured as one image, so the bar
+        // slides with the page it belongs to. Level 1: the leaf beneath the
+        // `AppShell` layout, which is what the outlet here used to render.
+        RouteTransitionPageRegion { class, {route.render(1)} }
+    }
+}
+
 /// Queue, History, and Settings: reached from the header rather than a tab, and
 /// presented as a sheet over whatever launched them.
 fn is_auxiliary_route(route: &Route) -> bool {
@@ -419,4 +462,74 @@ fn is_auxiliary_route(route: &Route) -> bool {
         route,
         Route::SettingsPage {} | Route::QueuePage {} | Route::HistoryPage {}
     )
+}
+
+/// The routes declared `layer = sheet`: they cover the page instead of
+/// replacing it.
+fn is_sheet_route(route: &Route) -> bool {
+    matches!(route, Route::VideoDetail { .. }) || is_auxiliary_route(route)
+}
+
+/// The page shown in the base slot: the current route when it is a page,
+/// and under a sheet the page it was opened over. Empty when a sheet was the
+/// first thing opened; Back then builds whatever it lands on, as before.
+fn page_beneath(route: &Route, previous: Option<Route>) -> Option<Route> {
+    if is_sheet_route(route) {
+        previous
+    } else {
+        Some(route.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn walk(routes: &[Route]) -> Option<Route> {
+        routes
+            .iter()
+            .fold(None, |previous, route| page_beneath(route, previous))
+    }
+
+    #[test]
+    fn a_sheet_keeps_the_page_it_was_opened_over() {
+        let watch = Route::VideoDetail { id: "video".into() };
+        assert_eq!(walk(&[Route::Explore {}, watch]), Some(Route::Explore {}));
+    }
+
+    /// Moving between sheets, or from Queue into the player, never changes
+    /// what is underneath: minimizing still lands on the page that opened them.
+    #[test]
+    fn sheets_over_sheets_keep_the_first_page() {
+        let watch = Route::VideoDetail { id: "video".into() };
+        let next = Route::VideoDetail { id: "next".into() };
+        assert_eq!(
+            walk(&[
+                Route::Feed {},
+                Route::QueuePage {},
+                Route::SettingsPage {},
+                watch,
+                next,
+            ]),
+            Some(Route::Feed {})
+        );
+    }
+
+    #[test]
+    fn a_page_replaces_the_one_kept() {
+        let watch = Route::VideoDetail { id: "video".into() };
+        let channel = Route::ChannelDetail {
+            id: "channel".into(),
+        };
+        assert_eq!(
+            walk(&[Route::Feed {}, watch, channel.clone()]),
+            Some(channel)
+        );
+    }
+
+    #[test]
+    fn a_sheet_opened_first_has_nothing_beneath_it() {
+        assert_eq!(walk(&[Route::VideoDetail { id: "video".into() }]), None);
+        assert_eq!(walk(&[Route::SettingsPage {}]), None);
+    }
 }
