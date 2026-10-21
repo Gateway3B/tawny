@@ -10,6 +10,18 @@ pub async fn get_viewer() -> Result<Viewer> {
     Ok(state.viewer(&owner.0).await.map_err(server_error)?)
 }
 
+/// Counts of what this account has changed, from any device, since the
+/// server started. Asked for often, so it touches nothing but memory: a
+/// device compares it with what it last saw and refetches only what moved.
+#[get(
+    "/api/v1/changes",
+    state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
+    owner: crate::auth::Owner
+)]
+pub async fn get_library_changes() -> Result<LibraryChanges> {
+    Ok(state.library_changes(&owner.0))
+}
+
 /// One page of the subscription feed.
 #[post(
     "/api/v1/feed",
@@ -69,10 +81,12 @@ pub async fn get_playlist_previews() -> Result<Vec<PlaylistPreview>> {
     owner: crate::auth::Owner
 )]
 pub async fn set_subscriptions(changes: Vec<SubscriptionChange>) -> Result<()> {
-    Ok(state
+    state
         .set_subscriptions(&owner.0, changes)
         .await
-        .map_err(server_error)?)
+        .map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::Subscriptions);
+    Ok(())
 }
 
 /// Create a playlist, or rename one.
@@ -82,10 +96,12 @@ pub async fn set_subscriptions(changes: Vec<SubscriptionChange>) -> Result<()> {
     owner: crate::auth::Owner
 )]
 pub async fn save_playlist(playlist_id: String, name: String) -> Result<Playlist> {
-    Ok(state
+    let done = state
         .save_playlist(&owner.0, &playlist_id, &name)
         .await
-        .map_err(server_error)?)
+        .map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::Playlists);
+    Ok(done)
 }
 
 /// Put the playlists in the order given.
@@ -95,10 +111,12 @@ pub async fn save_playlist(playlist_id: String, name: String) -> Result<Playlist
     owner: crate::auth::Owner
 )]
 pub async fn reorder_playlists(playlist_ids: Vec<String>) -> Result<()> {
-    Ok(state
+    state
         .reorder_playlists(&owner.0, &playlist_ids)
         .await
-        .map_err(server_error)?)
+        .map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::Playlists);
+    Ok(())
 }
 
 #[post(
@@ -107,10 +125,12 @@ pub async fn reorder_playlists(playlist_ids: Vec<String>) -> Result<()> {
     owner: crate::auth::Owner
 )]
 pub async fn set_in_playlist(playlist_id: String, video_id: String, member: bool) -> Result<bool> {
-    Ok(state
+    let done = state
         .set_in_playlist(&owner.0, &playlist_id, &video_id, member)
         .await
-        .map_err(server_error)?)
+        .map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::Playlists);
+    Ok(done)
 }
 
 #[post(
@@ -119,10 +139,12 @@ pub async fn set_in_playlist(playlist_id: String, video_id: String, member: bool
     owner: crate::auth::Owner
 )]
 pub async fn remove_watched_from_playlist(playlist_id: String) -> Result<usize> {
-    Ok(state
+    let done = state
         .remove_watched_from_playlist(&owner.0, &playlist_id)
         .await
-        .map_err(server_error)?)
+        .map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::Playlists);
+    Ok(done)
 }
 
 #[post(
@@ -131,10 +153,13 @@ pub async fn remove_watched_from_playlist(playlist_id: String) -> Result<usize> 
     owner: crate::auth::Owner
 )]
 pub async fn delete_playlist(playlist_id: String) -> Result<()> {
-    Ok(state
+    state
         .delete_playlist(&owner.0, &playlist_id)
         .await
-        .map_err(server_error)?)
+        .map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::Playlists);
+    state.note_change(&owner.0, LibraryChange::Queue);
+    Ok(())
 }
 
 /// Watch progress and the audio-only choice, for the videos given.
@@ -144,10 +169,15 @@ pub async fn delete_playlist(playlist_id: String) -> Result<()> {
     owner: crate::auth::Owner
 )]
 pub async fn save_progress(progress: Vec<VideoProgress>) -> Result<()> {
-    Ok(state
+    let watched_changed = state
         .save_progress(&owner.0, &progress)
         .await
-        .map_err(server_error)?)
+        .map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::Progress);
+    if watched_changed {
+        state.note_change(&owner.0, LibraryChange::Watched);
+    }
+    Ok(())
 }
 
 /// This account's saved place in one video, read fresh when it starts playing.
@@ -173,10 +203,12 @@ pub async fn get_video_progress(video_id: String) -> Result<Option<VideoProgress
     owner: crate::auth::Owner
 )]
 pub async fn save_groups(groups: Vec<SubscriptionGroup>) -> Result<()> {
-    Ok(state
+    state
         .save_groups(&owner.0, &groups)
         .await
-        .map_err(server_error)?)
+        .map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::Groups);
+    Ok(())
 }
 
 #[post(
@@ -185,10 +217,12 @@ pub async fn save_groups(groups: Vec<SubscriptionGroup>) -> Result<()> {
     owner: crate::auth::Owner
 )]
 pub async fn set_in_group(group_id: String, channel_id: String, member: bool) -> Result<bool> {
-    Ok(state
+    let done = state
         .set_in_group(&owner.0, &group_id, &channel_id, member)
         .await
-        .map_err(server_error)?)
+        .map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::Groups);
+    Ok(done)
 }
 
 #[post(
@@ -197,10 +231,12 @@ pub async fn set_in_group(group_id: String, channel_id: String, member: bool) ->
     owner: crate::auth::Owner
 )]
 pub async fn delete_group(group_id: String) -> Result<()> {
-    Ok(state
+    state
         .delete_group(&owner.0, &group_id)
         .await
-        .map_err(server_error)?)
+        .map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::Groups);
+    Ok(())
 }
 
 #[post(
@@ -209,10 +245,12 @@ pub async fn delete_group(group_id: String) -> Result<()> {
     owner: crate::auth::Owner
 )]
 pub async fn set_queue(queue: Vec<String>) -> Result<()> {
-    Ok(state
+    state
         .set_queue(&owner.0, &queue)
         .await
-        .map_err(server_error)?)
+        .map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::Queue);
+    Ok(())
 }
 
 #[post(
@@ -221,10 +259,12 @@ pub async fn set_queue(queue: Vec<String>) -> Result<()> {
     owner: crate::auth::Owner
 )]
 pub async fn record_history(video_id: String) -> Result<()> {
-    Ok(state
+    state
         .record_history(&owner.0, &video_id)
         .await
-        .map_err(server_error)?)
+        .map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::History);
+    Ok(())
 }
 
 #[post(
@@ -233,5 +273,7 @@ pub async fn record_history(video_id: String) -> Result<()> {
     owner: crate::auth::Owner
 )]
 pub async fn clear_history() -> Result<()> {
-    Ok(state.clear_history(&owner.0).await.map_err(server_error)?)
+    state.clear_history(&owner.0).await.map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::History);
+    Ok(())
 }

@@ -73,6 +73,11 @@ pub struct AppState {
     /// five-second tick was most of the work of watching a video, so the
     /// lists catch up when playback pauses, hides or ends instead.
     unshown_progress: Signal<HashMap<String, VideoProgress>>,
+    /// The playing video's position as this device last knew the server to
+    /// hold it: what it last sent, or last read. When the server's copy
+    /// moves away from this, another device moved it. See
+    /// [`crate::components::catch_up_playback`].
+    pub(crate) server_position: Signal<Option<(String, u64)>>,
     /// g3-ui's toast queue. It belongs to the `AppWrapper`, which sits below
     /// this state, so a component inside the wrapper hands it over once it
     /// mounts. Until then a notice has nowhere to show and is dropped.
@@ -396,26 +401,58 @@ impl AppState {
             return;
         }
         let progress = pending.into_values().collect::<Vec<_>>();
+        let sent = self.playing_entry(&progress);
         // No invalidation: the lists already show what was sent.
         spawn(async move {
             if api::save_progress(progress).await.is_err() {
                 self.show_toast("Could not save your place in that video", Color::Warning);
+            } else if sent.is_some() {
+                self.server_position.set(sent);
             }
         });
     }
 
-    fn save_one_progress(self, video: &Video) {
+    fn save_one_progress(mut self, video: &Video) {
         let progress = vec![VideoProgress {
             video_id: video.id.clone(),
             watched: video.watched,
             progress_seconds: video.progress_seconds,
             audio_only: video.audio_only,
         }];
+        let sent = self.playing_entry(&progress);
         spawn(async move {
             if api::save_progress(progress).await.is_err() {
                 self.show_toast("Could not save that", Color::Warning);
+            } else if sent.is_some() {
+                self.server_position.set(sent);
             }
         });
+    }
+
+    /// The playing video's position among those about to be sent.
+    fn playing_entry(self, progress: &[VideoProgress]) -> Option<(String, u64)> {
+        let active = self.active_video.peek();
+        let active = active.as_ref()?;
+        progress
+            .iter()
+            .find(|entry| entry.video_id == active.id)
+            .map(|entry| (entry.video_id.clone(), entry.progress_seconds))
+    }
+
+    /// Move the playing video to a position another device saved, without
+    /// sending it back: the server already has it.
+    pub(crate) fn adopt_saved_position(mut self, video_id: &str, seconds: u64) {
+        self.server_position
+            .set(Some((video_id.to_string(), seconds)));
+        let Some(mut active) = self.active_video.peek().clone() else {
+            return;
+        };
+        if active.id != video_id {
+            return;
+        }
+        active.progress_seconds = seconds;
+        self.pending_progress.write().remove(video_id);
+        self.active_video.set(Some(active));
     }
 
     /// Play this video without its video stream, and remember that choice for
@@ -1394,6 +1431,7 @@ pub fn AppStateProvider(children: Element) -> Element {
         settings,
         pending_progress: Signal::new(HashMap::new()),
         unshown_progress: Signal::new(HashMap::new()),
+        server_position: Signal::new(None),
         toaster: Signal::new(None),
         playlist_picker_video: Signal::new(None),
         playlist_picker_open: Signal::new(false),
@@ -1427,5 +1465,8 @@ pub fn AppStateProvider(children: Element) -> Element {
         feed_pages: Signal::new(1),
     });
 
-    rsx! { {children} }
+    rsx! {
+        crate::library_sync::LibrarySync {}
+        {children}
+    }
 }

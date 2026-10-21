@@ -91,6 +91,11 @@ pub struct AppServerState {
     search_lock: Arc<tokio::sync::Mutex<()>>,
     /// A self-hosted SponsorBlock mirror, when one is configured.
     sponsor_api_url: Option<String>,
+    /// What each account has changed since this server started. See
+    /// [`AppServerState::library_changes`].
+    library_changes: Arc<std::sync::Mutex<HashMap<String, crate::models::LibraryChanges>>>,
+    /// Tells this run's counts from an earlier run's, which started at zero too.
+    library_changes_epoch: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -501,6 +506,11 @@ impl AppServerState {
             playback_sessions: Arc::new(std::sync::Mutex::new(HashMap::new())),
             sync_lock: Arc::new(tokio::sync::Mutex::new(())),
             search_lock: Arc::new(tokio::sync::Mutex::new(())),
+            library_changes: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            library_changes_epoch: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|elapsed| elapsed.as_nanos() as u64)
+                .unwrap_or(1),
             sponsor_api_url: std::env::var("TAWNY_SPONSORBLOCK_URL")
                 .ok()
                 .map(|url| url.trim_end_matches('/').to_string())

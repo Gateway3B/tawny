@@ -37,6 +37,14 @@ Every video the server hands out carries the asking viewer's progress and its ch
 
 `g3-cache` persists each read to IndexedDB on web and a redb file on desktop and mobile, so a relaunch shows the last answer at once and refetches behind it; a mounted screen also refetches when the app regains focus. Offline, the screens you have opened show what they last showed. The cache is keyed to the signed-in account and emptied when it changes.
 
+### Changes made on another device
+
+Focus alone does not catch these. A phone left open on a playlist is never refocused, and on Android a loaded video keeps the WebView reporting itself visible in the background, so coming back to the app is not a focus event. So the server counts, in memory and per account, every write by kind (`LibraryChanges`: subscriptions, groups, playlists, queue, history, watched, progress), and each mutating server function in `src/api/library.rs` notes what it wrote. `library_sync::LibrarySync` asks for the counts (`get_library_changes`) whenever the app comes back into view (visibility, focus, `online`, Android's `tawnynativeplaybackresume`) and every 15 seconds while it is in view, and refetches only the kinds that moved, through `data_change::invalidate`. A server restart starts a new epoch, which counts as everything having changed.
+
+A position saved elsewhere brings a **paused** player up to date (`catch_up_playback`): picking the phone back up after watching on the computer finds the video where the computer left it. It moves only when the server's copy differs from what this device last sent or read for that video, so a failed save of its own never pulls it back, and never while playing.
+
+Returning to a list keeps the reader's place even when the refetch puts new videos above it: the shell's scroll memory holds the view to the card that was at the top (`data-scroll-anchor` on each `VideoCard`) as cards are added or removed. At the very top nothing is held, so new uploads show there.
+
 ### Changing data
 
 A change is shown at once and then made on the server:

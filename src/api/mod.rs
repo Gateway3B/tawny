@@ -1,10 +1,13 @@
 use crate::models::{
     Account, ChannelDetails, ChannelMediaPage, CommentsPage, Credentials, FeedPage, FeedQuery,
-    FeedRefreshResult, PlaybackFailure, PlaybackFailureOrigin, PlaybackSession, Playlist,
-    PlaylistContents, PlaylistPreview, SearchResults, SponsorSegment, SubscriptionChange,
+    FeedRefreshResult, LibraryChanges, PlaybackFailure, PlaybackFailureOrigin, PlaybackSession,
+    Playlist, PlaylistContents, PlaylistPreview, SearchResults, SponsorSegment, SubscriptionChange,
     SubscriptionGroup, Video, VideoDetails, VideoProgress, Viewer,
 };
 use dioxus::prelude::*;
+
+#[cfg(feature = "server")]
+use crate::models::LibraryChange;
 
 mod account;
 mod catalog;

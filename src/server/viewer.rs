@@ -11,7 +11,7 @@
 use super::*;
 use crate::models::{
     DurationFilter, FEED_PAGE_SIZE, FeedFilter, FeedGroup, FeedPage, FeedQuery, HISTORY_LIMIT,
-    PlaylistContents, PlaylistPreview, SubscriptionChange, Viewer,
+    LibraryChange, LibraryChanges, PlaylistContents, PlaylistPreview, SubscriptionChange, Viewer,
 };
 
 /// Every column a `DbVideo` reads.
@@ -27,6 +27,12 @@ const DURATION_LOOKAHEAD: usize = 48;
 struct DbAvatar {
     channel_id: String,
     avatar_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbWatched {
+    video_id: String,
+    watched: bool,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -732,8 +738,60 @@ impl AppServerState {
 
     /// Set watch progress (and the audio-only choice) for the videos given.
     /// Videos not mentioned keep theirs.
-    pub async fn save_progress(&self, owner: &str, progress: &[VideoProgress]) -> Result<()> {
-        self.write_user_progress(owner, progress).await
+    ///
+    /// Returns whether any video's watched flag changed: other devices
+    /// refetch their lists for that, but not for the tick a playing video
+    /// sends every few seconds.
+    pub async fn save_progress(&self, owner: &str, progress: &[VideoProgress]) -> Result<bool> {
+        if progress.is_empty() {
+            return Ok(false);
+        }
+        let ids = progress
+            .iter()
+            .map(|entry| entry.video_id.clone())
+            .collect::<Vec<_>>();
+        let before: Vec<DbWatched> = self
+            .db
+            .query("SELECT video_id, watched FROM video_progress WHERE owner = type::record($owner) AND video_id IN $ids")
+            .bind(("owner", owner.to_string()))
+            .bind(("ids", ids))
+            .await?
+            .check()?
+            .take(0)?;
+        let watched_changed = progress.iter().any(|entry| {
+            let was = before
+                .iter()
+                .find(|row| row.video_id == entry.video_id)
+                .is_some_and(|row| row.watched);
+            was != entry.watched
+        });
+        self.write_user_progress(owner, progress).await?;
+        Ok(watched_changed)
+    }
+
+    /// What this account has changed since the server started, for another
+    /// of its devices to compare with what it last saw.
+    pub fn library_changes(&self, owner: &str) -> LibraryChanges {
+        let counts = self
+            .library_changes
+            .lock()
+            .map(|changes| changes.get(owner).copied().unwrap_or_default())
+            .unwrap_or_default();
+        LibraryChanges {
+            epoch: self.library_changes_epoch,
+            ..counts
+        }
+    }
+
+    /// Count a change this account made, once it is written. The server
+    /// functions that write count what they wrote (see `api::library`).
+    pub fn note_change(&self, owner: &str, change: LibraryChange) {
+        if owner.is_empty() {
+            return;
+        }
+        if let Ok(mut changes) = self.library_changes.lock() {
+            changes.entry(owner.to_string()).or_default().note(change);
+        }
     }
 
     /// This account's saved place in one video, if it has one.
@@ -912,6 +970,37 @@ mod tests {
         let state = AppServerState::initialize().await.unwrap();
         let owner = state.accounts().create_guest().await.unwrap().id;
         (state, owner)
+    }
+
+    #[tokio::test]
+    async fn saving_progress_says_when_a_watched_flag_changed() {
+        let (state, owner) = state_and_owner().await;
+        let at = |seconds, watched| VideoProgress {
+            video_id: "sync-a".into(),
+            watched,
+            progress_seconds: seconds,
+            audio_only: false,
+        };
+        // Ticks of a playing video move the position and nothing else.
+        assert!(!state.save_progress(&owner, &[at(5, false)]).await.unwrap());
+        assert!(!state.save_progress(&owner, &[at(10, false)]).await.unwrap());
+        assert!(state.save_progress(&owner, &[at(600, true)]).await.unwrap());
+        // Watching a finished video again keeps it watched.
+        assert!(!state.save_progress(&owner, &[at(20, true)]).await.unwrap());
+        assert!(state.save_progress(&owner, &[at(0, false)]).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn change_counts_are_per_account() {
+        let (state, first) = state_and_owner().await;
+        let second = state.accounts().create_guest().await.unwrap().id;
+        let before = state.library_changes(&first);
+        state.note_change(&first, LibraryChange::Playlists);
+        assert_eq!(
+            state.library_changes(&first).changed_since(before),
+            vec![LibraryChange::Playlists]
+        );
+        assert_eq!(state.library_changes(&second), before);
     }
 
     fn channel(id: &str) -> Channel {

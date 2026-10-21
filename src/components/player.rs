@@ -512,6 +512,89 @@ const tryResume = () => {
 tryResume();
 "#;
 
+/// Where a paused, attached player stands, in whole seconds; `-1` when it is
+/// playing or has nothing loaded. A playing player is where the viewer is
+/// watching, so nothing else should move it.
+const PAUSED_POSITION_JS: &str = r#"
+const media = document.getElementById('tawny-player-media');
+const attached = window.__tawnyAttachEval?.phase === 'attached';
+const ready = media && attached && media.readyState >= 1 && media.paused;
+dioxus.send(ready && Number.isFinite(media.currentTime) ? Math.floor(media.currentTime) : -1);
+"#;
+
+/// Moves a still-paused player from `__FROM__` to `__TO__`, unless the viewer
+/// pressed play or moved it in the moment since it was asked where it stood.
+const CATCH_UP_JS: &str = r#"
+const media = document.getElementById('tawny-player-media');
+const still = media && media.paused && Math.abs(media.currentTime - __FROM__) <= 2;
+if (still) media.currentTime = __TO__;
+dioxus.send(Boolean(still));
+"#;
+
+/// Bring a paused player up to where another device left the same video.
+///
+/// Opening a video asks the server where it was left (see the resume effect
+/// in [`PersistentPlayer`]), but a phone put down with the video loaded keeps
+/// its own position: picking it back up after watching on the computer found
+/// it where it was, not where the computer stopped. Called when the server
+/// says a position changed. It moves the player only when the server's copy
+/// moved away from the one this device last sent or read, so a save of this
+/// device's that failed never pulls it backwards.
+pub async fn catch_up_playback(app_state: AppState) {
+    let Some(video) = app_state.active_video.peek().clone() else {
+        return;
+    };
+    let Ok(here) = document::eval(PAUSED_POSITION_JS).recv::<i64>().await else {
+        return;
+    };
+    let Ok(here) = u64::try_from(here) else {
+        return;
+    };
+    let Ok(Some(saved)) = get_video_progress(video.id.clone()).await else {
+        return;
+    };
+    let latest = (video.id.clone(), saved.progress_seconds);
+    if app_state.server_position.peek().as_ref() == Some(&latest) {
+        return;
+    }
+    if app_state
+        .active_video
+        .peek()
+        .as_ref()
+        .map(|active| &active.id)
+        != Some(&video.id)
+    {
+        return;
+    }
+    let to = saved.progress_seconds;
+    // Finished elsewhere: leaving it where it is beats jumping to the credits.
+    if video.is_effectively_over(to) || to.abs_diff(here) <= RESUME_DRIFT_SECONDS {
+        let mut known = app_state.server_position;
+        known.set(Some(latest));
+        return;
+    }
+    let script = CATCH_UP_JS
+        .replace("__FROM__", &here.to_string())
+        .replace("__TO__", &to.to_string());
+    if matches!(document::eval(&script).recv::<bool>().await, Ok(true)) {
+        app_state.adopt_saved_position(&video.id, to);
+        app_state.show_toast(
+            format!("Picked up at {}, where you left off", clock_label(to)),
+            Color::Neutral,
+        );
+    }
+}
+
+/// `1:02:03`, or `2:03` under an hour.
+fn clock_label(seconds: u64) -> String {
+    let (hours, minutes, seconds) = (seconds / 3600, (seconds % 3600) / 60, seconds % 60);
+    if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes}:{seconds:02}")
+    }
+}
+
 const PROGRESS_REPORTER_JS: &str = r#"
 const key = Symbol.for('tawny.progress-reporter');
 window[key]?.dispose?.();
@@ -806,6 +889,10 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
             let Ok(Some(saved)) = get_video_progress(video_id.clone()).await else {
                 return;
             };
+            if playing_id.peek().as_deref() == Some(video_id.as_str()) {
+                let mut known = resume_state.server_position;
+                known.set(Some((video_id.clone(), saved.progress_seconds)));
+            }
             // Finished elsewhere: opening it again means starting over, which
             // is what the player already did.
             if saved.watched

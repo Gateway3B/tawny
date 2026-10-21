@@ -7,7 +7,7 @@
 
 use crate::api::{
     get_channel_details, get_feed_page, get_playlist, get_playlist_previews, get_video_details,
-    get_viewer,
+    get_videos, get_viewer,
 };
 use g3_cache::invalidate_cached;
 
@@ -24,6 +24,10 @@ pub enum DataChange {
     /// so a changed queue is a new key and needs nothing more.
     Queue,
     History,
+    /// Videos marked watched or unwatched on another device: every list that
+    /// shows it or hides watched videos. This device's own marks are applied
+    /// to its cached lists directly, and need no refetch.
+    Watched,
 }
 
 pub fn invalidate(change: DataChange) {
@@ -44,5 +48,10 @@ pub fn invalidate(change: DataChange) {
             invalidate_cached(get_playlist_previews);
         }
         DataChange::Queue | DataChange::History => invalidate_cached(get_viewer),
+        DataChange::Watched => {
+            invalidate_cached(get_feed_page);
+            invalidate_cached(get_playlist);
+            invalidate_cached(get_videos);
+        }
     }
 }

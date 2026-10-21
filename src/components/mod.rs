@@ -20,7 +20,7 @@ pub use explore::Explore;
 pub use feed::{Feed, FeedFilterSegments};
 pub use library::{ChannelDetail, HistoryPage, QueuePage};
 pub use overlays::AppOverlays;
-pub use player::{PersistentPlayer, VideoDetail};
+pub use player::{PersistentPlayer, VideoDetail, catch_up_playback};
 pub use playlists::{PlaylistDetail, Playlists};
 pub use settings::SettingsPage;
 pub use shell::{AppShell, PageHeader};

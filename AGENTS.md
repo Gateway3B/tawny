@@ -73,6 +73,7 @@ src/server/             AppServerState, the server's engine: ytdlp, youtube (nor
 src/models/             Types shared by client and server
 src/components/         Screens and the shell; player.rs is the persistent player
 src/cache.rs            use_persistent_signal (per-device settings)
+src/library_sync.rs     Refetching what another device changed; catching up a paused player
 src/subscriptions_io.rs Importing and exporting subscription lists
 assets/                 tawny_transport.js and tawny_player_controls.js (the player's JS side)
 database/schema/        One .surql file per table (desired state, not migrations)

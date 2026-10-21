@@ -170,3 +170,121 @@ impl VideoList for PlaylistContents {
 // ---------------------------------------------------------------------------
 // Accounts
 // ---------------------------------------------------------------------------
+
+/// One kind of change to an account's own data, as counted in
+/// [`LibraryChanges`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LibraryChange {
+    Subscriptions,
+    Groups,
+    Playlists,
+    Queue,
+    History,
+    /// A video marked watched or unwatched, which lists show and filter on.
+    Watched,
+    /// Any saved position, including the ticks of a video playing elsewhere.
+    Progress,
+}
+
+impl LibraryChange {
+    pub const ALL: [Self; 7] = [
+        Self::Subscriptions,
+        Self::Groups,
+        Self::Playlists,
+        Self::Queue,
+        Self::History,
+        Self::Watched,
+        Self::Progress,
+    ];
+}
+
+/// Counters that move whenever this account's data changes, from any device.
+///
+/// A device asks for these often and cheaply, and compares them with the last
+/// it saw, to learn what another device changed while its own screens sat on
+/// cached answers. They are not data: only "something of this kind changed".
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LibraryChanges {
+    /// Which run of the server counted these. The counts live in memory and
+    /// start again on a restart, so a new epoch means anything may have
+    /// changed.
+    pub epoch: u64,
+    pub subscriptions: u64,
+    pub groups: u64,
+    pub playlists: u64,
+    pub queue: u64,
+    pub history: u64,
+    pub watched: u64,
+    pub progress: u64,
+}
+
+impl LibraryChanges {
+    fn count_mut(&mut self, change: LibraryChange) -> &mut u64 {
+        match change {
+            LibraryChange::Subscriptions => &mut self.subscriptions,
+            LibraryChange::Groups => &mut self.groups,
+            LibraryChange::Playlists => &mut self.playlists,
+            LibraryChange::Queue => &mut self.queue,
+            LibraryChange::History => &mut self.history,
+            LibraryChange::Watched => &mut self.watched,
+            LibraryChange::Progress => &mut self.progress,
+        }
+    }
+
+    pub fn count(mut self, change: LibraryChange) -> u64 {
+        *self.count_mut(change)
+    }
+
+    /// Counted on the server, as each write lands.
+    #[cfg_attr(not(any(feature = "server", test)), allow(dead_code))]
+    pub fn note(&mut self, change: LibraryChange) {
+        let count = self.count_mut(change);
+        *count = count.wrapping_add(1);
+    }
+
+    /// What changed between `before` and these. Everything, when the server
+    /// restarted in between.
+    pub fn changed_since(self, before: Self) -> Vec<LibraryChange> {
+        LibraryChange::ALL
+            .into_iter()
+            .filter(|&change| {
+                self.epoch != before.epoch || self.count(change) != before.count(change)
+            })
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod library_changes_tests {
+    use super::*;
+
+    #[test]
+    fn only_the_kinds_that_moved_are_reported() {
+        let before = LibraryChanges {
+            epoch: 7,
+            ..LibraryChanges::default()
+        };
+        let mut after = before;
+        after.note(LibraryChange::Playlists);
+        after.note(LibraryChange::Progress);
+        after.note(LibraryChange::Progress);
+        assert_eq!(
+            after.changed_since(before),
+            vec![LibraryChange::Playlists, LibraryChange::Progress]
+        );
+        assert!(after.changed_since(after).is_empty());
+    }
+
+    #[test]
+    fn a_restarted_server_reports_everything() {
+        let before = LibraryChanges {
+            epoch: 1,
+            ..LibraryChanges::default()
+        };
+        let after = LibraryChanges {
+            epoch: 2,
+            ..LibraryChanges::default()
+        };
+        assert_eq!(after.changed_since(before), LibraryChange::ALL.to_vec());
+    }
+}

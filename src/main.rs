@@ -8,6 +8,7 @@ mod data_change;
 mod db;
 #[cfg(feature = "server")]
 mod health;
+mod library_sync;
 mod models;
 #[cfg(feature = "server")]
 mod server;
