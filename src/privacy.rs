@@ -4,6 +4,8 @@ use crate::{auth::use_session, state::AppState};
 use dioxus::prelude::*;
 
 #[cfg(feature = "server")]
+mod guards;
+#[cfg(feature = "server")]
 mod server;
 
 #[post("/api/v1/auth/export",

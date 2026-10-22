@@ -1,7 +1,7 @@
 # Tawny account data
 
 This inventory describes the account-data download pilot. It is not a claim
-that backup expiry, every in-flight write, operational logs or external systems
+that backup expiry, operational logs or external systems
 have been reconciled after an account is deleted.
 
 | Storage | Owner and download scope | Primary deletion |
@@ -57,8 +57,30 @@ credential/session/future-column canaries, missing/switched review bindings,
 row/byte/configuration bounds, malformed library state and deleted accounts.
 The milestone passes 85 web/173 server tests (one existing live YouTube test
 ignored), strict checks on all four host feature sets, and strict actual WASM
-and Android checks. Ready/loading cards were inspected at 390×844 and 1440×900
+and Android checks. Ready/loading cards were inspected at 390Ãƒâ€”844 and 1440Ãƒâ€”900
 in both modes/themes. Actual browser file delivery, native sharing, iOS builds,
 multi-tab cookie/cache races, database-editor WebSocket permissions, offsite
-recovery and complete erasure of in-flight ordinary library writes remain
-unverified or unfinished as stated above.
+recovery remain unverified or unfinished as stated above.
+
+## Live database write fences
+
+The six owner tables and both private relation tables reject creates/updates
+for a missing account. Each private write updates the account's private
+`privacy_revision` counter in the same transaction. Deletion removes that
+account row, so an older database snapshot cannot commit a private write
+after deletion. Owned rows cannot be reassigned to another account or made
+unowned, and relation endpoints cannot be changed. Existing unowned demo rows
+remain unowned; no account is inferred for them.
+
+These guards are embedded with the desired schema and applied by startup
+schema sync. Retire older app instances before relying on the new deployment;
+verify the schema through the database editor's actual credentials. Tests cover
+normal library operations, all private tables/relations, a transaction holding
+an old account snapshot, cross-account isolation and legacy unowned data. This
+protects the live database; it does not reconcile older orphan rows or make a
+restored backup safe to serve without independent erasure replay.
+
+Guard milestone validation: 178 server tests and 85 web tests pass, with the
+existing live YouTube check ignored; strict checks pass for web, server,
+mobile and desktop. The Node/Python suites also pass. No UI changed in this
+milestone, and no production database was modified.
