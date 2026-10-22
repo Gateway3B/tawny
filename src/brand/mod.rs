@@ -31,7 +31,7 @@ pub struct BrandState {
     last_attempt: Signal<Option<i64>>,
 }
 
-fn timestamp() -> i64 {
+pub(crate) fn timestamp() -> i64 {
     web_time::SystemTime::now()
         .duration_since(web_time::UNIX_EPOCH)
         .map(|value| value.as_secs().min(i64::MAX as u64) as i64)

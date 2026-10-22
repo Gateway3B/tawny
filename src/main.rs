@@ -11,6 +11,7 @@ mod db;
 mod health;
 mod library_sync;
 mod models;
+mod privacy;
 #[cfg(feature = "server")]
 mod server;
 mod server_url;

@@ -307,6 +307,16 @@ pub fn account_rate_limits() -> g3_auth::rate_limit::RateLimits {
     RateLimits::new()
         .client_ip_header_from_env("CLIENT_IP_HEADER")
         .limit(Limit::per_minute(
+            &["/api/v1/auth/export"],
+            KeyBy::Session,
+            1,
+        ))
+        .limit(Limit::per_minute(
+            &["/api/v1/auth/export"],
+            KeyBy::Global,
+            10,
+        ))
+        .limit(Limit::per_minute(
             &["/api/v1/auth/legal-action"],
             KeyBy::Session,
             3,

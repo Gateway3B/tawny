@@ -72,8 +72,8 @@ labels, source files or runtime environment. Do not export builder caches.
 
 This milestone provides public discovery and native update presentation.
 Private legal review and exact-set receipts are implemented in the subsequent
-legal milestone below. Terms authorization, full privacy export/deletion
-recovery and offsite restore replay remain work. Those need Tawny's
+legal milestone below. A bounded private account download follows in the data milestone. Terms
+authorization, independent deletion recovery and offsite restore replay remain work. Those need Tawny's
 own account/data inventory and reviewed policy configuration. The catalog
 service, hostname, published app listings, store distribution and CI app
 credentials still need deployment/configuration. No policy was published and
@@ -157,7 +157,8 @@ as its library/account. Later receipt writes fail instead of recreating an
 account or leaving orphaned evidence. The new table is part of the app's
 automatically embedded schema and owner-table deletion inventory. Backups
 still contain historical receipt copies until the operator's retention or
-future independent replay removes them. Full account downloads remain pending.
+future independent replay removes them. A bounded owner-projected account download is now implemented; see
+[the data inventory](privacy-data.md) for scope and remaining operator work.
 
 A dismissible change notice is keyed to account and document-set digest. It
 never counts dismissal as acceptance. About and Settings stay accessible, and
@@ -181,3 +182,13 @@ in both modes/themes with published/missing synthetic content. No actual legal
 text was published or accepted. Hydrated alerts/acknowledgments, real native
 flows, database-editor WebSocket permissions and production/offsite recovery
 remain unverified for this milestone.
+
+## Account-data download
+
+Settings now offers an authenticated, bounded account-data copy, including
+legal receipts. [The data inventory](privacy-data.md) defines each section,
+credential exclusions, paging and size limits, web/mobile delivery and remaining
+operator responsibilities. The latest checks pass 85 web/173 server tests, strict
+checks for all four host targets, and actual WASM/Android strict checks. The new
+card was inspected in both modes/themes at phone/wide sizes. Actual file/share
+delivery and independent deletion/offsite recovery still need verification.

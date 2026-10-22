@@ -183,6 +183,7 @@ pub fn SettingsPage() -> Element {
                     // are on it decide what every other setting below is even
                     // describing.
                     AccountSettings {}
+                    crate::privacy::AccountDataDownload {}
                     BackendSettings {}
                     Card { title: "g3tech",
                         Button { fill: ButtonFill::Clear,
