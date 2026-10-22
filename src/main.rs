@@ -46,6 +46,8 @@ fn main() {
         let state = server::AppServerState::initialize()
             .await
             .unwrap_or_else(|_| panic!("Tawny initialization failed; check configuration and private database migration status."));
+        privacy::recovery::start(Arc::clone(&state.db)).await
+            .unwrap_or_else(|_| panic!("Check privacy recovery configuration and pending requests before starting Tawny."));
         server::spawn_subscription_poller(state.clone());
 
         let db = Arc::clone(&state.db);

@@ -46,6 +46,12 @@ struct Row {
 // oversized row before it can cross the database connection into this process.
 const SECTIONS: &[(&str, &str, &str, &str)] = &[
     (
+        "privacy_requests",
+        "privacy_request",
+        "account = $user",
+        "{request_id: request_id, state: state, created_at: created_at, updated_at: updated_at}",
+    ),
+    (
         "playlists",
         "playlist",
         "owner = $user",

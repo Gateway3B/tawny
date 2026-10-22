@@ -96,21 +96,32 @@ pub async fn current_account() -> Result<Account> {
         .map_err(|error| ServerFnError::new(error.to_string()))?)
 }
 
-/// Permanently remove the caller's account and library. Other devices lose
-/// access because their sessions can no longer resolve an account row.
-/// Missing or mismatched review bindings fail before any deletion.
+/// Remove the caller's primary data, or save a durable recovery-first request.
+/// Saved work is pending, not completion. Other devices lose access after primary
+/// removal. Missing/mismatched review bindings fail before work or ledger access.
 #[post(
     "/api/v1/auth/delete",
     state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
     owner: crate::auth::Owner,
     crate::auth::SessionContext { auth_session, .. }: crate::auth::SessionContext
 )]
-pub async fn delete_account(expected_owner: Option<String>) -> Result<()> {
+pub async fn delete_account(
+    expected_owner: Option<String>,
+) -> Result<crate::models::DeletionOutcome> {
+    owner
+        .require_reviewed(expected_owner.as_deref())
+        .map_err(server_error)?;
+    if crate::privacy::recovery::enabled().map_err(ServerFnError::new)? {
+        let request_id = crate::privacy::recovery::enqueue(&state.db, &owner)
+            .await
+            .map_err(ServerFnError::new)?;
+        return Ok(crate::models::DeletionOutcome::Queued { request_id });
+    }
     state
         .accounts()
         .delete(&owner, expected_owner.as_deref())
         .await
         .map_err(server_error)?;
     auth_session.logout_user();
-    Ok(())
+    Ok(crate::models::DeletionOutcome::Removed)
 }

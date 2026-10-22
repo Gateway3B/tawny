@@ -15,6 +15,7 @@ have been reconciled after an account is deleted.
 | video_progress | Owner; video ID, watched/progress/audio preference and timestamp | Remove owned rows |
 | subscription | Source account; legacy channel reference and timestamp | Remove owned relations |
 | brand_legal_receipt | Owner; app, document-set digest, action, purpose and receipt timestamp | Remove owned rows with account/library |
+| privacy_request | Session-derived account; only request ID, state and created/updated times are downloaded | Retain minimal private recovery evidence; clear raw account reference after primary verification |
 | sessions | Authentication payloads/cookies; excluded from downloads | Startup indexes known legacy payloads and removes orphan sessions; primary deletion removes indexed sessions and irreversibly retires the identity |
 | channel, video, video_detail_cache | Shared public YouTube metadata; download only the account's reference IDs | Preserve shared metadata; recompute channel interest |
 | Device preferences/caches/downloaded files | Per-device storage, excluded from the server download | Account flows clear the ordinary read cache; device settings and saved files need user handling |
@@ -117,3 +118,12 @@ actual WASM/Android targets. Tests cover repeated legacy migration, exact
 account and anonymous-session preservation, orphan cleanup, unknown/large
 payload holds, atomic deletion and twelve concurrent deletion/store races.
 No production sessions or offsite backups were accessed or changed.
+
+## Durable deletion requests
+
+Optional recovery-first deletion records one stable backend request/revision and
+requires an exact independent-ledger acknowledgment before primary removal.
+[Privacy operations](privacy-operations.md) defines the disabled/required modes,
+leases, retries, pending user feedback and remaining recovery/processor work.
+The minimal request evidence and retirement fence are retained private records;
+removal of the live profile does not make them anonymous or expire old copies.

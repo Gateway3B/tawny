@@ -83,6 +83,7 @@ pub(crate) enum Diagnostic {
     ExtractorShortsFailed,
     ExtractorFormatsFailed,
     RuntimePanic,
+    PrivacyRequestPending,
 }
 
 impl Diagnostic {
@@ -111,6 +112,7 @@ impl Diagnostic {
             Self::ExtractorShortsFailed => "extractor_shorts_failed",
             Self::ExtractorFormatsFailed => "extractor_formats_failed",
             Self::RuntimePanic => "runtime_panic",
+            Self::PrivacyRequestPending => "privacy_request_pending",
         }
     }
 }

@@ -64,12 +64,61 @@ snapshots and manual dumps, and verify lifecycle processing at the provider.
 The [account-data inventory](privacy-data.md) identifies live tables, device
 copies, retained session fences and exceptional request handling.
 
-Tawny's current deletion is transactional live removal with session retirement
-and late-write fences. It does not yet durably publish a recovery event to the
-independent ledger. Its app-specific quarantined replay/verification command,
-platform wrapper and encrypted offsite drill remain required work. Therefore,
-keep an older restored database offline; neither startup session migration nor
-a passing health probe proves that past deletions have been reapplied.
+Tawny implements optional durable deletion recording as described below. Its
+app-specific quarantined replay/verification command, platform wrapper and
+encrypted offsite drill remain required work. Keep an older restored database
+offline; neither startup session migration nor a passing health probe proves
+that past deletions have been reapplied.
+
+## Optional recovery-first deletion
+
+`G3_PRIVACY_RECOVERY=disabled` preserves immediate transactional primary removal
+and the earlier null response. `required` saves one UUID request and increasing
+subject revision from the authenticated account before any removal. It requires
+`G3_PRIVACY_LEDGER_URL` ending in `/events` and a separate app-scoped
+`G3_PRIVACY_LEDGER_TOKEN`. These are server-only values, never client build args
+or public catalog content. HTTPS is required outside the reviewed private
+container/loopback addresses. Unknown modes or incomplete settings fail startup.
+
+A worker claims a five-minute lease. It sends a minimal deletion event with a
+hashed non-reused account reference, validates the exact event digest returned
+by the independent ledger, and durably checkpoints that acknowledgment before
+primary data is removed. Ledger failure, a mismatched receipt, a lost lease or
+unreviewed account/request fields leaves the request pending. Primary removal
+and its checkpoint commit together. Retries reuse the same event and resume
+from a persisted acknowledgment or primary checkpoint. Retry delays grow up to
+one hour; the displayed attempt counter is capped at 20. No error text, account
+ID, event body or ledger credential enters the routine diagnostic log.
+
+The shared primary erase program retires sessions and verifies playlist relation
+removal. A queued request cannot use the legacy direct-purge path. A database
+event also rejects profile deletion while recovery recording is pending, and
+late registration cannot add credentials over a saved deletion request. Existing
+library writes are not frozen while recording is pending; the primary transaction
+and existing write fences serialize their removal. Retire older app instances
+before relying on this release, and do not disable the worker over pending work.
+
+The private final state is `primary_verified`, not expiry of every retained copy.
+It clears the raw account reference from the request and retains minimal request,
+subject/revision, digest, state and timestamp evidence. The private session fence
+still holds its non-reused account reference. These are retained pseudonymous
+operational records, with a separately reviewed retention/access schedule.
+Account downloads include only the caller's request ID, state and timestamps;
+ledger digests, leases, subjects, errors and future fields are excluded.
+
+Current clients distinguish a saved request from immediate primary removal.
+They show saved/pending, keep account access while work is queued and do not
+report deletion complete. A changed account ignores the older response. The
+queue survives closing the app and restarting the server. Public status proofs,
+completion/deadline notifications and hydrated multi-device behavior remain
+work; an account download can preserve its private request reference before
+primary removal. Deploy clients that understand queued responses before
+activating required mode. No production recovery mode is enabled by this change.
+
+Do not activate a launch deletion promise until the scoped independent ledger,
+B2 lifecycle, app-specific replay wrapper and an encrypted end-to-end recovery
+drill have been verified. This queue does not erase old backups, operational
+logs, browser/device copies or an external processor by itself.
 
 ## Validation
 
@@ -84,3 +133,15 @@ The logging milestone passes 184 server tests and 85 web tests (one existing
 live YouTube test ignored), strict checks on all four host builds, nine Node
 tests and ten Python extractor tests. Production Compose validates with
 synthetic settings. No UI or target-specific client behavior changed here.
+
+Queue milestone validation: 197 server and 87 web tests pass (the existing
+live YouTube and explicitly isolated WebSocket tests are ignored in the ordinary
+suite). Strict checks pass for all four host builds and actual WASM/Android
+targets. The separate disposable database-editor WebSocket drill also passes
+with the new queue/schema. Tests cover exact/mismatched ledger receipts, stable
+request identity, retries/checkpoint resume, owner isolation, lost leases,
+unknown fields including a field arriving during the ledger await, blocked
+legacy deletion/late registration and minimal private export. Pending notices
+were inspected at 390×844 and 1440×900 in iOS/Material, light/dark. These were
+static rendered previews; no app server was started, so hydrated interactions,
+server UI diagnostics and real devices remain unverified.

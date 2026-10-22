@@ -6,6 +6,10 @@ use dioxus::prelude::*;
 #[cfg(feature = "server")]
 mod guards;
 #[cfg(feature = "server")]
+pub(crate) mod primary;
+#[cfg(feature = "server")]
+pub(crate) mod recovery;
+#[cfg(feature = "server")]
 mod server;
 #[cfg(feature = "server")]
 pub(crate) mod sessions;

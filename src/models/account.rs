@@ -32,6 +32,15 @@ impl Account {
     }
 }
 
+/// A saved request is pending; only immediate primary removal uses null for
+/// compatibility with older clients. Neither variant asserts offsite expiry.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DeletionOutcome {
+    Removed,
+    Queued { request_id: String },
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Credentials {
     pub email: String,
@@ -113,6 +122,27 @@ pub fn validate_password(password: &str) -> Result<(), CredentialProblem> {
 #[cfg(test)]
 mod account_tests {
     use super::*;
+
+    #[test]
+    fn deletion_response_distinguishes_saved_work_from_legacy_null_success() {
+        assert_eq!(
+            serde_json::to_string(&DeletionOutcome::Removed).unwrap(),
+            "null"
+        );
+        assert_eq!(
+            serde_json::from_str::<DeletionOutcome>("null").unwrap(),
+            DeletionOutcome::Removed
+        );
+        let queued = DeletionOutcome::Queued {
+            request_id: "synthetic-request".into(),
+        };
+        assert_eq!(
+            serde_json::from_str::<DeletionOutcome>(&serde_json::to_string(&queued).unwrap())
+                .unwrap(),
+            queued
+        );
+        assert!(serde_json::from_str::<DeletionOutcome>(r#"{"state":"done"}"#).is_err());
+    }
 
     #[test]
     fn email_validation_normalizes_case_and_surrounding_space() {
