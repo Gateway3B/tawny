@@ -55,8 +55,10 @@ Apply the schema with a separate migration identity, provision a per-app
 EDITOR using g3-platform's reviewed provisioning flow, and retire older root
 connections before enabling shared traffic. Startup still runs SurrealKit and
 backfills; operator-controlled release rollouts remain work as stated above.
-Tawny is not yet in g3-platform's Compose/service inventory, and this change
-does not move its database or provision a production identity.
+g3-platform's optional `compose.tawny.yml` provides the shared service inventory;
+its `docs/tawny.md` describes scoped credentials, app-directory custody and
+migration. The overlay remains opt-in. Source changes do not move a database or
+provision a production identity.
 
 `python ci/privacy_auth_drill.py` creates a memory-only SurrealDB 3.2.4 fixture,
 with outbound SQL networking and scripting disabled, no host data volume,

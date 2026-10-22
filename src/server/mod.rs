@@ -395,6 +395,9 @@ impl AppServerState {
             .unwrap_or_else(|_| data_dir.join("extractor"));
         let mut youtube_builder = RustyPipe::builder()
             .storage_dir(extractor_cache)
+            // The default file reporter persists raw request/response bodies
+            // outside the reviewed telemetry path and its retention controls.
+            .no_reporter()
             .po_token_cache();
         // Only honoured when the path actually exists. It is an optional
         // helper, so a stale or placeholder value should cost the feature, not

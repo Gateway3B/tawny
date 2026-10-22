@@ -36,10 +36,11 @@ Tawny/extractor local json-file logs remain limited to five 10 MiB files per
 container. This bounds disk usage; it does not set an age limit. For the shared
 host, use g3-platform's reviewed journal policy and rotation/vacuum timer
 (14 days plus timer delay), then verify the remote destination's retention.
-Tawny is not yet in that deployment's service/collector inventory; this change
-adds no remote exporter or trace stream. Its `request_complete` format matches
-the existing collector's approved field projection. Service codes and playback
-timings require separate review before any remote forwarding is enabled.
+g3-platform's optional `compose.tawny.yml` now includes Tawny and its extraction
+sidecars. Its remote allowlist accepts only Tawny's `request_complete` fields;
+extractor messages, service codes and playback timings are not forwarded. The
+overlay remains opt-in and no remote trace exporter is enabled. Production
+credentials, image compatibility and destination retention still need review.
 
 Inventory and remove or expire historical Docker logs, journal files, forwarded
 copies, proxy/CDN logs and provider diagnostics separately. New source redaction
@@ -53,8 +54,9 @@ The standalone root mode remains a compatibility default, so a shared deployment
 must select database mode and supply its exact namespace/database credentials.
 There is no root fallback after a scoped login failure. See the
 [database workflow](../database/README.md) for migration and the isolated
-WebSocket test. This source change does not add Tawny to the platform inventory
-or provision/migrate a production database.
+WebSocket test. The optional platform overlay and
+`g3-platform/docs/tawny.md` describe the shared inventory/migration. Source changes do not enable it or provision/migrate
+a production database.
 
 ## Backups and recovery
 
@@ -199,3 +201,15 @@ request/revision/digest evidence, current/legacy metadata, unknown fields/tables
 missing profiles, delayed saves and orphan/guard verification. The disposable
 containers and network were removed. No UI changed in this replay milestone;
 no final Linux image, real device or offsite provider test is claimed here.
+
+
+The SDK's default RustyPipe file reporter is also disabled. It otherwise writes
+raw request/response reports beneath the extractor directory independently of
+tracing filters or journal expiry. Existing report files and cache/BotGuard
+copies remain an operator inventory task; see the account-data inventory. No
+historical file was scanned or removed by this source change.
+
+Report-configuration validation: 205 ordinary server tests and strict checks for
+all four host builds pass. The pinned SDK's documented `no_reporter` setting
+is applied at the single production client construction point. This source
+check does not inspect old report files or make a live YouTube request.

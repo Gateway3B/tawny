@@ -19,7 +19,10 @@ have been reconciled after an account is deleted.
 | sessions | Authentication payloads/cookies; excluded from downloads | Startup indexes known legacy payloads and removes orphan sessions; primary deletion removes indexed sessions and irreversibly retires the identity |
 | channel, video, video_detail_cache | Shared public YouTube metadata; download only the account's reference IDs | Preserve shared metadata; recompute channel interest |
 | Device preferences/caches/downloaded files | Per-device storage, excluded from the server download | Account flows clear the ordinary read cache; device settings and saved files need user handling |
-| Server caches, extractor data, operational logs and backups | Operator-managed systems, outside the self-service JSON projection | Separate inventory, retention and recovery verification still required |
+| Extractor storage directory (`TAWNY_EXTRACTOR_CACHE_DIR`, default `/data/extractor`) | Private operational cache; RustyPipe persists client/deobfuscation state and its cache format can contain OAuth/cookie credentials if supplied by an older/custom setup | No account mapping or automatic deletion is claimed; inspect/restrict legacy copies separately and do not restore old cache files automatically |
+| `/data/websub-secret` or configured WebSub secret | Server credential; excluded from account downloads | Separate protected secret custody; not removed by primary account deletion or covered by logical DB backups |
+| Legacy RustyPipe report files | May contain request URL/headers/body, provider responses and error details | New report generation is disabled; existing files need separate inventory/expiry, including overrides and backups |
+| Server caches, operational logs and backups | Operator-managed systems, outside the self-service JSON projection | Separate inventory, retention and recovery verification still required |
 
 `/api/v1/auth/export` is an authenticated POST with an `expected_owner` review
 binding. The server derives the account independently, uses fixed field lists,
@@ -127,3 +130,22 @@ requires an exact independent-ledger acknowledgment before primary removal.
 leases, retries, pending user feedback and remaining recovery/processor work.
 The minimal request evidence and retirement fence are retained private records;
 removal of the live profile does not make them anonymous or expire old copies.
+
+
+## SDK report files and operational cache
+
+Tawny explicitly disables RustyPipe's default file reporter. Its reports can
+include request headers/bodies and full provider responses, so suppressing SDK
+tracing alone does not cover that disk path. New failures still use Tawny's
+fixed diagnostic codes and reviewed telemetry. This does not erase existing
+`rustypipe_reports` directories, manual dumps or copied report files; inventory
+both the default extractor directory and any configured override.
+
+The SDK cache is distinct from those reports and remains enabled for client
+versions/deobfuscation work across restarts. Its format also supports OAuth
+and cookie credentials; Tawny does not expose those SDK login helpers, but an
+old/custom cache is not assumed empty or anonymous. Treat extractor storage,
+BotGuard snapshots and any provider's independent files as private operational
+state with reviewed access/retention. Database logical backups and primary
+account erasure do not verify removal of those files. The platform's optional
+Tawny rollout guide describes the separate directory and secret custody.
