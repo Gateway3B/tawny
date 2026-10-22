@@ -33,6 +33,15 @@ pub struct Session {
 }
 
 impl Session {
+    /// Discard an asynchronous result if the reviewed account is no longer
+    /// shown. This does not authorize the request; the server checks too.
+    pub fn matches(self, expected_owner: &str) -> bool {
+        self.account
+            .peek()
+            .as_ref()
+            .is_some_and(|account| account.id == expected_owner)
+    }
+
     /// The server wrote the cookie; retain only the account display state.
     pub fn adopt(&mut self, account: Account) {
         self.account.set(Some(account));
@@ -99,5 +108,36 @@ pub fn readable(error: &str) -> String {
         "Could not reach that server. Check the address and that it is running.".into()
     } else {
         error.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_result_from_an_old_account_no_longer_matches_after_switch_or_sign_out() {
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        dom.in_scope(ScopeId::ROOT, || {
+            let mut session = Session {
+                account: Signal::new(None),
+                status: Signal::new(SessionStatus::Connecting),
+            };
+            let account = |id: &str| Account {
+                id: id.into(),
+                display_name: "Fixture".into(),
+                email: None,
+                is_guest: true,
+            };
+            assert!(!session.matches("app_user:first"));
+            session.adopt(account("app_user:first"));
+            assert!(session.matches("app_user:first"));
+            session.adopt(account("app_user:second"));
+            assert!(!session.matches("app_user:first"));
+            assert!(session.matches("app_user:second"));
+            session.forget();
+            assert!(!session.matches("app_user:second"));
+        });
     }
 }

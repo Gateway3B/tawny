@@ -91,6 +91,9 @@ fn main() {
                     .with_config(AuthConfig::<String>::default().set_cache(false)),
             )
             .layer(SessionLayer::new(session_store))
+            .layer(dioxus::server::axum::middleware::from_fn(
+                auth::private_account_responses,
+            ))
             .layer(g3_cache::cdn_cache_guard("/api"))
             .merge(sessionless))
     });

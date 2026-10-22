@@ -33,8 +33,11 @@ use crate::{
 /// process; a packaged client has to be restarted by hand, which is what the
 /// setup screen says.
 fn reload_client() {
-    spawn(async move {
-        let mut eval = document::eval("window.location.reload(); dioxus.send(true);");
+    // Signing in/out unmounts the account's keyed form. Keep the reload in
+    // the root scope so that removing that form cannot cancel it.
+    let document = document::document();
+    dioxus::core::spawn_forever(async move {
+        let mut eval = document.eval("window.location.reload(); dioxus.send(true);".into());
         let _ = eval.recv::<bool>().await;
     });
 }
@@ -182,27 +185,34 @@ fn BackendSetupScreen(problem: Option<String>, on_saved: EventHandler<()>) -> El
 /// The account section of the settings page.
 #[component]
 pub fn AccountSettings() -> Element {
+    let session = use_session();
+    let account = session.account.read();
+    rsx! {
+        if let Some(account) = account.as_ref() {
+            // Draft credentials and in-flight confirmations belong to one
+            // account. A switch remounts the form with empty fields.
+            AccountForm { key: "{account.id}", account: account.clone() }
+        } else {
+            Card { title: "Account",
+                Text { tone: TextTone::Secondary, "Connecting to your server…" }
+            }
+        }
+    }
+}
+
+#[component]
+fn AccountForm(account: crate::models::Account) -> Element {
     let app_state = use_context::<AppState>();
     let alerts = use_alert();
     let mut session = use_session();
-    let account = (session.account)();
-
     let email = use_signal(String::new);
     let mut password = use_signal(String::new);
     let mut error = use_signal(String::new);
     let mut busy = use_signal(|| false);
-    // A guest sees the sign-up form; anyone else sees sign-in. Both post to a
-    // different endpoint, so which one is showing has to be explicit.
     let mut signing_in = use_signal(|| false);
-
-    let Some(account) = account else {
-        return rsx! {
-            Card { title: "Account",
-                Text { tone: TextTone::Secondary, "Connecting to your server…" }
-            }
-        };
-    };
-
+    let registration_owner = account.id.clone();
+    let deletion_owner = account.id.clone();
+    let sign_out_owner = account.id.clone();
     let is_guest = account.is_guest;
     let upgrade = is_guest && !signing_in();
 
@@ -238,6 +248,8 @@ pub fn AccountSettings() -> Element {
                         expand: ButtonExpand::Block,
                         loading: busy(),
                         onclick: move |_| {
+                            if *busy.peek() || !session.matches(&registration_owner) { return; }
+                            let reviewed_owner = registration_owner.clone();
                             // Validated here first so the field-level rules in
                             // `models` mark the input rather than arriving as
                             // server prose. The server checks them again; this
@@ -256,13 +268,19 @@ pub fn AccountSettings() -> Element {
                             busy.set(true);
                             spawn(async move {
                                 let result = if upgrade {
-                                    register_account(credentials).await
+                                    register_account(credentials, Some(reviewed_owner.clone())).await
                                 } else {
                                     sign_in_to_account(credentials).await
                                 };
+                                if !session.matches(&reviewed_owner) { return; }
                                 match result {
                                     Ok(account) => {
                                         let switched = !upgrade;
+                                        if switched {
+                                            g3_cache::set_cache_owner(None).await;
+                                            if !session.matches(&reviewed_owner) { return; }
+                                            app_state.forget_account();
+                                        }
                                         session.adopt(account);
                                         password.set(String::new());
                                         signing_in.set(false);
@@ -288,6 +306,7 @@ pub fn AccountSettings() -> Element {
                         Button {
                             fill: ButtonFill::Clear,
                             expand: ButtonExpand::Block,
+                            disabled: busy(),
                             onclick: move |_| {
                                 signing_in.toggle();
                                 error.set(String::new());
@@ -305,9 +324,22 @@ pub fn AccountSettings() -> Element {
                         fill: ButtonFill::Outline,
                         color: Color::Neutral,
                         expand: ButtonExpand::Block,
+                        disabled: busy(),
                         onclick: move |_| {
+                            if *busy.peek() || !session.matches(&sign_out_owner) { return; }
+                            let reviewed_owner = sign_out_owner.clone();
+                            busy.set(true);
                             spawn(async move {
-                                let _ = sign_out_of_account().await;
+                                let result = sign_out_of_account().await;
+                                if !session.matches(&reviewed_owner) { return; }
+                                if let Err(problem) = result {
+                                    app_state.show_toast(readable(&problem.to_string()), Color::Danger);
+                                    busy.set(false);
+                                    return;
+                                }
+                                g3_cache::set_cache_owner(None).await;
+                                if !session.matches(&reviewed_owner) { return; }
+                                app_state.forget_account();
                                 session.forget();
                                 reload_client();
                             });
@@ -320,25 +352,35 @@ pub fn AccountSettings() -> Element {
                     color: Color::Danger,
                     expand: ButtonExpand::Block,
                     disabled: busy(),
-                    onclick: move |_| async move {
+                    onclick: move |_| {
+                        if *busy.peek() || !session.matches(&deletion_owner) { return; }
+                        let reviewed_owner = deletion_owner.clone();
+                        busy.set(true);
+                        spawn(async move {
                         let buttons = vec![AlertButton::cancel("Cancel"), AlertButton::destructive("Delete account")];
                         if !alerts.show(AlertOptions {
                             title: "Delete account?".into(),
-                            message: Some("This permanently deletes your account, subscriptions, playlists, queue and history on every device.".into()),
+                            message: Some("This deletes your account, subscriptions, playlists, queue and history from this server. Other devices lose server access to this account. The server operator manages backup retention.".into()),
                             buttons: buttons.clone(),
                             input: None,
-                        }).await.confirmed(&buttons) { return; }
-                        busy.set(true);
-                        match delete_account().await {
+                        }).await.confirmed(&buttons) { busy.set(false); return; }
+                        if !session.matches(&reviewed_owner) { return; }
+                        let result = delete_account(Some(reviewed_owner.clone())).await;
+                        if !session.matches(&reviewed_owner) { return; }
+                        match result {
                             Ok(()) => {
+                                // Finish cleanup before forgetting the session
+                                // unmounts this form and cancels its task.
+                                g3_cache::set_cache_owner(None).await;
+                                if !session.matches(&reviewed_owner) { return; }
                                 app_state.forget_account();
                                 session.forget();
-                                g3_cache::set_cache_owner(None).await;
                                 reload_client();
                             }
                             Err(problem) => app_state.show_toast(readable(&problem.to_string()), Color::Danger),
                         }
                         busy.set(false);
+                        });
                     },
                     "Delete account"
                 }

@@ -25,15 +25,25 @@ pub async fn create_guest_account() -> Result<Account> {
 }
 
 /// Promote the calling guest into a real account, keeping its library.
+/// `expected_owner` binds the action to the account shown by the form; only
+/// the session-derived `Owner` chooses which record is changed.
 #[post(
     "/api/v1/auth/register",
     state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
     owner: crate::auth::Owner
 )]
-pub async fn register_account(credentials: Credentials) -> Result<Account> {
+pub async fn register_account(
+    credentials: Credentials,
+    expected_owner: Option<String>,
+) -> Result<Account> {
     Ok(state
         .accounts()
-        .register(&owner.0, &credentials.email, &credentials.password)
+        .register(
+            &owner,
+            expected_owner.as_deref(),
+            &credentials.email,
+            &credentials.password,
+        )
         .await
         .map_err(|error| ServerFnError::new(error.to_string()))?)
 }
@@ -88,16 +98,17 @@ pub async fn current_account() -> Result<Account> {
 
 /// Permanently remove the caller's account and library. Other devices lose
 /// access because their sessions can no longer resolve an account row.
+/// Missing or mismatched review bindings fail before any deletion.
 #[post(
     "/api/v1/auth/delete",
     state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
     owner: crate::auth::Owner,
     crate::auth::SessionContext { auth_session, .. }: crate::auth::SessionContext
 )]
-pub async fn delete_account() -> Result<()> {
+pub async fn delete_account(expected_owner: Option<String>) -> Result<()> {
     state
         .accounts()
-        .delete(&owner.0)
+        .delete(&owner, expected_owner.as_deref())
         .await
         .map_err(server_error)?;
     auth_session.logout_user();

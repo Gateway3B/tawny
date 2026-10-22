@@ -99,3 +99,37 @@ and real native bundles. Do not equate static previews with those checks.
 - A hydrated app flow, installed Android/iOS package, macOS/iOS compile,
   live GitHub App credential fetch and complete Linux image build have not
   been verified by these checks.
+
+## Account review prerequisite
+
+Registration and deletion require `expected_owner`, matching the account the
+form showed before submission or confirmation. The server still chooses the
+account from the authenticated session; this argument never selects a target.
+Missing bindings from older clients fail with a refresh/update message. Deploy
+compatible clients before enabling these handlers for existing native users.
+
+Account forms are keyed by account ID so a switch discards credential drafts.
+Confirmations freeze that ID before awaiting input and check it again before
+submitting. Old responses cannot adopt an account, clear a different account's
+viewer, or display success after a switch. Device-cache cleanup finishes before
+forgetting the session unmounts the form; reload runs in the root scope and
+survives that unmount. Sign-out failures are shown instead of being ignored.
+Browser cookie races and concurrent persistent-cache ownership operations
+still need a hydrated multi-tab check; these guards do not claim to settle
+those framework/storage races.
+
+A registration that resumes after password hashing only changes an existing
+guest with no email. It cannot overwrite another registration or recreate a
+deleted account. Account HTTP results and errors explicitly use
+`Cache-Control: private, no-store`, outside the session/authorization layers.
+The deletion confirmation distinguishes primary server removal from backups
+managed by the server operator. Independent recovery and retention are still
+separate, unfinished Tawny work.
+
+The account-review milestone passes 82 web tests, 162 server tests (one
+existing live YouTube test ignored), and strict Clippy for all four host
+feature sets. Database tests cover missing/mismatched review bindings,
+owner isolation, a late registration after deletion, and preservation of a
+completed registration. An HTTP test verifies no-store headers on account
+successes, failures and missing endpoints through the CDN guard. Hydrated
+confirmation/account-switch and real-device cache cleanup remain unverified.

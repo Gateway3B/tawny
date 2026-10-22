@@ -127,7 +127,9 @@ impl<'db> Accounts<'db> {
         Self { db }
     }
 
-    pub async fn delete(&self, account_id: &str) -> Result<()> {
+    pub async fn delete(&self, owner: &Owner, expected_owner: Option<&str>) -> Result<()> {
+        owner.require_reviewed(expected_owner)?;
+        let account_id = &owner.0;
         self.db
             .query(DELETE_ACCOUNT_QUERY)
             .bind(("owner", account_id.to_string()))
@@ -154,7 +156,15 @@ impl<'db> Accounts<'db> {
             .ok_or_else(|| anyhow!("guest account was not created"))
     }
 
-    pub async fn register(&self, account_id: &str, email: &str, password: &str) -> Result<Account> {
+    pub async fn register(
+        &self,
+        owner: &Owner,
+        expected_owner: Option<&str>,
+        email: &str,
+        password: &str,
+    ) -> Result<Account> {
+        owner.require_reviewed(expected_owner)?;
+        let account_id = &owner.0;
         let account = self.find(account_id).await?;
         if !account.is_guest || account.email.is_some() {
             return Err(AuthError::AlreadyRegistered.into());
@@ -167,15 +177,28 @@ impl<'db> Accounts<'db> {
 
         let password = password.to_string();
         let password_hash = tokio::task::spawn_blocking(move || hash_password(&password)).await??;
+        self.finish_registration(&account.id, email, password_hash)
+            .await
+    }
+
+    // Password hashing yields. Check the guest state in the write itself so
+    // deletion or another registration during that await cannot be undone.
+    async fn finish_registration(
+        &self,
+        account_id: &str,
+        email: String,
+        password_hash: String,
+    ) -> Result<Account> {
         let updated: Vec<DbAccount> = self
             .db
             .query(format!(
                 r#"UPDATE type::record($id) SET
                     email = $email, password_hash = $password_hash, display_name = $email,
                     is_guest = false, updated_at = time::now()
+                WHERE is_guest = true AND email = NONE
                 RETURN {ACCOUNT_COLUMNS}"#
             ))
-            .bind(("id", account.id))
+            .bind(("id", account_id.to_string()))
             .bind(("email", email))
             .bind(("password_hash", password_hash))
             .await?
@@ -186,7 +209,7 @@ impl<'db> Accounts<'db> {
             .into_iter()
             .next()
             .map(Into::into)
-            .ok_or_else(|| anyhow!("account row vanished during sign-up"))
+            .ok_or_else(|| anyhow!("The account changed. Review sign-up again."))
     }
 
     pub async fn sign_in(&self, email: &str, password: &str) -> Result<Account> {
@@ -261,6 +284,23 @@ impl g3_auth::AuthUser for AppUser {
 pub type SessionContext = g3_auth::SessionContext<AppUser, Any>;
 pub type AuthSession = g3_auth::AuthSession<AppUser, Any>;
 
+/// Account results and errors can contain private identity or session details.
+/// Revalidation alone still lets a browser retain the response body.
+pub async fn private_account_responses(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let private = request.uri().path().starts_with("/api/v1/auth/");
+    let mut response = next.run(request).await;
+    if private {
+        response.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("private, no-store"),
+        );
+    }
+    response
+}
+
 pub fn account_rate_limits() -> g3_auth::rate_limit::RateLimits {
     use g3_auth::rate_limit::{KeyBy, Limit, RateLimits};
     RateLimits::new()
@@ -300,6 +340,20 @@ pub fn account_rate_limits() -> g3_auth::rate_limit::RateLimits {
 /// this still refuses one, because a server function called during
 /// server-side rendering runs without any middleware.
 pub struct Owner(pub String);
+
+impl Owner {
+    /// The supplied ID is a review binding, never the target of a query.
+    /// Old clients without it must refresh before changing private data.
+    fn require_reviewed(&self, expected: Option<&str>) -> Result<()> {
+        let expected = expected
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| anyhow!("Refresh or update Tawny before changing this account."))?;
+        if expected != self.0 {
+            return Err(anyhow!("The account changed. Review this action again."));
+        }
+        Ok(())
+    }
+}
 
 impl<S> FromRequestParts<S> for Owner
 where
@@ -350,6 +404,157 @@ fn record_key(id: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn account_results_and_errors_are_not_stored() {
+        use axum::{body::Body, http::Request, middleware::from_fn, routing::get};
+        use tower::ServiceExt;
+        let app = axum::Router::new()
+            .route(
+                "/api/v1/auth/account",
+                get(|| async {
+                    (
+                        [(axum::http::header::CACHE_CONTROL, "public, max-age=60")],
+                        "fixture",
+                    )
+                }),
+            )
+            .route(
+                "/api/v1/auth/delete",
+                get(|| async { StatusCode::FORBIDDEN }),
+            )
+            .route(
+                "/api/v1/author/fixture",
+                get(|| async {
+                    (
+                        [(axum::http::header::CACHE_CONTROL, "public, max-age=60")],
+                        "public fixture",
+                    )
+                }),
+            )
+            .layer(from_fn(private_account_responses))
+            .layer(g3_cache::cdn_cache_guard("/api"));
+        for (path, status) in [
+            ("/api/v1/auth/account", StatusCode::OK),
+            ("/api/v1/auth/delete", StatusCode::FORBIDDEN),
+            ("/api/v1/auth/missing", StatusCode::NOT_FOUND),
+            ("/api/v1/author/fixture", StatusCode::OK),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), status);
+            assert_eq!(
+                response.headers()[axum::http::header::CACHE_CONTROL],
+                if path.starts_with("/api/v1/auth/") {
+                    "private, no-store"
+                } else {
+                    "public, max-age=60"
+                }
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn private_account_changes_reject_missing_or_different_review_before_work() {
+        let state = crate::server::AppServerState::initialize().await.unwrap();
+        let first = state.accounts().create_guest().await.unwrap();
+        let second = state.accounts().create_guest().await.unwrap();
+        let owner = Owner(first.id.clone());
+        for expected in [None, Some(""), Some(second.id.as_str())] {
+            // Invalid credentials would produce another error if registration
+            // reached validation or hashing before checking the review.
+            let message = state
+                .accounts()
+                .register(&owner, expected, "bad", "x")
+                .await
+                .unwrap_err()
+                .to_string();
+            assert!(message.contains("Refresh or update") || message.contains("account changed"));
+            assert!(state.accounts().delete(&owner, expected).await.is_err());
+            assert!(state.accounts().find(&first.id).await.unwrap().is_guest);
+            assert!(state.accounts().find(&second.id).await.unwrap().is_guest);
+        }
+        state
+            .accounts()
+            .delete(&owner, Some(&first.id))
+            .await
+            .unwrap();
+        assert!(state.accounts().find(&first.id).await.is_err());
+        assert!(state.accounts().find(&second.id).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_reviewed_guest_can_register_once_and_a_late_write_cannot_replace_it() {
+        let state = crate::server::AppServerState::initialize().await.unwrap();
+        let account = state.accounts().create_guest().await.unwrap();
+        let owner = Owner(account.id.clone());
+        let registered = state
+            .accounts()
+            .register(
+                &owner,
+                Some(&account.id),
+                "first@example.invalid",
+                "fixture password long enough",
+            )
+            .await
+            .unwrap();
+        assert!(!registered.is_guest);
+        assert_eq!(registered.id, account.id);
+        assert!(
+            state
+                .accounts()
+                .finish_registration(
+                    &account.id,
+                    "second@example.invalid".into(),
+                    "synthetic-late-hash".into()
+                )
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            state
+                .accounts()
+                .find(&account.id)
+                .await
+                .unwrap()
+                .email
+                .as_deref(),
+            Some("first@example.invalid")
+        );
+        assert!(
+            state
+                .accounts()
+                .sign_in("first@example.invalid", "fixture password long enough")
+                .await
+                .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_registration_finishing_after_deletion_cannot_recreate_the_account() {
+        let state = crate::server::AppServerState::initialize().await.unwrap();
+        let account = state.accounts().create_guest().await.unwrap();
+        state
+            .accounts()
+            .delete(&Owner(account.id.clone()), Some(&account.id))
+            .await
+            .unwrap();
+        assert!(
+            state
+                .accounts()
+                .finish_registration(
+                    &account.id,
+                    "late@example.invalid".into(),
+                    "synthetic-late-hash".into()
+                )
+                .await
+                .is_err()
+        );
+        assert!(state.accounts().find(&account.id).await.is_err());
+    }
 
     #[test]
     fn deletion_covers_every_owner_table_in_the_schema() {
@@ -426,7 +631,11 @@ mod tests {
         }
         state.db.query("CREATE channel:shared SET channel_id = 'UCtest', name = 'Shared', handle = '@shared', subscribed = true; CREATE channel:exclusive SET channel_id = 'UCexclusive', name = 'Exclusive', handle = '@exclusive', subscribed = true; CREATE user_subscription SET owner = type::record($owner), channel_id = 'UCexclusive';")
             .bind(("owner", first.id.clone())).await.unwrap().check().unwrap();
-        state.accounts().delete(&first.id).await.unwrap();
+        state
+            .accounts()
+            .delete(&Owner(first.id.clone()), Some(&first.id))
+            .await
+            .unwrap();
         let mut response = state.db.query("SELECT VALUE subscribed FROM ONLY channel:shared; SELECT VALUE subscribed FROM ONLY channel:exclusive; RETURN count(SELECT id FROM playlist_item);")
             .await.unwrap().check().unwrap();
         assert!(response.take::<Option<bool>>(0).unwrap().unwrap());
