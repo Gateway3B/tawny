@@ -29,6 +29,11 @@ use dioxus::mobile::Config as NativeConfig;
 
 #[cfg(feature = "server")]
 fn main() {
+    // Recovery must never start HTTP handlers, pollers, clients or load .env.
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    if args.first().is_some_and(|arg| arg == "privacy-replay") {
+        std::process::exit(privacy::restore::main(&args[1..]));
+    }
     let _ = dotenvy::dotenv();
     telemetry::init();
     brand::legal::server::validate_configuration().expect("validate public legal catalog origin");

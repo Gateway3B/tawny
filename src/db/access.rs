@@ -322,6 +322,7 @@ mod tests {
                 .is_err()
         );
         crate::privacy::recovery::exercise_editor_queue(Arc::clone(&db)).await;
+        crate::privacy::restore::wire_snapshot(&provision, &root.endpoint).await;
         // Permission-denied reads can return an empty result rather than a
         // transport error. Check the actual data and attempted write effects.
         if db.use_db("other").await.is_ok() {

@@ -168,7 +168,7 @@ async fn claim(db: &Surreal<Any>, lease: &str) -> Result<Option<Job>> {
     Ok(rows.pop())
 }
 
-const REQUEST_FIELDS: &[&str] = &[
+pub(super) const REQUEST_FIELDS: &[&str] = &[
     "id",
     "app",
     "request_id",
@@ -216,7 +216,7 @@ COMMIT TRANSACTION;
 "#
 );
 
-async fn verify_primary(db: &Surreal<Any>, account: &RecordId) -> Result<()> {
+pub(super) async fn verify_primary(db: &Surreal<Any>, account: &RecordId) -> Result<()> {
     let mut response = db
         .query(
             r#"

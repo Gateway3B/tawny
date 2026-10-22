@@ -81,3 +81,12 @@ and the explicit wire drill; the wire drill also passes when run separately.
 Eight Python CI tests, workflow lint, formatting, spelling and both Compose
 layouts pass. This uses only synthetic data in newly created local fixtures;
 existing services, host database volumes and production credentials are untouched.
+
+
+The same disposable drill now checks recovery-first deletion and a real logical
+old-snapshot export/import. It restores into its own `restore/tawny` database,
+replays an independently supplied synthetic deletion event twice and verifies
+actual primary/session removal while preserving another account, shared video
+facts, relations and unowned demo rows. See [privacy operations](../docs/privacy-operations.md)
+for the release-specific quarantine boundary. This test does not build the final
+Linux app image or contact B2; encrypted offsite recovery remains required.

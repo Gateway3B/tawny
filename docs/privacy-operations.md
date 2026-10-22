@@ -64,11 +64,11 @@ snapshots and manual dumps, and verify lifecycle processing at the provider.
 The [account-data inventory](privacy-data.md) identifies live tables, device
 copies, retained session fences and exceptional request handling.
 
-Tawny implements optional durable deletion recording as described below. Its
-app-specific quarantined replay/verification command, platform wrapper and
-encrypted offsite drill remain required work. Keep an older restored database
-offline; neither startup session migration nor a passing health probe proves
-that past deletions have been reapplied.
+Tawny implements optional durable deletion recording and a deletion-only
+quarantined replay/verification command. The g3-platform hook is prepared;
+a reviewed final Linux image and encrypted/offsite drill remain required work.
+Keep an older restored database offline; neither startup session migration nor
+a passing health probe proves that past deletions have been reapplied.
 
 ## Optional recovery-first deletion
 
@@ -145,3 +145,57 @@ legacy deletion/late registration and minimal private export. Pending notices
 were inspected at 390×844 and 1440×900 in iOS/Material, light/dark. These were
 static rendered previews; no app server was started, so hydrated interactions,
 server UI diagnostics and real devices remain unverified.
+
+
+## Quarantined primary replay
+
+The server binary accepts `privacy-replay --apply` or `privacy-replay --verify`
+before loading `.env`, initializing the normal app, serving traffic or starting
+pollers. It reads one strict bounded event on stdin. Only Tawny deletion events
+with a UUID request, positive bounded revision and lowercase SHA-256 subject are
+supported. Duplicate/unknown fields and extra deletion payloads are rejected.
+The destination must be the named scratch container's exact WebSocket address,
+root scope, namespace `restore`, database `tawny`, with
+`G3_PRIVACY_RESTORE=quarantined-v1`. These markers constrain the command; only the
+platform wrapper's Docker inspection proves the actual quarantine. Do not use
+this command against an exposed or production database.
+
+The wrapper authenticates independently recovered ledger objects first. Replay
+receives no ledger/provider credentials and makes no provider or ledger calls.
+It reinstalls source-defined schema without the ordinary startup data repairs;
+backup metadata hashes are not accepted as evidence that guards still exist.
+Unexpected tables, fields, events, indexes or function definitions require
+review. Original ownership is resolved from the profile, owned rows, tracked
+sessions, retained session fence or an existing request. A missing profile can
+be recovered from surviving ownership. No surviving identity remains a hold.
+
+The independent event must match any existing request's identity, revision and
+acknowledgment digest. Conflicts cannot replace saved evidence. Primary removal
+uses the same transaction as the live queue, retires sessions, advances allowed
+checkpoints and removes the raw account reference after verification. Repeating
+an exact event is safe, including after an interrupted primary checkpoint. It
+preserves other accounts, anonymous sessions, shared catalog facts and unowned
+demo rows. Missing guards, unrecognized sessions and unattributable orphaned
+private rows keep the restore closed for review; they are not silently discarded.
+`--verify` checks actual rows, the exact receipt and current definitions without
+repairing them. The command prints only fixed success/failure labels and has a
+four-minute limit. Its successful result concerns this primary restore, not the
+expiry of logs, B2 versions, device copies or all processors.
+
+The actual old logical snapshot is exercised in the existing disposable
+WebSocket drill, which exports and imports a synthetic pre-request database,
+then applies/verifies the independent event twice. The fixture also checks
+preservation and delayed library/session saves. No production backup is used.
+The final Linux image and encrypted/offsite drill remain separate work, as do
+public status proofs, corrections, consent withdrawals and shared deployment.
+
+
+Replay milestone validation: 205 ordinary server and 87 web tests pass, with
+strict checks for server, web, mobile and desktop. The separate actual WebSocket
+old-snapshot export/import and replay drill passes. Nine Node, ten extractor
+Python and eight CI Python tests pass. Recovery tests cover duplicate/unknown
+events, exact destinations, repeated apply, each saved checkpoint, conflicting
+request/revision/digest evidence, current/legacy metadata, unknown fields/tables,
+missing profiles, delayed saves and orphan/guard verification. The disposable
+containers and network were removed. No UI changed in this replay milestone;
+no final Linux image, real device or offsite provider test is claimed here.
