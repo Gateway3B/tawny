@@ -53,12 +53,14 @@ jobs:
         run: |
           npm run test:unit
           npm run lint:web
+          python -m unittest discover -s ci -p "test_*.py"
 
       - name: Check whitespace
         run: git diff --check
 
   rust:
     name: Rust (${{ matrix.profile }})
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: ${{ matrix.timeout-minutes }}
 
@@ -113,18 +115,19 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Fetch private dependencies
+        uses: ./.github/actions/private-dependencies
         with:
-          shared-key: ${{ matrix.profile }}
+          client-id: ${{ vars.G3_DEPENDENCIES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.G3_DEPENDENCIES_APP_PRIVATE_KEY }}
 
       - name: Check build
-        run: cargo check ${{ matrix.cargo-args }}
+        run: cargo check --locked --offline ${{ matrix.cargo-args }}
 
       # Every feature set: code gated to one build is only linted by that build.
       - name: Run Clippy
-        run: cargo clippy --all-targets --no-deps ${{ matrix.cargo-args }} -- -D warnings
+        run: cargo clippy --locked --offline --all-targets --no-deps ${{ matrix.cargo-args }} -- -D warnings
 
       - name: Run Rust tests
         if: matrix.test
-        run: cargo test ${{ matrix.cargo-args }}
+        run: cargo test --locked --offline ${{ matrix.cargo-args }}

@@ -1,7 +1,8 @@
+use crate::brand::{AboutG3tech, BrandProvider};
 use crate::{
     components::{
-        AccountGate, AppOverlays, AppShell, ChannelDetail, Explore, Feed, HistoryPage,
-        PlaylistDetail, Playlists, QueuePage, SettingsPage, Subscriptions, VideoDetail,
+        AppOverlays, AppShell, ChannelDetail, Explore, Feed, HistoryPage, PlaylistDetail,
+        Playlists, QueuePage, SettingsPage, Subscriptions, VideoDetail,
     },
     models::{Appearance, PlatformStyle},
     state::{AppState, AppStateProvider},
@@ -104,13 +105,17 @@ pub enum Route {
         #[public]
         #[route("/settings")]
         SettingsPage {},
+        #[transition(layer = sheet)]
+        #[public]
+        #[route("/about-g3tech")]
+        AboutG3tech {},
         #[transition(layer = stack_page)]
         #[public]
         #[route("/channel/:id")]
         ChannelDetail { id: String },
 }
 
-fn tawny_theme(appearance: Appearance) -> Theme {
+pub(crate) fn tawny_theme(appearance: Appearance) -> Theme {
     match appearance {
         // Each token becomes a CSS `light-dark()` pair, so the browser follows
         // the system setting by itself, with no script and no re-render.
@@ -288,10 +293,7 @@ fn ThemedApp() -> Element {
             // as well would produce duplicate `overlay` snapshots and make the
             // browser abort every sheet/player transition.
             route_transition_overlay: false,
-            // Inside the wrapper so the setup screen is themed. A component
-            // adds no DOM node of its own, so passing children through leaves
-            // the snapshot structure untouched.
-            AccountGate {
+            BrandProvider {
                 Router::<Route> {}
             }
             AppOverlays {}

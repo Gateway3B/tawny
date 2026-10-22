@@ -13,8 +13,9 @@ dioxus = { version = "=0.7.9", features = ["router", "fullstack"] }
 dioxus-fullstack = "=0.7.9"
 dioxus-icons = "0.1.0"
 g3-route-transitions = { version = "0.5", features = ["native-back"] }
-g3-native-plugins = { version = "0.4.3", features = ["appearance", "back-button", "clipboard", "media", "safe-area", "storage"] }
+g3-native-plugins = { version = "0.4.4", features = ["app-info", "external-url", "appearance", "back-button", "clipboard", "media", "safe-area", "storage"] }
 g3-ui = { version = "0.6", features = ["transitions"] }
+g3-brand = { git = "https://github.com/g3techhq/g3-brand", rev = "07d3e99391fcafabfcc6b5e0a044ac9ab4f54d7d" }
 g3-auth = "0.2.0"
 g3-cache = "0.2.0"
 manganis = "=0.7.9"
@@ -127,5 +128,10 @@ package = "getrandom"
 version = "0.2"
 features = ["js"]
 
+[patch.crates-io]
+# Reviewed app-info support until a maintainer-approved native release.
+g3-native-plugins = { git = "https://github.com/g3techhq/g3-native-plugins", rev = "1896034867ae692db0503c38136cfbcfc804448a" }
+
 [dev-dependencies]
+dioxus-ssr = "=0.7.9"
 tower = { version = "0.5", features = ["util"] }

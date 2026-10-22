@@ -86,6 +86,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      secrets:
+        - g3_brand_token
+      args:
+        G3_CATALOG_ORIGIN: ${G3_CATALOG_ORIGIN:-https://catalog.g3tech.net}
+        G3_RELEASE_CHANNEL: ${G3_RELEASE_CHANNEL:-production}
     environment:
       SURREALDB_HOST: ws://surrealdb:8000
       CLIENT_IP_HEADER: ${CLIENT_IP_HEADER:-}
@@ -117,3 +122,8 @@ services:
 volumes:
   surrealdb-data:
   tawny-data:
+
+# Build-only secret; never passed to the running app or extractor.
+secrets:
+  g3_brand_token:
+    environment: G3_BRAND_READ_TOKEN

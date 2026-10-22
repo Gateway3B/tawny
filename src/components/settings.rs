@@ -184,6 +184,12 @@ pub fn SettingsPage() -> Element {
                     // describing.
                     AccountSettings {}
                     BackendSettings {}
+                    Card { title: "g3tech",
+                        Button { fill: ButtonFill::Clear,
+                            onclick: move |_| { spawn(g3_route_transitions::animated_navigate(Route::AboutG3tech {})); },
+                            "About g3tech and other apps"
+                        }
+                    }
                     SponsorBlockSettingsCard {}
 
                     Card { title: "Swipe actions",

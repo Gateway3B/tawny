@@ -398,6 +398,16 @@ fn ToasterBridge() -> Element {
 
 #[component]
 pub fn AppShell() -> Element {
+    let route = use_route::<Route>();
+    rsx! {
+        super::AccountGate { allow_offline: matches!(route, Route::AboutG3tech {}),
+            ShellContent {}
+        }
+    }
+}
+
+#[component]
+fn ShellContent() -> Element {
     let route: Route = use_route();
     let mut app_state = use_context::<AppState>();
 
@@ -432,6 +442,7 @@ pub fn AppShell() -> Element {
     remembered.borrow_mut().clone_from(&base_route);
 
     rsx! {
+        crate::brand::StoreUpdatePrompt {}
         NativeMediaCoordinator {}
         NativeBackCoordinator {}
         ToasterBridge {}
@@ -527,7 +538,10 @@ fn BasePage(route: Route, covered: bool) -> Element {
 fn is_auxiliary_route(route: &Route) -> bool {
     matches!(
         route,
-        Route::SettingsPage {} | Route::QueuePage {} | Route::HistoryPage {}
+        Route::SettingsPage {}
+            | Route::QueuePage {}
+            | Route::HistoryPage {}
+            | Route::AboutG3tech {}
     )
 }
 
@@ -575,6 +589,7 @@ mod tests {
                 Route::Feed {},
                 Route::QueuePage {},
                 Route::SettingsPage {},
+                Route::AboutG3tech {},
                 watch,
                 next,
             ]),
@@ -598,5 +613,6 @@ mod tests {
     fn a_sheet_opened_first_has_nothing_beneath_it() {
         assert_eq!(walk(&[Route::VideoDetail { id: "video".into() }]), None);
         assert_eq!(walk(&[Route::SettingsPage {}]), None);
+        assert_eq!(walk(&[Route::AboutG3tech {}]), None);
     }
 }

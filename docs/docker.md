@@ -52,7 +52,9 @@ TAWNY_WEBSUB_CALLBACK_URL=https://tawny.example/api/v1/websub/youtube
 TAWNY_WEBSUB_SECRET=a-random-64-character-secret
 ```
 
-Build and run the complete stack:
+For a source build, first export a short-lived `G3_BRAND_READ_TOKEN` with
+read access to the private g3-brand repository (see [private builds](g3-brand.md#private-builds)).
+Compose passes it as a build-only secret. Then build and run the complete stack:
 
 ```sh
 docker compose --profile production up -d --build
@@ -63,9 +65,11 @@ The Tawny image is multi-stage: Node installs the pinned browser transport,
 Rust/Dioxus builds the full-stack web release, and only the release output and
 runtime libraries enter the final image. The source tree's sibling development
 crate patches live in `.cargo/config.toml`, which `.dockerignore` keeps out of
-the image, so `g3-ui`, `g3-route-transitions` and `g3-native-plugins` resolve
-from crates.io there and a standalone clone builds without repositories
-elsewhere on the machine.
+the image. The portable lockfile resolves published UI/navigation dependencies
+and exact Git revisions for private g3-brand and reviewed native metadata
+support. A standalone clone needs private repository access, not sibling
+checkouts. Builder layers containing private sources are not exported to CI
+caches, and the runtime stage receives only the compiled bundle.
 
 Place a TLS reverse proxy in front of port 8080. `TAWNY_PUBLIC_URL` must be the
 public HTTPS origin for proxy URLs and WebSub lease callbacks. If the explicit

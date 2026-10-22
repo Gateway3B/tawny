@@ -16,6 +16,8 @@ on:
       - "compose.prod.yml"
       - "docker/**"
       - "src/**"
+      - "ci/private-git-credential.sh"
+      - ".github/actions/private-dependencies/**"
       - "Cargo.lock"
       - "Cargo.toml"
       - "Dioxus.toml"
@@ -56,6 +58,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
@@ -77,6 +81,17 @@ jobs:
             type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' }}
             type=sha
 
+      - name: Get scoped dependency access
+        if: matrix.context == '.'
+        id: dependency-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.G3_DEPENDENCIES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.G3_DEPENDENCIES_APP_PRIVATE_KEY }}
+          owner: g3techhq
+          repositories: g3-brand
+          permission-contents: read
+
       - name: Build and publish image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -85,7 +100,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Scoped per image, unlike g3-ui's single-image cache: without it the
-          # two builds share one cache key and evict each other every run.
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          # Source-bearing builder layers stay on this disposable runner.
+          secrets: ${{ matrix.context == '.' && format('g3_brand_token={0}', steps.dependency-token.outputs.token) || '' }}
+          build-args: |
+            G3_CATALOG_ORIGIN=https://catalog.g3tech.net
+            G3_RELEASE_CHANNEL=production

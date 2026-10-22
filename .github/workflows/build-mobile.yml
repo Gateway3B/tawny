@@ -29,6 +29,8 @@ permissions:
 env:
   DIOXUS_CLI_VERSION: 0.7.9
   SERVER_URL: ${{ inputs.server_url }}
+  G3_CATALOG_ORIGIN: https://catalog.g3tech.net
+  G3_RELEASE_CHANNEL: production
 
 jobs:
   android:
@@ -57,10 +59,11 @@ jobs:
       - name: Install web asset dependencies
         run: npm ci
 
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Fetch private dependencies
+        uses: ./.github/actions/private-dependencies
         with:
-          shared-key: mobile-android
+          client-id: ${{ vars.G3_DEPENDENCIES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.G3_DEPENDENCIES_APP_PRIVATE_KEY }}
 
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@94dc7fe43d6ed7bfa6a6ea24f60f85e3f41dd104
@@ -112,10 +115,11 @@ jobs:
       - name: Install web asset dependencies
         run: npm ci
 
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Fetch private dependencies
+        uses: ./.github/actions/private-dependencies
         with:
-          shared-key: mobile-ios
+          client-id: ${{ vars.G3_DEPENDENCIES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.G3_DEPENDENCIES_APP_PRIVATE_KEY }}
 
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@94dc7fe43d6ed7bfa6a6ea24f60f85e3f41dd104

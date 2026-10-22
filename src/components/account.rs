@@ -55,13 +55,13 @@ fn reload_client() {
 /// frame before the setup screen replaces it, which is the cheaper of the two
 /// mistakes to make.
 #[component]
-pub fn AccountGate(children: Element) -> Element {
+pub fn AccountGate(#[props(default)] allow_offline: bool, children: Element) -> Element {
     let session = use_session();
     let mut backend_chosen = use_signal(|| true);
 
     use_effect(move || backend_chosen.set(server_url::has_chosen_backend()));
 
-    if !backend_chosen() {
+    if !allow_offline && !backend_chosen() {
         return rsx! {
             BackendSetupScreen {
                 on_saved: move |_| {
@@ -73,7 +73,7 @@ pub fn AccountGate(children: Element) -> Element {
     }
 
     match (session.status)() {
-        SessionStatus::Failed(message) => rsx! {
+        SessionStatus::Failed(message) if !allow_offline => rsx! {
             BackendSetupScreen {
                 problem: message,
                 on_saved: move |_| reload_client(),
@@ -84,6 +84,38 @@ pub fn AccountGate(children: Element) -> Element {
         // cache, and blocking it would make a cold start feel like a network
         // failure.
         _ => rsx! { {children} },
+    }
+}
+
+#[cfg(test)]
+mod gate_tests {
+    use super::*;
+
+    #[component]
+    fn Fixture(allow_offline: bool) -> Element {
+        use_context_provider(|| crate::auth::Session {
+            account: Signal::new(None),
+            status: Signal::new(SessionStatus::Failed("Synthetic offline server".into())),
+        });
+        rsx! {
+            g3_ui::AppWrapper {
+                AccountGate { allow_offline, p { "Public help fixture" } }
+            }
+        }
+    }
+
+    #[test]
+    fn offline_help_can_render_while_library_pages_offer_server_setup() {
+        for allow_offline in [false, true] {
+            let mut dom = VirtualDom::new_with_props(Fixture, FixtureProps { allow_offline });
+            dom.rebuild_in_place();
+            let html = dioxus_ssr::render(&dom);
+            assert_eq!(html.contains("Public help fixture"), allow_offline);
+            assert_eq!(html.contains("Connect to a Tawny server"), !allow_offline);
+            if !allow_offline {
+                assert!(html.contains("About g3tech and other apps"));
+            }
+        }
     }
 }
 
@@ -133,6 +165,10 @@ fn BackendSetupScreen(problem: Option<String>, on_saved: EventHandler<()>) -> El
                             }
                         },
                         "Connect"
+                    }
+                    Button { fill: ButtonFill::Clear,
+                        onclick: move |_| { spawn(g3_route_transitions::animated_navigate(crate::app::Route::AboutG3tech {})); },
+                        "About g3tech and other apps"
                     }
                     Text { variant: TextVariant::Caption,
                         "Changing this restarts the app. On a packaged build, close and reopen it."

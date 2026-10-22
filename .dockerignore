@@ -4,6 +4,9 @@
 .claude
 .codex
 .env
+.env.*
+!.env.example
+!.env.template
 .tawny-cache
 .tawny-data
 bg_snapshot.bin

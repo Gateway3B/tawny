@@ -2545,9 +2545,9 @@ dependencies = [
 
 [[package]]
 name = "dioxus-ssr"
-version = "0.7.10"
+version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4544ecf908962909de403bfdf94f771b036e9e1857e371cd3279841a15a892e6"
+checksum = "d261c5c9907b84fb1ed52f59f46d68c84a4ae860a65cc5effd0cea740ee428af"
 dependencies = [
  "askama_escape",
  "dioxus-core",
@@ -3340,6 +3340,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "g3-brand"
+version = "0.1.0"
+source = "git+https://github.com/g3techhq/g3-brand?rev=07d3e99391fcafabfcc6b5e0a044ac9ab4f54d7d#07d3e99391fcafabfcc6b5e0a044ac9ab4f54d7d"
+dependencies = [
+ "chrono",
+ "dioxus",
+ "futures-util",
+ "g3-ui",
+ "reqwest 0.12.28",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "url",
+]
+
+[[package]]
 name = "g3-cache"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3379,8 +3397,7 @@ dependencies = [
 [[package]]
 name = "g3-native-plugins"
 version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cc84f15a844a586b8c9e3fc881fd7f522f65bce9e3235b89a0b294b684ee602"
+source = "git+https://github.com/g3techhq/g3-native-plugins?rev=1896034867ae692db0503c38136cfbcfc804448a#1896034867ae692db0503c38136cfbcfc804448a"
 dependencies = [
  "cfg-if",
  "dioxus",
@@ -8740,10 +8757,12 @@ dependencies = [
  "dioxus",
  "dioxus-fullstack",
  "dioxus-icons",
+ "dioxus-ssr",
  "dirs",
  "dotenvy",
  "futures-util",
  "g3-auth",
+ "g3-brand",
  "g3-cache",
  "g3-native-plugins",
  "g3-route-transitions",
@@ -9450,6 +9469,7 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]
