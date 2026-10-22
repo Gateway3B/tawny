@@ -42,11 +42,7 @@ use std::{
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use surrealdb::{
-    Surreal,
-    engine::any::{Any, connect},
-    opt::auth::Root,
-};
+use surrealdb::{Surreal, engine::any::Any};
 use surrealdb_types::SurrealValue;
 
 mod browse;
@@ -390,30 +386,7 @@ impl AppServerState {
     pub async fn initialize() -> Result<Self> {
         let data_dir = default_data_dir();
         std::fs::create_dir_all(&data_dir).context("create Tawny data directory")?;
-        let endpoint = if cfg!(test) {
-            "mem://".into()
-        } else {
-            std::env::var("SURREALDB_HOST").context(
-                "SURREALDB_HOST is required; start the Compose dependencies or provide a SurrealDB endpoint",
-            )?
-        };
-        let db = connect(endpoint.clone())
-            .await
-            .context("connect to SurrealDB")?;
-        if endpoint != "mem://"
-            && let (Ok(username), Ok(password)) = (
-                std::env::var("SURREALDB_USER"),
-                std::env::var("SURREALDB_PASSWORD"),
-            )
-        {
-            db.signin(Root { username, password })
-                .await
-                .context("sign in to SurrealDB")?;
-        }
-        db.use_ns(std::env::var("SURREALDB_NAMESPACE").unwrap_or_else(|_| "tawny".into()))
-            .use_db(std::env::var("SURREALDB_NAME").unwrap_or_else(|_| "main".into()))
-            .await
-            .context("select SurrealDB namespace and database")?;
+        let db = crate::db::connect().await?;
         crate::db::sync_schema(&db).await?;
         crate::privacy::sessions::prepare(&db).await?;
 

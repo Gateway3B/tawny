@@ -46,6 +46,16 @@ copies, proxy/CDN logs and provider diagnostics separately. New source redaction
 cannot erase previously retained viewing IDs or error payloads. A log copy is
 not covered just because the primary database has been erased.
 
+## Shared database identity
+
+Tawny supports explicit `SURREALDB_AUTH_LEVEL=database` with a per-app EDITOR.
+The standalone root mode remains a compatibility default, so a shared deployment
+must select database mode and supply its exact namespace/database credentials.
+There is no root fallback after a scoped login failure. See the
+[database workflow](../database/README.md) for migration and the isolated
+WebSocket test. This source change does not add Tawny to the platform inventory
+or provision/migrate a production database.
+
 ## Backups and recovery
 
 Follow the shared platform's encrypted B2 backup and independent-ledger design.

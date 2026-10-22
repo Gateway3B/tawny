@@ -93,6 +93,7 @@ services:
         G3_RELEASE_CHANNEL: ${G3_RELEASE_CHANNEL:-production}
     environment:
       SURREALDB_HOST: ws://surrealdb:8000
+      SURREALDB_AUTH_LEVEL: ${SURREALDB_AUTH_LEVEL:-root}
       CLIENT_IP_HEADER: ${CLIENT_IP_HEADER:-}
       SURREALDB_NAMESPACE: ${SURREALDB_NAMESPACE:-tawny}
       SURREALDB_NAME: ${SURREALDB_NAME:-main}

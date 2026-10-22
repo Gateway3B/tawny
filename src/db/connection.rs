@@ -26,3 +26,14 @@ pub async fn sync_schema(db: &Surreal<Any>) -> Result<()> {
         .context("validate Tawny data backfills")?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    #[tokio::test]
+    async fn schema_sync_can_repeat_when_the_private_tables_are_empty() {
+        let db = surrealdb::engine::any::connect("mem://").await.unwrap();
+        db.use_ns("test").use_db("test").await.unwrap();
+        super::sync_schema(&db).await.unwrap();
+        super::sync_schema(&db).await.unwrap();
+    }
+}

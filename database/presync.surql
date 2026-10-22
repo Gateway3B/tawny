@@ -8,11 +8,14 @@
 -- unique index never saw. Keep the most recently written answer. WITH NOINDEX
 -- because the stale index hides the duplicates from indexed lookups.
 IF (INFO FOR DB).tables.user_subscription != NONE {
-    FOR $group IN (
+    -- Bind SELECT before iterating: the remote 3.2.4 protocol cannot execute
+    -- this parenthesized SELECT directly as a FOR iterator on an empty table.
+    LET $groups = (
         SELECT owner, channel_id, array::sort::desc(array::group([updated_at, id])) AS rows
         FROM user_subscription WITH NOINDEX
         GROUP BY owner, channel_id
-    ) {
+    );
+    FOR $group IN $groups {
         IF array::len($group.rows) > 1 {
             DELETE array::slice($group.rows, 1).map(|$row| $row[1]);
         };
