@@ -27,6 +27,7 @@ use dioxus::mobile::Config as NativeConfig;
 #[cfg(feature = "server")]
 fn main() {
     let _ = dotenvy::dotenv();
+    brand::legal::server::validate_configuration().expect("validate public legal catalog origin");
     dioxus::serve(|| async move {
         use std::sync::Arc;
 

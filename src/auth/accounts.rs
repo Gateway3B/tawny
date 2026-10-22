@@ -94,6 +94,7 @@ const DELETE_ACCOUNT_QUERY: &str = r#"
     DELETE video_progress WHERE owner = type::record($owner);
     DELETE user_subscription WHERE owner = type::record($owner);
     DELETE subscription WHERE in = type::record($owner);
+    DELETE brand_legal_receipt WHERE owner = type::record($owner);
     FOR $channel_id IN $channels {
         UPDATE channel SET subscribed = count(SELECT id FROM user_subscription WHERE channel_id = $channel_id AND subscribed = true) > 0 WHERE channel_id = $channel_id;
     };
@@ -305,6 +306,11 @@ pub fn account_rate_limits() -> g3_auth::rate_limit::RateLimits {
     use g3_auth::rate_limit::{KeyBy, Limit, RateLimits};
     RateLimits::new()
         .client_ip_header_from_env("CLIENT_IP_HEADER")
+        .limit(Limit::per_minute(
+            &["/api/v1/auth/legal-action"],
+            KeyBy::Session,
+            3,
+        ))
         .limit(Limit::per_hour(
             &["/api/v1/auth/guest"],
             KeyBy::ClientIp,
@@ -344,7 +350,7 @@ pub struct Owner(pub String);
 impl Owner {
     /// The supplied ID is a review binding, never the target of a query.
     /// Old clients without it must refresh before changing private data.
-    fn require_reviewed(&self, expected: Option<&str>) -> Result<()> {
+    pub(crate) fn require_reviewed(&self, expected: Option<&str>) -> Result<()> {
         let expected = expected
             .filter(|value| !value.is_empty())
             .ok_or_else(|| anyhow!("Refresh or update Tawny before changing this account."))?;

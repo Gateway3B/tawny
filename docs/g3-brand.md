@@ -71,8 +71,9 @@ labels, source files or runtime environment. Do not export builder caches.
 ## Remaining rollout
 
 This milestone provides public discovery and native update presentation.
-It does not implement Tawny's private legal receipts, terms authorization,
-privacy export/deletion recovery or offsite restore replay. Those need Tawny's
+Private legal review and exact-set receipts are implemented in the subsequent
+legal milestone below. Terms authorization, full privacy export/deletion
+recovery and offsite restore replay remain work. Those need Tawny's
 own account/data inventory and reviewed policy configuration. The catalog
 service, hostname, published app listings, store distribution and CI app
 credentials still need deployment/configuration. No policy was published and
@@ -133,3 +134,50 @@ owner isolation, a late registration after deletion, and preservation of a
 completed registration. An HTTP test verifies no-store headers on account
 successes, failures and missing endpoints through the CDN guard. Hydrated
 confirmation/account-switch and real-device cache cleanup remain unverified.
+
+## Private legal review
+
+About shows the published `tawny`/`en` document set, exact revisions, effective
+dates and change summaries. An authenticated guest or registered account can
+explicitly acknowledge a notice or accept the applicable terms. The backend
+resolves the current set itself and re-fetches before recording an action; a
+stale digest, wrong account or unreviewed consent purpose is rejected. Notice
+acknowledgment does not satisfy a terms requirement or grant processing consent.
+
+Receipts live only in this app server's `brand_legal_receipt` table, with a
+server timestamp, account owner, account-derived subject digest, app, set
+digest and action. `expected_owner` is a review binding; the session chooses
+the account. Private status/actions are protected under `/api/v1/auth/` with
+no-store responses. Legal actions are limited to three per minute per session.
+No private status or receipt enters the shared public catalog or its cache.
+
+The receipt transaction touches the account row so it conflicts with concurrent
+deletion. Primary deletion erases the owner's receipts in the same transaction
+as its library/account. Later receipt writes fail instead of recreating an
+account or leaving orphaned evidence. The new table is part of the app's
+automatically embedded schema and owner-table deletion inventory. Backups
+still contain historical receipt copies until the operator's retention or
+future independent replay removes them. Full account downloads remain pending.
+
+A dismissible change notice is keyed to account and document-set digest. It
+never counts dismissal as acceptance. About and Settings stay accessible, and
+store-update notices take precedence so the two do not compete for focus.
+Public update notices also remain mounted on the backend setup screen. A
+read-only public copy of legal documents can be read without an account or
+backend connection when the catalog is available/saved; it provides no private
+action or acceptance claim.
+
+No shared legal set has been published by this implementation. Server operators
+must review applicability, including their own processing/hosting obligations,
+before publishing documents for users. No consent purposes or backend terms
+enforcement are enabled. This is a notice/receipt pilot, not a compliance claim.
+
+Validation: 84 web and 168 server tests pass (one existing live YouTube test
+ignored), with strict Clippy for web/server/mobile/desktop on the host. Tests
+cover two-account isolation, exact revisions, terms-versus-notice semantics,
+rejected purposes, erasure, late writes and twelve concurrent deletion/receipt
+interleavings. Read-only legal markup was inspected at phone/wide dimensions
+in both modes/themes with published/missing synthetic content. No actual legal
+text was published or accepted. Hydrated alerts/acknowledgments, real native
+flows, database-editor WebSocket permissions and production/offsite recovery
+remain unverified for this milestone.

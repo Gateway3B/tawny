@@ -64,6 +64,7 @@ web = ["dioxus/web", "dep:web-sys", "g3-cache/web"]
 desktop = ["dioxus/desktop", "dep:dirs", "g3-auth/desktop", "g3-cache/desktop"]
 mobile = ["dioxus/mobile", "tokio", "dep:dirs", "g3-auth/mobile", "g3-cache/mobile"]
 server = [
+    "g3-brand/server",
     "dioxus/server",
     "g3-auth/server",
     "g3-auth/rate-limit",

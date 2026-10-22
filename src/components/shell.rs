@@ -400,6 +400,10 @@ fn ToasterBridge() -> Element {
 pub fn AppShell() -> Element {
     let route = use_route::<Route>();
     rsx! {
+        // An obsolete native client may fail before connecting to its server.
+        // Public update help must stay available on the setup screen too.
+        crate::brand::StoreUpdatePrompt {}
+        crate::brand::legal::LegalChangeNotice {}
         super::AccountGate { allow_offline: matches!(route, Route::AboutG3tech {}),
             ShellContent {}
         }
@@ -442,7 +446,6 @@ fn ShellContent() -> Element {
     remembered.borrow_mut().clone_from(&base_route);
 
     rsx! {
-        crate::brand::StoreUpdatePrompt {}
         NativeMediaCoordinator {}
         NativeBackCoordinator {}
         ToasterBridge {}
