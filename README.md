@@ -76,6 +76,7 @@ for yt-dlp. See [docs/docker.md](docs/docker.md).
 | [docs/mobile.md](docs/mobile.md) | Android, iOS and desktop |
 | [docs/g3-brand.md](docs/g3-brand.md) | Shared g3tech catalog, update notices and private builds |
 | [docs/privacy-data.md](docs/privacy-data.md) | Account download scope, primary deletion and remaining retention work |
+| [docs/privacy-operations.md](docs/privacy-operations.md) | Runtime logging, retained copies and recovery rollout limits |
 | [docs/docker.md](docs/docker.md), [docs/deployment.md](docs/deployment.md) | Compose, images, Portainer, backups |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Known failure modes |
 | [database/README.md](database/README.md), [tests/README.md](tests/README.md) | Schema workflow, test suite |

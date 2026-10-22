@@ -210,8 +210,8 @@ pub async fn youtube_websub_notification(
         return proxy_error(StatusCode::BAD_REQUEST, "WebSub payload is not UTF-8");
     };
     tokio::spawn(async move {
-        if let Err(error) = state.ingest_websub_notification(&xml).await {
-            eprintln!("WebSub ingestion failed: {error:#}");
+        if state.ingest_websub_notification(&xml).await.is_err() {
+            crate::telemetry::diagnostic(crate::telemetry::Diagnostic::WebsubIngestionFailed);
         }
     });
     let mut response = Response::new(Body::empty());
@@ -226,8 +226,8 @@ pub fn spawn_subscription_poller(state: AppServerState) {
             let mut interval = tokio::time::interval(Duration::from_secs(3 * 24 * 60 * 60));
             loop {
                 interval.tick().await;
-                if let Err(error) = renewal_state.renew_websub_subscriptions().await {
-                    eprintln!("WebSub renewal failed: {error:#}");
+                if renewal_state.renew_websub_subscriptions().await.is_err() {
+                    crate::telemetry::diagnostic(crate::telemetry::Diagnostic::WebsubRenewalFailed);
                 }
             }
         });
@@ -241,8 +241,8 @@ pub fn spawn_subscription_poller(state: AppServerState) {
             state
                 .backfill_channel_metadata(None, CHANNEL_METADATA_BATCH)
                 .await;
-            if let Err(error) = state.poll_subscriptions_once().await {
-                eprintln!("subscription poll failed: {error:#}");
+            if state.poll_subscriptions_once().await.is_err() {
+                crate::telemetry::diagnostic(crate::telemetry::Diagnostic::SubscriptionPollFailed);
             }
         }
     });

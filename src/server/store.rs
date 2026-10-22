@@ -278,8 +278,8 @@ impl AppServerState {
             .and_then(|mut response| response.take(0))
         {
             Ok(rows) => rows,
-            Err(error) => {
-                eprintln!("could not list channels for a metadata backfill: {error}");
+            Err(_) => {
+                crate::telemetry::diagnostic(crate::telemetry::Diagnostic::MetadataListUnavailable);
                 return 0;
             }
         };
@@ -304,8 +304,10 @@ impl AppServerState {
             .await
             {
                 Ok(page) => page,
-                Err(error) => {
-                    eprintln!("metadata backfill for {} failed: {error:#}", channel.id);
+                Err(_) => {
+                    crate::telemetry::diagnostic(
+                        crate::telemetry::Diagnostic::MetadataExtractFailed,
+                    );
                     return false;
                 }
             };
@@ -331,10 +333,9 @@ impl AppServerState {
                             .await
                         {
                             Ok(()) => true,
-                            Err(error) => {
-                                eprintln!(
-                                    "could not verify subscriber count for {}: {error:#}",
-                                    channel.id
+                            Err(_) => {
+                                crate::telemetry::diagnostic(
+                                    crate::telemetry::Diagnostic::MetadataCountFailed,
                                 );
                                 changed
                             }
@@ -343,8 +344,8 @@ impl AppServerState {
                         changed
                     }
                 }
-                Err(error) => {
-                    eprintln!("could not store metadata for {}: {error:#}", channel.id);
+                Err(_) => {
+                    crate::telemetry::diagnostic(crate::telemetry::Diagnostic::MetadataStoreFailed);
                     false
                 }
             }

@@ -128,9 +128,17 @@ docker compose --profile production up -d
 SurrealDB defaults to a 2 GB container memory ceiling. Override
 `SURREALDB_MEMORY_LIMIT` for a larger server after measuring the workload.
 
-For a consistent backup, stop the stack and archive both named volumes with a
-container-based volume backup tool. Restore into empty volumes using the same
-image versions, then start the stack and verify `/api/v1/health`.
+Backups contain account data, legal receipts and session payloads. Use the
+shared platform's encrypted backup/expiry process and a separately recoverable
+erasure ledger before claiming a retention or deletion horizon. Existing volume
+archives need their own inventory and expiry; changing the backup job does not
+remove them.
+
+Restore only into an isolated database with application containers and public
+traffic stopped. Health alone does not establish that a restored database is
+safe to serve. Tawny still needs its independent deletion replay adapter and an
+end-to-end recovery drill before an older backup can be cleared for service.
+See [privacy operations](privacy-operations.md) for the current boundary.
 
 ## Legacy host mode
 

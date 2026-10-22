@@ -18,7 +18,8 @@ name: tawny
 
 # Bounded container logs. The json-file driver has no cap by default, and a
 # chatty container can fill the host disk, which takes the database down with
-# it. The extractor is the one to watch: yt-dlp narrates every download.
+# it. Only Tawny and the reviewed extractor retain structured diagnostics.
+# This is a size bound, not an age-based deletion policy.
 x-logging: &default-logging
   driver: json-file
   options:
@@ -61,7 +62,9 @@ services:
       interval: 5s
       timeout: 4s
       retries: 12
-    logging: *default-logging
+    # Unreviewed database/provider output can contain private payloads.
+    logging:
+      driver: none
     restart: unless-stopped
 
   pot-provider:
@@ -78,7 +81,9 @@ services:
       timeout: 4s
       start_period: 10s
       retries: 6
-    logging: *default-logging
+    # Unreviewed database/provider output can contain private payloads.
+    logging:
+      driver: none
     restart: unless-stopped
 
   extractor:

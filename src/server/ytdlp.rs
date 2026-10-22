@@ -20,7 +20,7 @@ pub(crate) fn locate_ytdlp() -> Option<std::path::PathBuf> {
         if path.exists() {
             return Some(path);
         }
-        eprintln!("TAWNY_YTDLP_BIN does not exist: {}", path.display());
+        crate::telemetry::diagnostic(crate::telemetry::Diagnostic::ExtractorBinaryUnavailable);
         return None;
     }
     // Fall back to PATH. `--version` is the cheapest way to confirm it runs.
@@ -56,7 +56,7 @@ pub(crate) fn configured_http_url(variable: &str) -> Option<String> {
     let valid = reqwest::Url::parse(configured)
         .is_ok_and(|url| matches!(url.scheme(), "http" | "https") && url.host_str().is_some());
     if !valid {
-        eprintln!("ignoring {variable}: expected an absolute http(s) URL");
+        crate::telemetry::diagnostic(crate::telemetry::Diagnostic::ExtractorConfigurationInvalid);
         return None;
     }
     Some(configured.to_string())
@@ -424,8 +424,10 @@ impl AppServerState {
             };
             return match dump {
                 Ok(dump) => ytdlp_flat_playlist_videos(dump, channel_id, channel_name),
-                Err(error) => {
-                    eprintln!("yt-dlp service could not list Shorts for {channel_id}: {error}");
+                Err(_) => {
+                    crate::telemetry::diagnostic(
+                        crate::telemetry::Diagnostic::ExtractorShortsFailed,
+                    );
                     Vec::new()
                 }
             };
@@ -449,7 +451,7 @@ impl AppServerState {
         let output = match tokio::time::timeout(Duration::from_secs(40), output).await {
             Ok(Ok(output)) if output.status.success() => output,
             _ => {
-                eprintln!("yt-dlp could not list Shorts for {channel_id}");
+                crate::telemetry::diagnostic(crate::telemetry::Diagnostic::ExtractorShortsFailed);
                 return Vec::new();
             }
         };
@@ -531,8 +533,8 @@ impl AppServerState {
         video_id: &str,
     ) -> std::result::Result<Vec<YtdlpFormat>, PlaybackFailure> {
         let formats = self.run_ytdlp(video_id).await;
-        if let Err(failure) = &formats {
-            eprintln!("yt-dlp gave no formats for {video_id}: {failure}");
+        if formats.is_err() {
+            crate::telemetry::diagnostic(crate::telemetry::Diagnostic::ExtractorFormatsFailed);
         }
         formats
     }

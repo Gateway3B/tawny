@@ -17,6 +17,8 @@ mod server;
 mod server_url;
 mod state;
 mod subscriptions_io;
+#[cfg(feature = "server")]
+mod telemetry;
 
 use app::App;
 // Both features re-export the same `dioxus-desktop` crate.
@@ -28,6 +30,7 @@ use dioxus::mobile::Config as NativeConfig;
 #[cfg(feature = "server")]
 fn main() {
     let _ = dotenvy::dotenv();
+    telemetry::init();
     brand::legal::server::validate_configuration().expect("validate public legal catalog origin");
     dioxus::serve(|| async move {
         use std::sync::Arc;
@@ -42,7 +45,7 @@ fn main() {
 
         let state = server::AppServerState::initialize()
             .await
-            .expect("initialize Tawny server");
+            .unwrap_or_else(|_| panic!("Tawny initialization failed; check configuration and private database migration status."));
         server::spawn_subscription_poller(state.clone());
 
         let db = Arc::clone(&state.db);
@@ -95,7 +98,10 @@ fn main() {
                 auth::private_account_responses,
             ))
             .layer(g3_cache::cdn_cache_guard("/api"))
-            .merge(sessionless))
+            .merge(sessionless)
+            .layer(dioxus::server::axum::middleware::from_fn(
+                telemetry::request_complete,
+            )))
     });
 }
 

@@ -431,7 +431,7 @@ impl AppServerState {
             if std::path::Path::new(&botguard_bin).is_file() {
                 youtube_builder = youtube_builder.botguard_bin(botguard_bin);
             } else {
-                eprintln!("ignoring TAWNY_BOTGUARD_BIN: no binary at {botguard_bin}");
+                crate::telemetry::diagnostic(crate::telemetry::Diagnostic::BotguardUnavailable);
             }
         }
         let youtube = youtube_builder
@@ -681,23 +681,16 @@ impl AppServerState {
         let ping_url = format!("{provider_url}/ping");
         match tokio::time::timeout(Duration::from_secs(2), self.http.get(&ping_url).send()).await {
             Ok(Ok(response)) if response.status().is_success() => Some(provider_url),
-            Ok(Ok(response)) => {
-                eprintln!(
-                    "PO-token provider at {provider_url} returned {} from /ping; using yt-dlp's default client",
-                    response.status()
-                );
+            Ok(Ok(_)) => {
+                crate::telemetry::diagnostic(crate::telemetry::Diagnostic::PoProviderRejected);
                 None
             }
-            Ok(Err(error)) => {
-                eprintln!(
-                    "PO-token provider at {provider_url} is unavailable ({error}); using yt-dlp's default client"
-                );
+            Ok(Err(_)) => {
+                crate::telemetry::diagnostic(crate::telemetry::Diagnostic::PoProviderUnavailable);
                 None
             }
             Err(_) => {
-                eprintln!(
-                    "PO-token provider at {provider_url} did not answer /ping; using yt-dlp's default client"
-                );
+                crate::telemetry::diagnostic(crate::telemetry::Diagnostic::PoProviderTimeout);
                 None
             }
         }
@@ -757,8 +750,8 @@ impl AppServerState {
                 .and_then(|mut response| response.take(0))
             {
                 Ok(rows) => rows,
-                Err(error) => {
-                    eprintln!("could not re-read channel interest: {error}");
+                Err(_) => {
+                    crate::telemetry::diagnostic(crate::telemetry::Diagnostic::ChannelInterestUnavailable);
                     return;
                 }
             };

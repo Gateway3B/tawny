@@ -8798,6 +8798,8 @@ dependencies = [
  "time",
  "tokio",
  "tower",
+ "tracing",
+ "tracing-subscriber",
  "web-sys",
  "web-time",
 ]

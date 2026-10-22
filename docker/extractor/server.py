@@ -6,6 +6,7 @@ service owns the executable, JavaScript challenge runtime, and PO-token plugin.
 
 from __future__ import annotations
 
+from enum import Enum
 import importlib.metadata
 import json
 import os
@@ -17,6 +18,24 @@ import urllib.request
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
+
+
+class Event(Enum):
+    EXTRACTION_FAILED = "extraction_failed"
+    REQUEST_FAILED = "request_failed"
+    SERVICE_STARTED = "service_started"
+    SERVICE_FAILED = "service_failed"
+
+
+def event(code: Event) -> None:
+    # No dynamic URL, address, subprocess stderr or exception is retained.
+    print(json.dumps({"message": "service_event", "code": code.value}), flush=True)
+
+
+class PrivateHTTPServer(ThreadingHTTPServer):
+    def handle_error(self, request: object, client_address: object) -> None:
+        # The default prints both the address and exception traceback.
+        event(Event.REQUEST_FAILED)
 
 
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
@@ -190,7 +209,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if result.returncode != 0:
             stderr = result.stderr.decode("utf-8", errors="replace").strip()
-            print(f"yt-dlp failed for {resource_id}: {stderr}", flush=True)
+            event(Event.EXTRACTION_FAILED)
             # yt-dlp's own words go back to Tawny, which sorts them into
             # YouTube refusing the video versus something to fix here.
             self.send_json(
@@ -201,14 +220,20 @@ class Handler(BaseHTTPRequestHandler):
         self.send_bytes(HTTPStatus.OK, result.stdout)
 
     def log_message(self, message: str, *args: object) -> None:
-        print(f"{self.address_string()} - {message % args}", flush=True)
+        # BaseHTTPRequestHandler passes the raw request and remote address.
+        # Request URLs include viewing choices; omit access logs entirely.
+        pass
 
 
 def main() -> None:
-    port = int(os.environ.get("PORT", "8080"))
-    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
-    print(f"Tawny yt-dlp service listening on 0.0.0.0:{port}", flush=True)
-    server.serve_forever()
+    try:
+        port = int(os.environ.get("PORT", "8080"))
+        server = PrivateHTTPServer(("0.0.0.0", port), Handler)
+        event(Event.SERVICE_STARTED)
+        server.serve_forever()
+    except Exception:
+        event(Event.SERVICE_FAILED)
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

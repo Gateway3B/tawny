@@ -140,9 +140,7 @@ impl AppServerState {
             let sound = self.adaptive_tail_is_available(source).await;
             ytdlp_verified = Some(sound);
             if !sound {
-                eprintln!(
-                    "playback for {video_id}: yt-dlp URLs are gated past the head, extracting again"
-                );
+                crate::telemetry::diagnostic(crate::telemetry::Diagnostic::PlaybackTailRetry);
                 let retried_formats = self.ytdlp_formats(video_id).await.unwrap_or_default();
                 if let Some(retried) =
                     ytdlp_playback_source(&self.http, video_id, &retried_formats, &known_ranges)
@@ -169,13 +167,10 @@ impl AppServerState {
             .and_then(|source| source.tracks.first())
             .map(|track| track.url.clone());
         if let Some(source) = ytdlp_source {
-            eprintln!(
-                "playback for {video_id}: {} yt-dlp tracks, ranges derived locally",
-                source.tracks.len()
-            );
+            crate::telemetry::diagnostic(crate::telemetry::Diagnostic::PlaybackTracksResolved);
             provider_sources.push(source);
         } else if let Some(source) = ytdlp_hls_source(&ytdlp_formats) {
-            eprintln!("playback for {video_id}: yt-dlp produced no DASH ladder, using its HLS");
+            crate::telemetry::diagnostic(crate::telemetry::Diagnostic::PlaybackHlsFallback);
             provider_sources.push(source);
         }
 
@@ -183,8 +178,10 @@ impl AppServerState {
         let youtube_sources = match player {
             // Only tracks yt-dlp covers, plus the extractor's manifests.
             Ok(player) => rusty_playback_sources(&player, &ytdlp_urls),
-            Err(error) => {
-                eprintln!("playback extraction failed for {video_id}: {error:#}");
+            Err(_) => {
+                crate::telemetry::diagnostic(
+                    crate::telemetry::Diagnostic::PlaybackExtractionFailed,
+                );
                 Vec::new()
             }
         };
@@ -281,19 +278,12 @@ impl AppServerState {
             // Cumulative, so the slow phase is the one with the big step. This
             // all runs before the first frame, and a slow start is otherwise
             // impossible to attribute from the log.
-            eprintln!(
-                "playback for {video_id}: {} sources, primary {:?}, tail probe {} \
-                 (extract {}ms, ranges {}ms, verify {}ms, total {}ms)",
+            crate::telemetry::playback_resolved(
                 provider_sources.len(),
-                provider_sources[0].protocol,
-                match promoted {
-                    Some(_) => "confirmed a source",
-                    None => "confirmed nothing (using priority order)",
-                },
-                extracted_at.as_millis(),
-                ranged_at.as_millis(),
-                verified_at.as_millis(),
-                started.elapsed().as_millis(),
+                extracted_at,
+                ranged_at,
+                verified_at,
+                started.elapsed(),
             );
             let primary = provider_sources.remove(0);
             return Ok(ResolvedPlayback {
@@ -310,7 +300,7 @@ impl AppServerState {
         // viewer learns the cause (a stopped sidecar, say) instead of meeting
         // gated URLs that freeze a minute in.
         let failure = no_stream_failure(ytdlp_failure, ytdlp_formats.len());
-        eprintln!("playback for {video_id}: {failure}");
+        crate::telemetry::diagnostic(crate::telemetry::Diagnostic::PlaybackUnavailable);
         Err(failure)
     }
 }

@@ -9,8 +9,8 @@ use crate::server::AppServerState;
 pub async fn health(Extension(state): Extension<AppServerState>) -> StatusCode {
     match state.db.health().await {
         Ok(()) => StatusCode::OK,
-        Err(error) => {
-            eprintln!("SurrealDB health check failed: {error}");
+        Err(_) => {
+            crate::telemetry::diagnostic(crate::telemetry::Diagnostic::DatabaseUnavailable);
             StatusCode::SERVICE_UNAVAILABLE
         }
     }
