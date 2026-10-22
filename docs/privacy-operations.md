@@ -68,8 +68,9 @@ copies, retained session fences and exceptional request handling.
 
 Tawny implements optional durable deletion recording and a deletion-only
 quarantined replay/verification command. The g3-platform hook is prepared;
-a reviewed final Linux image and encrypted/offsite drill remain required work.
-Keep an older restored database offline; neither startup session migration nor
+a packaged Linux image and local encrypted synthetic drill now pass as described
+below. Published-image review and live encrypted offsite verification remain
+required. Keep an older restored database offline; neither startup session migration nor
 a passing health probe proves that past deletions have been reapplied.
 
 ## Optional recovery-first deletion
@@ -188,8 +189,9 @@ The actual old logical snapshot is exercised in the existing disposable
 WebSocket drill, which exports and imports a synthetic pre-request database,
 then applies/verifies the independent event twice. The fixture also checks
 preservation and delayed library/session saves. No production backup is used.
-The final Linux image and encrypted/offsite drill remain separate work, as do
-public status proofs, corrections, consent withdrawals and shared deployment.
+The packaged Linux image/local encrypted drill are covered below. Live offsite
+recovery and the published registry digest remain separate work, as do public
+status proofs, corrections, consent withdrawals and shared-host rollout.
 
 
 Replay milestone validation: 205 ordinary server and 87 web tests pass, with
@@ -213,3 +215,49 @@ Report-configuration validation: 205 ordinary server tests and strict checks for
 all four host builds pass. The pinned SDK's documented `no_reporter` setting
 is applied at the single production client construction point. This source
 check does not inspect old report files or make a live YouTube request.
+
+
+## Packaged Linux image and encrypted fixture
+
+The full Linux web/server build fetched the private dependency through an
+ephemeral BuildKit secret and built successfully with the locked dependencies.
+The server code includes `1aaa8c1` (SDK report files disabled). The first runtime
+image was `sha256:91dfca57788300a1aa85177202fc69f0c88b2d06ab1a5da77a247724e10d6664`.
+The packaged startup drill found that SurrealKit also reads
+`database/setup.surql`: an image without it attempts a write under its read-only
+working directory. The production Dockerfile now copies that metadata file.
+
+The minimal runtime repair was applied to that built image as
+`sha256:3344bb9ffeba436a9ace99d3546ee961a85ac213d6181d30aaf50d00266809aa`.
+Its compiled server hash, entrypoint, environment and working directory match
+the original build; the added setup file is the runtime packaging correction.
+This local image passes actual age encryption/decryption, exact old-backup
+import, failed premature verification, repeated independent deletion replay,
+conflicting-revision refusal, late-write rejection and preservation of another
+account, anonymous sessions, shared video facts and unowned demo rows. The
+packaged server then becomes healthy as UID/GID 10001 with a read-only root
+filesystem, temporary app-data storage and database-scoped credentials.
+All fixture containers/networks are removed; no existing service is reused.
+
+Reproduce after building the app image locally:
+
+```sh
+docker build --file ci/privacy-crypto.Dockerfile --tag tawny-privacy-crypto:ci ci
+python ci/privacy_linux_drill.py --image YOUR_LOCAL_APP_IMAGE --crypto-image tawny-privacy-crypto:ci
+```
+
+The publishing workflow builds and loads a candidate, runs this packaged-server/
+encrypted-backup gate for the app, then tags/pushes that same tested local image.
+It does not rebuild between verification and publication. The crypto helper has
+no private app source or credentials. The source-bearing builder cache stays on
+the runner; the runtime image copies only the packaged app and metadata setup.
+Build concurrency defaults to two Cargo jobs. Twelve CI helper tests and workflow
+syntax checks pass. The changed workflow has not run on GitHub or published an
+image, and the GitHub App's actual installation/access still needs verification.
+
+These are local image IDs, not reviewed published registry digests for platform
+configuration. The drill uses synthetic data and local encryption on an isolated
+network, not B2. Actual B2 history/lifecycle/recovery, custody, destination log
+expiry, extractor/provider runtime compatibility, public playback, hydrated UI
+and real native devices remain separate checks. No production recovery mode,
+policy, cloud credential, DNS or deployment is changed by this exercise.

@@ -7,6 +7,8 @@ RUN npm ci --omit=dev
 
 FROM rust:1.95-bookworm AS builder
 
+ARG CARGO_BUILD_JOBS=2
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
@@ -53,6 +55,9 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=builder /app/target/dx/tawny/release/web/ /app/
+# SurrealKit reads this path even when the app embeds its desired schema.
+# Bake it in so non-root/read-only startup never tries to create it.
+COPY database/setup.surql /app/database/setup.surql
 
 ENV IP=0.0.0.0 \
     PORT=8080 \

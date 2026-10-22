@@ -16,10 +16,11 @@ on:
       - "compose.prod.yml"
       - "docker/**"
       - "src/**"
-      - "ci/private-git-credential.sh"
+      - "ci/**"
       - ".github/actions/private-dependencies/**"
       - "Cargo.lock"
       - "Cargo.toml"
+      - "build.rs"
       - "Dioxus.toml"
       - "Dockerfile"
       - "package-lock.json"
@@ -40,6 +41,7 @@ jobs:
   image:
     name: ${{ matrix.title }}
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     strategy:
       # Independent images. One failing should not hide whether the other built.
@@ -92,16 +94,39 @@ jobs:
           repositories: g3-brand
           permission-contents: read
 
-      - name: Build and publish image
+      - name: Build candidate image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          push: false
+          load: true
+          tags: g3-local-candidate:test
           labels: ${{ steps.meta.outputs.labels }}
           # Source-bearing builder layers stay on this disposable runner.
           secrets: ${{ matrix.context == '.' && format('g3_brand_token={0}', steps.dependency-token.outputs.token) || '' }}
           build-args: |
             G3_CATALOG_ORIGIN=https://catalog.g3tech.net
             G3_RELEASE_CHANNEL=production
+
+
+      - name: Build isolated recovery crypto helper
+        if: matrix.context == '.'
+        run: docker build --file ci/privacy-crypto.Dockerfile --tag tawny-privacy-crypto:ci ci
+
+      - name: Verify packaged server and encrypted old-backup replay
+        if: matrix.context == '.'
+        run: |
+          docker pull surrealdb/surrealdb:v3.2.4
+          python3 ci/privacy_linux_drill.py --image g3-local-candidate:test --crypto-image tawny-privacy-crypto:ci
+
+      - name: Publish verified image
+        env:
+          PUBLISH_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          test -n "$PUBLISH_TAGS"
+          while IFS= read -r tag; do
+            test -n "$tag" || continue
+            docker tag g3-local-candidate:test "$tag"
+            docker push "$tag"
+          done <<< "$PUBLISH_TAGS"

@@ -92,3 +92,12 @@ actual primary/session removal while preserving another account, shared video
 facts, relations and unowned demo rows. See [privacy operations](../docs/privacy-operations.md)
 for the release-specific quarantine boundary. This test does not build the final
 Linux app image or contact B2; encrypted offsite recovery remains required.
+
+
+Separately, `ci/privacy_linux_drill.py` exercises the packaged Linux server with
+an encrypted old synthetic backup and verifies non-root/read-only startup using
+scoped credentials. The publishing workflow gates the app image on that check
+and pushes the tested candidate. Runtime packaging includes `database/setup.surql`
+because SurrealKit reads it even with embedded app schema; it must not attempt
+to create the file in a read-only working directory. See the latest local-image
+evidence and offsite limitations in the privacy operations guide.
