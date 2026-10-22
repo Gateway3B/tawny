@@ -259,7 +259,7 @@ mod tests {
             .unwrap()
             .check()
             .unwrap();
-        state.db.query("UPDATE type::record($owner) SET email = 'first@example.invalid', password_hash = 'credential-canary', future_private_marker = 'future-field-canary'; CREATE sessions:export_canary SET sessionid = 'session-secret-canary', sessionstore = 'cookie-secret-canary'; CREATE channel:export_shared SET channel_id = 'UCSynthetic', name = 'Public fixture', handle = '@fixture';")
+        state.db.query("UPDATE type::record($owner) SET email = 'first@example.invalid', password_hash = 'credential-canary', future_private_marker = 'future-field-canary'; CREATE sessions:export_canary SET sessionid = 'session-secret-canary', sessionstore = 'cookie-secret-canary', sessionexpires = '4102444800', account_indexed = true; CREATE channel:export_shared SET channel_id = 'UCSynthetic', name = 'Public fixture', handle = '@fixture';")
             .bind(("owner", first.0.clone())).await.unwrap().check().unwrap();
         state
             .db

@@ -192,3 +192,14 @@ operator responsibilities. The latest checks pass 85 web/173 server tests, stric
 checks for all four host targets, and actual WASM/Android strict checks. The new
 card was inspected in both modes/themes at phone/wide sizes. Actual file/share
 delivery and independent deletion/offsite recovery still need verification.
+
+## Live erasure and stored sessions
+
+Private writes now conflict transactionally with account removal, and the
+reviewed account-tracked `g3-auth` source is pinned at `9f68e70c`. Startup indexes
+known legacy sessions before serving, deletion removes their payloads with the
+account, and private retirement fences reject late session saves. Unknown
+legacy formats hold startup/deletion for review. Database guards reject writes
+from an older untracked session adapter. See [the inventory](privacy-data.md)
+for retained fence data, device/process limits and recovery work. These source
+changes do not configure B2, deploy the service or make an old restore safe.

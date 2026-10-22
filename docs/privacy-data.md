@@ -15,7 +15,7 @@ have been reconciled after an account is deleted.
 | video_progress | Owner; video ID, watched/progress/audio preference and timestamp | Remove owned rows |
 | subscription | Source account; legacy channel reference and timestamp | Remove owned relations |
 | brand_legal_receipt | Owner; app, document-set digest, action, purpose and receipt timestamp | Remove owned rows with account/library |
-| sessions | Authentication payloads/cookies; excluded from downloads | Account removal prevents session resolution; physical payload/index retirement remains work |
+| sessions | Authentication payloads/cookies; excluded from downloads | Startup indexes known legacy payloads and removes orphan sessions; primary deletion removes indexed sessions and irreversibly retires the identity |
 | channel, video, video_detail_cache | Shared public YouTube metadata; download only the account's reference IDs | Preserve shared metadata; recompute channel interest |
 | Device preferences/caches/downloaded files | Per-device storage, excluded from the server download | Account flows clear the ordinary read cache; device settings and saved files need user handling |
 | Server caches, extractor data, operational logs and backups | Operator-managed systems, outside the self-service JSON projection | Separate inventory, retention and recovery verification still required |
@@ -57,7 +57,7 @@ credential/session/future-column canaries, missing/switched review bindings,
 row/byte/configuration bounds, malformed library state and deleted accounts.
 The milestone passes 85 web/173 server tests (one existing live YouTube test
 ignored), strict checks on all four host feature sets, and strict actual WASM
-and Android checks. Ready/loading cards were inspected at 390Ãƒâ€”844 and 1440Ãƒâ€”900
+and Android checks. Ready/loading cards were inspected at 390×844 and 1440×900
 in both modes/themes. Actual browser file delivery, native sharing, iOS builds,
 multi-tab cookie/cache races, database-editor WebSocket permissions, offsite
 recovery remain unverified or unfinished as stated above.
@@ -84,3 +84,36 @@ Guard milestone validation: 178 server tests and 85 web tests pass, with the
 existing live YouTube check ignored; strict checks pass for web, server,
 mobile and desktop. The Node/Python suites also pass. No UI changed in this
 milestone, and no production database was modified.
+
+## Saved authentication sessions
+
+Tawny source-pins the reviewed `g3-auth` adapter at `9f68e70c`. Serving uses
+account tracking, and user lookup caching stays disabled. Before accepting
+requests, startup indexes known plaintext legacy sessions in 128-row batches
+and removes sessions naming a missing account. Migration has a 180-second
+limit. Unknown/encrypted, malformed or oversized legacy payloads hold startup
+with a generic diagnostic; they are not guessed, discarded or logged.
+
+Account deletion checks that no unindexed sessions remain and removes the
+account's sessions in the same transaction as its library/profile. The private
+`auth_session_subject` fence stores only the account reference, retirement flag
+and timestamp. Delayed tracked responses touch that same fence and cannot
+restore retired payloads. A database event rejects the untracked format from
+older binaries. Other accounts and anonymous session payloads stay intact.
+The fence is retained private operational data, not anonymized data or a public
+receipt. Its retention must cover supported backup/restore horizons.
+
+Stop older app instances before the migration and do not roll back to an
+untracked session writer. This does not immediately wipe every process's
+in-memory session copy, browser cookie or saved file. Deleted accounts cannot
+resolve for authentication; cache expiry, device handling and independent
+recovery replay remain separate responsibilities. Never serve an old restored
+database before the recovery process verifies it. No external provider session
+or grant is implied to be revoked by this local operation.
+
+Session milestone validation: 181 server and 85 web tests pass (one existing
+live YouTube test ignored), with strict checks for all four host builds and
+actual WASM/Android targets. Tests cover repeated legacy migration, exact
+account and anonymous-session preservation, orphan cleanup, unknown/large
+payload holds, atomic deletion and twelve concurrent deletion/store races.
+No production sessions or offsite backups were accessed or changed.

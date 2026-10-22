@@ -3309,8 +3309,7 @@ dependencies = [
 [[package]]
 name = "g3-auth"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbee29fb7ce48f9aca136bfda629720b4c43e23d1fe17d8f967824a0a4b05cec"
+source = "git+https://github.com/g3techhq/g3-auth?rev=9f68e70c04f8358b4fc9b087624cb03199cf6fad#9f68e70c04f8358b4fc9b087624cb03199cf6fad"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3331,8 +3330,7 @@ dependencies = [
 [[package]]
 name = "g3-auth-macros"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4981b5e61a851a837b84208557f5a70349759e8200567206e7645528f654fa8"
+source = "git+https://github.com/g3techhq/g3-auth?rev=9f68e70c04f8358b4fc9b087624cb03199cf6fad#9f68e70c04f8358b4fc9b087624cb03199cf6fad"
 dependencies = [
  "proc-macro2",
  "quote",

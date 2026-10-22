@@ -415,6 +415,7 @@ impl AppServerState {
             .await
             .context("select SurrealDB namespace and database")?;
         crate::db::sync_schema(&db).await?;
+        crate::privacy::sessions::prepare(&db).await?;
 
         let extractor_cache = std::env::var("TAWNY_EXTRACTOR_CACHE_DIR")
             .map(std::path::PathBuf::from)

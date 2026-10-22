@@ -37,7 +37,7 @@ fn main() {
         use dioxus::server::axum::middleware::from_fn_with_state;
         use dioxus::server::axum::routing::get;
         use dioxus::server::axum::{Extension, Router};
-        use g3_auth::{AuthGuard, AuthSessionLayer, SurrealSessionPool, require_session};
+        use g3_auth::{AuthGuard, AuthSessionLayer, require_session};
         use surrealdb::engine::any::Any;
 
         let state = server::AppServerState::initialize()
@@ -49,12 +49,10 @@ fn main() {
         let session_config = SessionConfig::default()
             .with_cookie_path("/")
             .with_secure(!cfg!(debug_assertions));
-        let session_store = SessionStore::new(
-            Some(SurrealSessionPool::new(Arc::clone(&db))),
-            session_config,
-        )
-        .await
-        .expect("create Tawny session store");
+        let session_store =
+            SessionStore::new(Some(auth::session_pool(Arc::clone(&db))), session_config)
+                .await
+                .expect("create Tawny session store");
         // Every page is public: the client signs a first-time visitor in as a
         // guest from whichever page they opened. Server functions are not,
         // unless marked `#[g3_auth::public]`.

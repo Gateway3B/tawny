@@ -7,6 +7,8 @@ use dioxus::prelude::*;
 mod guards;
 #[cfg(feature = "server")]
 mod server;
+#[cfg(feature = "server")]
+pub(crate) mod sessions;
 
 #[post("/api/v1/auth/export",
     state: dioxus::fullstack::extract::State<crate::server::AppServerState>,

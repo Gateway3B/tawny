@@ -37,7 +37,11 @@ Deletion requires confirmation in Settings, removes playlist relations and
 account-owned tables in one transaction, and keeps the shared YouTube catalog.
 The client discards pending playback progress, stops playback and clears its
 cache before reloading. Auth user caching is disabled so another device cannot
-keep using a deleted row.
+keep using a deleted row. Saved sessions are now indexed before serving and
+removed transactionally with the account; a private identity fence prevents
+late responses from recreating them. Unknown legacy formats hold startup or
+deletion for review. See [the data inventory](privacy-data.md) for deployment,
+retention and recovery limits.
 
 Guest creation and registration allow ten requests an hour per client;
 sign-in allows five a minute. The three endpoints also share a sixty-per-minute

@@ -98,6 +98,7 @@ const DELETE_ACCOUNT_QUERY: &str = r#"
     FOR $channel_id IN $channels {
         UPDATE channel SET subscribed = count(SELECT id FROM user_subscription WHERE channel_id = $channel_id AND subscribed = true) > 0 WHERE channel_id = $channel_id;
     };
+    fn::privacy_retire_sessions_v1(type::record($owner));
     DELETE type::record($owner);
     COMMIT TRANSACTION;
 "#;
@@ -284,6 +285,13 @@ impl g3_auth::AuthUser for AppUser {
 /// that sign in or out.
 pub type SessionContext = g3_auth::SessionContext<AppUser, Any>;
 pub type AuthSession = g3_auth::AuthSession<AppUser, Any>;
+
+/// Serving and migration use the same account-tracked adapter.
+pub fn session_pool<C: surrealdb::Connection>(
+    db: std::sync::Arc<Surreal<C>>,
+) -> g3_auth::SurrealSessionPool<C> {
+    g3_auth::SurrealSessionPool::new(db).track_accounts::<AppUser>()
+}
 
 /// Account results and errors can contain private identity or session details.
 /// Revalidation alone still lets a browser retain the response body.
