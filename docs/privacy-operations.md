@@ -261,3 +261,17 @@ network, not B2. Actual B2 history/lifecycle/recovery, custody, destination log
 expiry, extractor/provider runtime compatibility, public playback, hydrated UI
 and real native devices remain separate checks. No production recovery mode,
 policy, cloud credential, DNS or deployment is changed by this exercise.
+
+The subsequent full Linux build from `d38f65b` includes backend effective-terms
+checks and the production metadata packaging fix directly. Local image ID:
+`sha256:7b1370d550871696c8f54c9e24425051dd9d242facacb7bd36bb8298b21e4b5a`.
+It passes the encrypted old-backup drill plus actual packaged Dioxus API checks.
+The fixture enables required terms against an unavailable loopback catalog:
+ordinary authenticated activity returns 503 while guest/session bootstrap,
+account lookup, account export and primary deletion remain available. Responses
+are private/no-store, and deletion revokes the session. The same non-root,
+read-only runtime uses scoped database credentials and no external network.
+The publishing gate now requires this additional check before pushing its tested
+candidate. All owned fixtures are removed. This closes the newer gate's local
+packaging gap, while hydrated acceptance, actual provider/offsite behavior and a
+reviewed registry digest remain separate rollout evidence.

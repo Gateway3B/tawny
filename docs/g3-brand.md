@@ -236,9 +236,8 @@ The in-process HTTP/session test uses the actual tracked session adapter and
 receipt transactions. It verifies account isolation, exact acceptance, changed
 sets, catalog failure, essential access and session retirement after deletion.
 No server, policy publication, consent purpose or deployment is enabled here.
-Hydrated acceptance/retry, native interactions and a packaged image containing
-this newer gate remain rollout checks; the earlier packaged deletion-recovery
-evidence applies to its recorded source snapshot.
+Hydrated acceptance/retry and native interactions remain rollout checks. The
+newer packaged image evidence follows below.
 
 Validation passes 210 ordinary server tests, 87 web tests and strict checks for
 server/web/mobile/desktop on the host. The separate database-editor fixture and
@@ -249,3 +248,16 @@ existing 50 generated-CSS warnings; formatting passes. No UI markup changed.
 The real loopback catalog test covers the 60-second expiry boundary, failure
 cooldown, retry/recovery, forced refresh and a backwards clock. The actual
 WebAssembly strict check also passes.
+
+The full locked Linux web/server image built from `d38f65b` is
+`sha256:7b1370d550871696c8f54c9e24425051dd9d242facacb7bd36bb8298b21e4b5a`.
+The isolated encrypted-backup drill passes with required terms and an unavailable
+loopback catalog. It invokes the packaged Dioxus routes: guest creation/account
+lookup succeed, ordinary viewer activity is refused with 503, the authenticated
+account download and primary deletion succeed, and the removed account loses
+access. Private responses are `private, no-store`. The server runs as non-root,
+read-only, with database-scoped credentials; no public port, host data or provider
+access is used. Actual age encryption/import/repeated replay also pass, and all
+owned containers/networks are removed. This is a local image ID, not a published
+registry digest. Live publication/offsite expiry and actual client flows remain
+unverified; deployment enforcement stays disabled by default.

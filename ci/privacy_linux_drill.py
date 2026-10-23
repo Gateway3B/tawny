@@ -30,6 +30,50 @@ with urllib.request.urlopen(request, timeout=15) as response:
     sys.stdout.buffer.write(response.read())
 """
 
+# Exercise the packaged Dioxus routes, not substitute handlers. Cookies are
+# forwarded explicitly because the release cookie is Secure and this isolated
+# synthetic network uses HTTP instead of the production HTTPS reverse proxy.
+LEGAL_HTTP = """
+import http.cookies, json, sys, urllib.error, urllib.request
+origin = sys.argv[1]
+cookies = {}
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+def request(path, body=None, expected=200):
+    headers = {'Accept':'application/json', 'Content-Type':'application/json',
+        'Cookie':'; '.join(key + '=' + value for key, value in cookies.items())}
+    data = json.dumps(body).encode() if body is not None else None
+    query = urllib.request.Request(origin + path, data=data, headers=headers)
+    try:
+        response = opener.open(query, timeout=20)
+    except urllib.error.HTTPError as problem:
+        response = problem
+    with response:
+        if response.status != expected:
+            raise RuntimeError('Unexpected packaged legal fixture status')
+        if path.startswith('/api/v1/auth/') or expected != 200:
+            if response.headers.get('Cache-Control') != 'private, no-store':
+                raise RuntimeError('Packaged private response could be cached')
+        for field in response.headers.get_all('Set-Cookie', []):
+            parsed = http.cookies.SimpleCookie()
+            parsed.load(field)
+            cookies.update({key: value.value for key, value in parsed.items()})
+        payload = response.read()
+        return json.loads(payload) if expected == 200 else None
+account = request('/api/v1/auth/guest', {})
+owner = account['id']
+if not owner.startswith('app_user:') or not account['is_guest']:
+    raise RuntimeError('Synthetic guest was not created')
+if request('/api/v1/auth/account')['id'] != owner:
+    raise RuntimeError('Synthetic session did not bind its account')
+request('/api/v1/viewer', expected=503)
+export = json.loads(request('/api/v1/auth/export', {'expected_owner':owner}))
+if not isinstance(export, dict) or owner not in json.dumps(export):
+    raise RuntimeError('Essential account download was unavailable')
+request('/api/v1/auth/delete', {'expected_owner':owner})
+request('/api/v1/auth/account', expected=401)
+print('event=privacy_linux_drill_packaged_terms_and_essential_access_verified')
+"""
+
 
 def run(command, **options):
     return subprocess.run(command, check=True, capture_output=True, timeout=60, **options).stdout
@@ -210,6 +254,8 @@ RELATE playlist:linux_other->playlist_item->video:shared SET position = 0;
             "SURREALDB_NAMESPACE": "restore", "SURREALDB_NAME": "tawny",
             "SURREALDB_USER": "fixture_runtime", "SURREALDB_PASSWORD": "synthetic-linux-runtime",
             "G3_PRIVACY_RECOVERY": "disabled", "TAWNY_DATA_DIR": "/data",
+            "G3_LEGAL_ENFORCEMENT": "required",
+            "G3_CATALOG_ORIGIN": "http://127.0.0.1:9",
             "TAWNY_PUBLIC_URL": "http://" + name + "-app:8080",
         }
         arguments = ["--name", name + "-app", "--network", network, "--read-only",
@@ -232,6 +278,9 @@ RELATE playlist:linux_other->playlist_item->video:shared SET position = 0;
                     raise RuntimeError("Packaged scoped server did not become ready") from None
                 time.sleep(0.2)
         print("event=privacy_linux_drill_scoped_server_ready", flush=True)
+        result = run(["docker", "exec", utility, "python3", "-c", LEGAL_HTTP,
+                      "http://" + name + "-app:8080"])
+        print(result.decode().strip(), flush=True)
     finally:
         cleanup(containers, network)
     print("event=privacy_linux_encrypted_backup_drill_passed image=" + app_image)
