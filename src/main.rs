@@ -36,7 +36,8 @@ fn main() {
     }
     let _ = dotenvy::dotenv();
     telemetry::init();
-    brand::legal::server::validate_configuration().expect("validate public legal catalog origin");
+    brand::legal::server::validate_configuration()
+        .expect("validate legal enforcement mode and public catalog origin");
     dioxus::serve(|| async move {
         use std::sync::Arc;
 
@@ -86,6 +87,9 @@ fn main() {
             .layer(Extension(state.clone()));
 
         Ok(dioxus::server::router(App)
+            .layer(dioxus::server::axum::middleware::from_fn(
+                brand::legal::enforcement::enforce_terms,
+            ))
             .layer(from_fn_with_state(
                 rate_limits,
                 g3_auth::rate_limit::enforce,

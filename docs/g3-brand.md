@@ -203,3 +203,49 @@ legacy formats hold startup/deletion for review. Database guards reject writes
 from an older untracked session adapter. See [the inventory](privacy-data.md)
 for retained fence data, device/process limits and recovery work. These source
 changes do not configure B2, deploy the service or make an old restore safe.
+
+## Optional backend terms checks
+
+`G3_LEGAL_ENFORCEMENT` defaults to `disabled`. After reviewed document
+publication and rollout validation, `required` checks protected API activity
+against the signed-in account's acceptance of the exact current document set.
+This includes guest accounts and registration of an existing guest. Future
+effective dates are respected. A notice acknowledgment, dismissal, another
+account's acceptance or an older set cannot authorize activity or processing
+consent. Missing documents, catalog/database failures and unverifiable state
+keep protected activity closed. Unknown modes refuse normal startup.
+
+Protected requests use a validated public catalog for at most 60 seconds before
+requiring a refresh; failure cannot authorize activity from an expired snapshot.
+requests share a ten-second failure cooldown, including forced review refreshes,
+so an outage cannot queue repeated slow fetches. Recovery must revalidate content.
+Normal authentication still guards private endpoints. Sign-in/guest bootstrap, account
+lookup, sign-out, legal review/actions and account export/deletion remain
+available without accepting changed terms. About and Settings remain public.
+Successful acceptance refreshes cached reads that the gate may have refused.
+Gate errors are `private, no-store` and do not expose private receipt details.
+
+Health, WebSub and playback proxy routes retain their existing sessionless
+boundaries: callback signatures and already issued short-lived proxy tokens
+still supply their own authorization. New playback sessions pass through the
+protected API. This setting neither deletes device caches nor revokes an
+already issued media capability. Keep the mode consistent across replicas and
+use a reviewed image containing the gate before enabling it.
+
+The in-process HTTP/session test uses the actual tracked session adapter and
+receipt transactions. It verifies account isolation, exact acceptance, changed
+sets, catalog failure, essential access and session retirement after deletion.
+No server, policy publication, consent purpose or deployment is enabled here.
+Hydrated acceptance/retry, native interactions and a packaged image containing
+this newer gate remain rollout checks; the earlier packaged deletion-recovery
+evidence applies to its recorded source snapshot.
+
+Validation passes 210 ordinary server tests, 87 web tests and strict checks for
+server/web/mobile/desktop on the host. The separate database-editor fixture and
+live YouTube test remain opt-in; neither is included in that ordinary count.
+Nine JavaScript, ten extractor and twelve CI helper tests pass. Both Compose
+files resolve using synthetic settings. Web lint exits successfully with its
+existing 50 generated-CSS warnings; formatting passes. No UI markup changed.
+The real loopback catalog test covers the 60-second expiry boundary, failure
+cooldown, retry/recovery, forced refresh and a backwards clock. The actual
+WebAssembly strict check also passes.

@@ -9,11 +9,13 @@ use crate::{
 use dioxus::prelude::*;
 use g3_brand::{
     Catalog,
-    legal::{DocumentSet, LegalRequest, LegalStatus},
+    legal::{DocumentSet, LegalAction, LegalRequest, LegalStatus},
 };
 use g3_ui::{Button, ButtonFill, Card, Modal, Stack, Text, TextTone};
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "server")]
+pub mod enforcement;
 #[cfg(feature = "server")]
 pub mod server;
 
@@ -139,6 +141,7 @@ pub fn LegalProvider(children: Element) -> Element {
             generation: next,
         }));
         spawn(async move {
+            let accepted_terms = request.action == LegalAction::TermsAccepted;
             let result = record_legal_action(request, Some(target.clone())).await;
             let current = pending
                 .peek()
@@ -156,6 +159,11 @@ pub fn LegalProvider(children: Element) -> Element {
             match result {
                 Ok(value) if value.owner == target => {
                     app.show_toast("Your acknowledgment was recorded.", g3_ui::Color::Success);
+                    if accepted_terms {
+                        // Reads refused by the optional gate must retry after
+                        // verified acceptance, including the account's viewer.
+                        g3_cache::invalidate_all_cached();
+                    }
                     review.restart();
                 }
                 Ok(_) => {

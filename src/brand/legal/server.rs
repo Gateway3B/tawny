@@ -23,27 +23,56 @@ fn origin() -> String {
 }
 
 pub fn validate_configuration() -> std::result::Result<(), String> {
+    super::enforcement::validate_configuration().map_err(str::to_owned)?;
     CatalogClient::new(&origin()).map(|_| ())
 }
 
 async fn catalog(force: bool) -> Result<Catalog> {
-    static CACHE: OnceLock<tokio::sync::Mutex<Option<CachedCatalog>>> = OnceLock::new();
-    let now = super::super::timestamp();
+    static CACHE: OnceLock<tokio::sync::Mutex<PublicCache>> = OnceLock::new();
     let mut cached = CACHE.get_or_init(Default::default).lock().await;
+    let client = CatalogClient::new(&origin()).map_err(error)?;
+    load_catalog(&mut cached, &client, force, super::super::timestamp).await
+}
+
+#[derive(Default)]
+struct PublicCache {
+    snapshot: Option<CachedCatalog>,
+    failed_at: Option<i64>,
+}
+
+async fn load_catalog(
+    cached: &mut PublicCache,
+    client: &CatalogClient,
+    force: bool,
+    clock: impl Fn() -> i64,
+) -> Result<Catalog> {
+    let now = clock();
+    let unavailable = || error("Shared legal documents are unavailable. Please try again.");
+    if cached
+        .failed_at
+        .is_some_and(|at| now >= at && now.saturating_sub(at) < 10)
+    {
+        return Err(unavailable());
+    }
     if !force
-        && let Some(value) = cached.as_ref()
+        && let Some(value) = cached.snapshot.as_ref()
         && now >= value.fetched_at
         && now.saturating_sub(value.fetched_at) < 60
     {
         return Ok(value.catalog.clone());
     }
-    let client = CatalogClient::new(&origin()).map_err(error)?;
-    let value = client
-        .refresh(cached.as_ref(), now)
-        .await
-        .map_err(|_| error("Shared legal documents are unavailable. Please try again."))?;
+    let value = match client.refresh(cached.snapshot.as_ref(), now).await {
+        Ok(value) => value,
+        Err(_) => {
+            // Stamp the end of the bounded fetch so a timeout cannot consume
+            // the whole cooldown and immediately trigger another slow request.
+            cached.failed_at = Some(clock());
+            return Err(unavailable());
+        }
+    };
     let result = value.catalog.clone();
-    *cached = Some(value);
+    cached.snapshot = Some(value);
+    cached.failed_at = None;
     Ok(result)
 }
 
@@ -86,7 +115,7 @@ pub async fn review(
     review_for(db, owner, catalog(force).await?).await
 }
 
-async fn review_for(
+pub(super) async fn review_for(
     db: &Surreal<Any>,
     owner: &Owner,
     catalog: Catalog,
@@ -138,7 +167,7 @@ CREATE brand_legal_receipt CONTENT {
 COMMIT TRANSACTION;
 "#;
 
-async fn commit(
+pub(super) async fn commit(
     db: &Surreal<Any>,
     owner: &Owner,
     request: LegalRequest,
@@ -190,6 +219,98 @@ async fn commit(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn catalog_expiry_outages_and_recovery_never_authorize_a_stale_snapshot() {
+        use axum::{Router, http::StatusCode, response::IntoResponse, routing::get};
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+        };
+        let available = Arc::new(AtomicBool::new(true));
+        let requests = Arc::new(AtomicUsize::new(0));
+        let fixture = super::super::fixture_catalog();
+        let response_catalog = fixture.clone();
+        let healthy = Arc::clone(&available);
+        let count = Arc::clone(&requests);
+        let app = Router::new().route(
+            "/api/v1/catalog",
+            get(move || {
+                let fixture = response_catalog.clone();
+                let healthy = Arc::clone(&healthy);
+                let count = Arc::clone(&count);
+                async move {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    if healthy.load(Ordering::SeqCst) {
+                        axum::Json(fixture).into_response()
+                    } else {
+                        StatusCode::SERVICE_UNAVAILABLE.into_response()
+                    }
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let client =
+            CatalogClient::new(&format!("http://{}", listener.local_addr().unwrap())).unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let mut cache = PublicCache::default();
+        assert_eq!(
+            load_catalog(&mut cache, &client, false, || 100)
+                .await
+                .unwrap(),
+            fixture
+        );
+        assert_eq!(
+            load_catalog(&mut cache, &client, false, || 159)
+                .await
+                .unwrap(),
+            fixture
+        );
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+        available.store(false, Ordering::SeqCst);
+        assert!(
+            load_catalog(&mut cache, &client, false, || 160)
+                .await
+                .is_err()
+        );
+        for force in [false, true] {
+            assert!(
+                load_catalog(&mut cache, &client, force, || 169)
+                    .await
+                    .is_err()
+            );
+        }
+        assert_eq!(requests.load(Ordering::SeqCst), 2);
+        assert!(
+            load_catalog(&mut cache, &client, false, || 170)
+                .await
+                .is_err()
+        );
+        assert_eq!(requests.load(Ordering::SeqCst), 3);
+        available.store(true, Ordering::SeqCst);
+        assert!(
+            load_catalog(&mut cache, &client, false, || 179)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            load_catalog(&mut cache, &client, false, || 180)
+                .await
+                .unwrap(),
+            fixture
+        );
+        assert_eq!(requests.load(Ordering::SeqCst), 4);
+        // A backwards clock must revalidate instead of extending cache age.
+        load_catalog(&mut cache, &client, false, || 179)
+            .await
+            .unwrap();
+        assert_eq!(requests.load(Ordering::SeqCst), 5);
+        load_catalog(&mut cache, &client, true, || 180)
+            .await
+            .unwrap();
+        assert_eq!(requests.load(Ordering::SeqCst), 6);
+        server.abort();
+    }
 
     fn request(review: &AccountLegalReview, action: LegalAction) -> LegalRequest {
         LegalRequest {
