@@ -666,23 +666,33 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
     // keeps serving its previous value while it re-runs, so without the tag a
     // freshly opened video reads the *previous* video's session and renders a
     // conclusion — including a failure — that was never about this video.
+    //
+    // It depends on which video is playing and whether it is live, never on
+    // the whole video: saving the position every five seconds replaces that,
+    // and reading it here re-resolved playback each time. A video's session is
+    // cached on the server, which hid it; a live stream's is not, so every
+    // five seconds went to YouTube until it flagged the server as a bot.
+    let playback_target = use_memo(move || {
+        app_state
+            .active_video()
+            .map(|video| (video.id, video.is_live))
+    });
     let playback_resource = use_resource(move || {
-        let active_video = app_state.active_video();
+        let target = playback_target();
         let attempt = playback_attempt();
         let nonce = resolve_nonce();
         async move {
             let _attempt = (attempt, nonce);
-            match active_video {
-                Some(video) => {
-                    let id = video.id.clone();
+            match target {
+                Some((id, is_live)) => {
                     let fresh = stale_session_for.peek().as_deref() == Some(id.as_str());
                     // A live stream is always played through the server (the
                     // device resolver has no live path), so asking the phone
                     // first would only add the seconds it takes to say no.
-                    let from_device = from_device && !video.is_live;
+                    let from_device = from_device && !is_live;
                     Some((
-                        id,
-                        resolve_session(video.id, prefer_sabr, fresh, from_device).await,
+                        id.clone(),
+                        resolve_session(id, prefer_sabr, fresh, from_device).await,
                     ))
                 }
                 None => None,

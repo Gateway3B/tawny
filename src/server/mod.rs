@@ -79,7 +79,7 @@ pub struct AppServerState {
     public_url: String,
     websub_callback_url: Option<String>,
     websub_secret: String,
-    proxy_targets: Arc<tokio::sync::RwLock<HashMap<String, ProxyTarget>>>,
+    proxy_targets: Arc<tokio::sync::RwLock<ProxyTargets>>,
     proxy_counter: Arc<AtomicU64>,
     /// Resolved playback, keyed by video id. See [`AppServerState::playback_session`].
     playback_sessions: Arc<std::sync::Mutex<HashMap<String, CachedPlayback>>>,
@@ -99,6 +99,118 @@ pub(crate) struct ProxyTarget {
     url: String,
     request_headers: Vec<crate::models::PlaybackRequestHeader>,
     expires_at: std::time::Instant,
+    /// How long it lives past its last use. See [`ProxyTargets::touch`].
+    ttl: std::time::Duration,
+}
+
+/// Every upstream the playback proxy serves, by token, and the token each
+/// upstream already has.
+///
+/// A URL keeps one token. A live stream's HLS playlists list an hour of
+/// segments (720 of them) and are fetched again every five seconds; minting a
+/// fresh token for every line of every refresh added ~17,000 entries a minute,
+/// and pruning the table on every insert made each refresh slower than the
+/// last until it could no longer keep up with the stream.
+#[derive(Debug, Default)]
+pub(crate) struct ProxyTargets {
+    by_token: HashMap<String, ProxyTarget>,
+    by_url: HashMap<String, String>,
+    pruned_at: Option<std::time::Instant>,
+}
+
+/// How often expired registrations are swept out.
+const PROXY_PRUNE_EVERY: std::time::Duration = std::time::Duration::from_secs(30);
+
+impl ProxyTargets {
+    pub(crate) fn get(&self, token: &str) -> Option<&ProxyTarget> {
+        self.by_token.get(token)
+    }
+
+    pub(crate) fn remove(&mut self, token: &str) {
+        if let Some(target) = self.by_token.remove(token)
+            && self.by_url.get(&target.url).map(String::as_str) == Some(token)
+        {
+            self.by_url.remove(&target.url);
+        }
+    }
+
+    /// The token serving `url` with `request_headers` for at least `ttl`:
+    /// the one it already has, kept alive that long, or a new one from `mint`.
+    pub(crate) fn token_for(
+        &mut self,
+        url: String,
+        request_headers: Vec<crate::models::PlaybackRequestHeader>,
+        ttl: std::time::Duration,
+        now: std::time::Instant,
+        mint: impl FnOnce() -> String,
+    ) -> String {
+        self.prune(now);
+        let expires_at = now + ttl;
+        if let Some(token) = self.by_url.get(&url)
+            && let Some(target) = self.by_token.get_mut(token)
+            && target.request_headers == request_headers
+        {
+            target.expires_at = target.expires_at.max(expires_at);
+            target.ttl = target.ttl.max(ttl);
+            return token.clone();
+        }
+        let token = mint();
+        self.by_url.insert(url.clone(), token.clone());
+        self.by_token.insert(
+            token.clone(),
+            ProxyTarget {
+                url,
+                request_headers,
+                expires_at,
+                ttl,
+            },
+        );
+        token
+    }
+
+    /// Whether `token` is served right now, keeping it alive for its lifetime
+    /// past this use.
+    ///
+    /// A live stream's variant playlists are registered once, when the master
+    /// playlist is rewritten, and then fetched every few seconds for as long as
+    /// the viewer watches. With a fixed lifetime they all answered 410 at the
+    /// 90-minute mark and the stream stopped.
+    pub(crate) fn touch(&mut self, token: &str, now: std::time::Instant) -> bool {
+        let Some(target) = self.by_token.get_mut(token) else {
+            return false;
+        };
+        if target.expires_at <= now {
+            return false;
+        }
+        target.expires_at = target.expires_at.max(now + target.ttl);
+        true
+    }
+
+    /// Whether `token` needs [`Self::touch`]ing yet: past half its lifetime.
+    /// Lets most requests take only a read lock.
+    pub(crate) fn needs_touch(&self, token: &str, now: std::time::Instant) -> bool {
+        self.by_token.get(token).is_some_and(|target| {
+            target.expires_at <= now || target.expires_at - now < target.ttl / 2
+        })
+    }
+
+    fn prune(&mut self, now: std::time::Instant) {
+        if self
+            .pruned_at
+            .is_some_and(|at| now.duration_since(at) < PROXY_PRUNE_EVERY)
+        {
+            return;
+        }
+        self.by_token.retain(|_, target| target.expires_at > now);
+        let by_token = &self.by_token;
+        self.by_url.retain(|_, token| by_token.contains_key(token));
+        self.pruned_at = Some(now);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.by_token.len()
+    }
 }
 
 /// One video's playback resolve, shared by everyone who asks for it.
@@ -478,7 +590,7 @@ impl AppServerState {
             public_url,
             websub_callback_url,
             websub_secret,
-            proxy_targets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            proxy_targets: Arc::new(tokio::sync::RwLock::new(ProxyTargets::default())),
             proxy_counter: Arc::new(AtomicU64::new(1)),
             playback_sessions: Arc::new(std::sync::Mutex::new(HashMap::new())),
             sync_lock: Arc::new(tokio::sync::Mutex::new(())),
@@ -2339,5 +2451,98 @@ mod sponsor_server_tests {
             one,
             sponsor_cache_discriminator(&[SponsorCategory::Sponsor])
         );
+    }
+}
+
+#[cfg(test)]
+mod proxy_target_tests {
+    use super::ProxyTargets;
+    use crate::models::PlaybackRequestHeader;
+    use std::time::{Duration, Instant};
+
+    const HOUR: Duration = Duration::from_secs(60 * 60);
+
+    fn minting(prefix: &str) -> impl FnMut() -> Box<dyn FnOnce() -> String> + '_ {
+        let mut count = 0;
+        move || {
+            count += 1;
+            let token = format!("{prefix}{count}");
+            Box::new(move || token)
+        }
+    }
+
+    #[test]
+    fn a_refreshed_live_playlist_keeps_its_tokens_and_the_table_stays_put() {
+        let mut targets = ProxyTargets::default();
+        let mut mint = minting("t");
+        let start = Instant::now();
+        let segments = (0..720)
+            .map(|sq| format!("https://example/sq/{sq}"))
+            .collect::<Vec<_>>();
+        let first = segments
+            .iter()
+            .map(|url| targets.token_for(url.clone(), Vec::new(), HOUR, start, mint()))
+            .collect::<Vec<_>>();
+        // Ten minutes of refreshes every five seconds.
+        for refresh in 1..=120 {
+            let now = start + Duration::from_secs(5 * refresh);
+            for (url, token) in segments.iter().zip(&first) {
+                assert_eq!(
+                    &targets.token_for(url.clone(), Vec::new(), HOUR, now, mint()),
+                    token
+                );
+            }
+        }
+        assert_eq!(targets.len(), 720);
+    }
+
+    #[test]
+    fn other_headers_get_their_own_token_and_expired_ones_are_swept() {
+        let mut targets = ProxyTargets::default();
+        let mut mint = minting("t");
+        let now = Instant::now();
+        let plain = targets.token_for("https://a".into(), Vec::new(), HOUR, now, mint());
+        let headed = targets.token_for(
+            "https://a".into(),
+            vec![PlaybackRequestHeader {
+                name: "User-Agent".into(),
+                value: "x".into(),
+            }],
+            HOUR,
+            now,
+            mint(),
+        );
+        assert_ne!(plain, headed);
+
+        let short = targets.token_for(
+            "https://b".into(),
+            Vec::new(),
+            Duration::from_secs(1),
+            now,
+            mint(),
+        );
+        let later = now + Duration::from_secs(120);
+        targets.token_for("https://c".into(), Vec::new(), HOUR, later, mint());
+        assert!(targets.get(&short).is_none(), "expired, so swept");
+        assert!(targets.get(&headed).is_some());
+    }
+
+    #[test]
+    fn a_target_in_use_outlives_its_first_lifetime() {
+        let mut targets = ProxyTargets::default();
+        let mut mint = minting("t");
+        let start = Instant::now();
+        let playlist = targets.token_for("https://live".into(), Vec::new(), HOUR, start, mint());
+        // Fetched every few seconds; touched whenever it is past half-life.
+        let mut now = start;
+        while now < start + 3 * HOUR {
+            now += Duration::from_secs(5);
+            if targets.needs_touch(&playlist, now) {
+                assert!(targets.touch(&playlist, now), "still in use at {now:?}");
+            }
+        }
+        assert!(targets.touch(&playlist, now));
+        // Left alone past its lifetime, it lapses.
+        assert!(!targets.touch(&playlist, now + 2 * HOUR));
     }
 }

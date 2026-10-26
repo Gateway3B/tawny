@@ -110,3 +110,39 @@ assert.equal(restoresRefresh({ refreshAttempts: 1 }, 600, 629), false);
 assert.equal(restoresRefresh({ refreshAttempts: 1 }, 600, 630), true);
 assert.equal(restoresRefresh({ refreshAttempts: 0 }, 600, 900), false);
 assert.equal(restoresRefresh({}, 0, 900), false);
+
+// YouTube's live HLS: HE-AAC audio (id 3) goes only with 144p and 240p, AAC-LC
+// (id 9) with everything. Starting on HE-AAC pins ABR to 240p.
+const { fullLadderAudio } = window.TawnyTransport;
+const variant = (height, audioId, audioCodec, active = false, language = "und") => ({
+  height,
+  audioId,
+  audioCodec,
+  active,
+  language,
+  label: "Default",
+});
+const youtubeLive = [
+  variant(144, 3, "mp4a.40.5"),
+  variant(240, 3, "mp4a.40.5", true),
+  variant(240, 9, "mp4a.40.2"),
+  variant(720, 9, "mp4a.40.2"),
+  variant(1080, 9, "mp4a.40.2"),
+];
+assert.deepEqual(fullLadderAudio(youtubeLive), {
+  codec: "mp4a.40.2",
+  label: "Default",
+  language: "und",
+});
+// Already on the audio that reaches the top: nothing to do.
+assert.equal(fullLadderAudio(youtubeLive.map((v) => ({ ...v, active: v.height === 1080 }))), null);
+// Another language's bigger ladder never overrides the language chosen.
+assert.equal(
+  fullLadderAudio([
+    variant(240, 1, "mp4a.40.2", true, "en"),
+    variant(1080, 2, "mp4a.40.2", false, "es"),
+  ]),
+  null,
+);
+// Audio only: no video to climb.
+assert.equal(fullLadderAudio([{ audioId: 1, active: true, language: "en" }]), null);

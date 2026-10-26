@@ -202,6 +202,7 @@
     const previewTime = controls.querySelector("[data-player-preview-time]");
     const currentTime = controls.querySelector("[data-player-current-time]");
     const duration = controls.querySelector("[data-player-duration]");
+    const timeSeparator = controls.querySelector(".player-time-separator");
     const speedLabel = controls.querySelector("[data-player-speed-label]");
     const optionsMenu = controls.querySelector("[data-player-options-menu]");
     const qualityOptions = controls.querySelector("[data-player-quality-options]");
@@ -339,6 +340,48 @@
       else scheduleHide();
     }
 
+    // How far behind the live edge still reads as "LIVE". Shaka deliberately
+    // plays a few of YouTube's five-second segments back from the edge.
+    const LIVE_EDGE_SLACK = 20;
+
+    // The stretch the timeline spans, in media time: the video's length, or
+    // for a live stream, which has no length (the element reports Infinity),
+    // the window it can be rewound across. Measuring a live stream against its
+    // missing duration put the clock at "59:51 / 0:00" and left the bar empty
+    // and impossible to drag.
+    function timelineRange() {
+      if (Number.isFinite(video.duration) && video.duration > 0) {
+        return { start: 0, end: video.duration, live: false };
+      }
+      const seekable = video.seekable;
+      if (seekable && seekable.length) {
+        const start = seekable.start(0);
+        const end = seekable.end(seekable.length - 1);
+        if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+          return { start, end, live: true };
+        }
+      }
+      return { start: 0, end: 0, live: false };
+    }
+
+    // A media time as the clock shows it: elapsed, or for a live stream "LIVE"
+    // at the edge and how far behind it otherwise.
+    function timeLabel(time, range = timelineRange()) {
+      if (!range.live) return formatTime(time);
+      const behind = range.end - time;
+      return behind > LIVE_EDGE_SLACK ? `-${formatTime(behind)}` : "LIVE";
+    }
+
+    // Where on the bar (0-1) a media time sits, and the media time at a spot.
+    function timelineRatio(time, range = timelineRange()) {
+      const length = range.end - range.start;
+      return length > 0 ? Math.max(0, Math.min(1, (time - range.start) / length)) : 0;
+    }
+
+    function timeAtRatio(ratio, range = timelineRange()) {
+      return range.start + ratio * (range.end - range.start);
+    }
+
     function bufferedEnd() {
       let end = 0;
       for (let index = 0; index < video.buffered.length; index += 1) {
@@ -357,11 +400,12 @@
     }
 
     function updateTimeline() {
-      const length = Number.isFinite(video.duration) ? video.duration : 0;
+      const range = timelineRange();
+      const length = range.end - range.start;
       const position = Number.isFinite(video.currentTime) ? video.currentTime : 0;
       // Compared first: assigning the same text still replaces the node, and
       // this runs every frame the bar is up.
-      const positionText = formatTime(position);
+      const positionText = timeLabel(position, range);
       if (currentTime && currentTime.textContent !== positionText) {
         currentTime.textContent = positionText;
       }
@@ -370,11 +414,14 @@
       // owns, so any re-render of that subtree silently drops them. Rebuilding
       // when they have gone missing is what keeps them on screen.
       applySponsorSegments();
-      const lengthText = formatTime(length);
+      // A live stream has no length to show beside the clock.
+      const lengthText = range.live ? "" : formatTime(length);
       if (duration && duration.textContent !== lengthText) duration.textContent = lengthText;
+      if (duration) duration.hidden = range.live;
+      if (timeSeparator) timeSeparator.hidden = range.live;
       if (!progress || scrubbing) return;
-      const played = length > 0 ? Math.min(100, (position / length) * 100) : 0;
-      const buffered = length > 0 ? Math.min(100, (bufferedEnd() / length) * 100) : 0;
+      const played = timelineRatio(position, range) * 100;
+      const buffered = timelineRatio(bufferedEnd(), range) * 100;
       progress.value = String(Math.round(played * 100));
       progress.style.setProperty("--player-progress", `${played}%`);
       progress.style.setProperty("--player-buffered", `${Math.max(played, buffered)}%`);
@@ -457,7 +504,8 @@
      */
     function renderTimeline() {
       if (!progress) return;
-      const length = Number.isFinite(video.duration) ? video.duration : 0;
+      const range = timelineRange();
+      const length = range.end - range.start;
       if (length <= 0) {
         progress.style.removeProperty("--player-track-image");
         return;
@@ -467,8 +515,8 @@
       // Below a pixel or two the gaps would be wider than the segments between
       // them, which reads as a dashed line rather than a divided one.
       const gap = width > 0 ? Math.min(1.5, (TIMELINE_GAP_PX / width) * 100) : 0;
-      const played = clampPercent((currentPosition() / length) * 100);
-      const buffered = Math.max(played, clampPercent((bufferedEnd() / length) * 100));
+      const played = clampPercent(timelineRatio(currentPosition(), range) * 100);
+      const buffered = Math.max(played, clampPercent(timelineRatio(bufferedEnd(), range) * 100));
 
       // Spans are applied in order, each overriding what came before, so the
       // list reads as layers: base, buffered, played, segment colours, gaps.
@@ -640,11 +688,10 @@
 
     function showScrubPreview(position) {
       if (!seekPreview || !progress) return;
-      const length = Number.isFinite(video.duration) ? video.duration : 0;
-      const percent = length > 0 ? Math.min(100, Math.max(0, (position / length) * 100)) : 0;
+      const percent = timelineRatio(position) * 100;
       seekPreview.hidden = false;
       seekPreview.style.left = `clamp(5rem, ${percent}%, calc(100% - 5rem))`;
-      if (previewTime) previewTime.textContent = formatTime(position);
+      if (previewTime) previewTime.textContent = timeLabel(position);
       const chapter = chapterAt(position);
       if (previewChapter) {
         previewChapter.textContent = chapter?.title || "";
@@ -892,11 +939,16 @@
         if (!bounds.width) return;
         const ratio = Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width));
         progress.value = String(Math.round(ratio * 10000));
-        const length = Number.isFinite(video.duration) ? video.duration : 0;
-        const position = ratio * length;
-        if (currentTime) currentTime.textContent = formatTime(position);
+        const range = timelineRange();
+        const position = timeAtRatio(ratio, range);
+        if (currentTime) currentTime.textContent = timeLabel(position, range);
         progress.style.setProperty("--player-progress", `${ratio * 100}%`);
-        progress.setAttribute("aria-valuetext", `${formatTime(position)} of ${formatTime(length)}`);
+        progress.setAttribute(
+          "aria-valuetext",
+          range.live
+            ? timeLabel(position, range)
+            : `${formatTime(position)} of ${formatTime(range.end)}`,
+        );
         showScrubPreview(position);
       };
 
@@ -908,8 +960,7 @@
         const bounds = progress.getBoundingClientRect();
         if (!bounds.width) return;
         const ratio = Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width));
-        const length = Number.isFinite(video.duration) ? video.duration : 0;
-        showScrubPreview(ratio * length);
+        showScrubPreview(timeAtRatio(ratio));
       };
 
       const beginScrub = () => {
@@ -923,9 +974,9 @@
       const finishScrub = (commit) => {
         if (!scrubbing) return;
         scrubbing = false;
-        const length = Number.isFinite(video.duration) ? video.duration : 0;
-        if (commit && length > 0) {
-          video.currentTime = (Number(progress.value) / 10000) * length;
+        const range = timelineRange();
+        if (commit && range.end > range.start) {
+          video.currentTime = timeAtRatio(Number(progress.value) / 10000, range);
         }
         hideScrubPreview();
         if (resumeAfterScrub) video.play().catch(() => {});
@@ -966,9 +1017,9 @@
         // as the start so the clock freezes at the preview position and the
         // media still pauses throughout the gesture.
         beginScrub();
-        const length = Number.isFinite(video.duration) ? video.duration : 0;
-        const position = (Number(progress.value) / 10000) * length;
-        if (currentTime) currentTime.textContent = formatTime(position);
+        const range = timelineRange();
+        const position = timeAtRatio(Number(progress.value) / 10000, range);
+        if (currentTime) currentTime.textContent = timeLabel(position, range);
         progress.style.setProperty("--player-progress", `${Number(progress.value) / 100}%`);
         showScrubPreview(position);
       });

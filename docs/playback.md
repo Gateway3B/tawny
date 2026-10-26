@@ -38,6 +38,32 @@ The media element lives in the shared app shell: it is full-width on a video rou
 
 Tawny is not affiliated with or endorsed by YouTube. YouTube trademarks belong to their respective owners.
 
+## Live streams
+
+A live stream has only yt-dlp's HLS master playlist, which the proxy rewrites
+so every child URL comes back through it. Its variant playlists list an hour
+of five-second segments (720 lines) and are fetched again every five seconds,
+so the proxy gives each upstream URL one token for as long as it is in use
+(`ProxyTargets` in `src/server/mod.rs`): a refresh maps back to the tokens it
+already has, and a registration lives on past each use. Minting a token per
+line per refresh grew the table by ~17,000 entries a minute, slowed every
+refresh by ~20 ms over the last, and a fixed 90-minute lifetime cut the
+playlists off mid-stream.
+
+The session is held on the server like a verified one, and the player
+resolves once per video, not whenever the playing video's fields change (its
+position is written every five seconds). Re-resolving a live stream on each
+of those writes sent a request to YouTube every five seconds until it flagged
+the server as a bot.
+
+YouTube's live master playlist offers two audio tracks in one language,
+HE-AAC and AAC-LC, and pairs HE-AAC only with 144p and 240p. Shaka's ABR moves
+only between variants that share the audio track, so after loading, the
+transport switches to the audio track that goes with the highest quality
+(`fullLadderAudio`). The controls measure a live stream against its seekable
+window: "LIVE" at the edge, how far behind it otherwise, and a scrub bar
+across the hour that can be rewound.
+
 ## Watch progress
 
 While a video plays, its position is saved to the server about every five

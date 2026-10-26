@@ -7,22 +7,21 @@ impl AppServerState {
         request_headers: Vec<crate::models::PlaybackRequestHeader>,
         ttl: Duration,
     ) -> String {
-        let counter = self.proxy_counter.fetch_add(1, Ordering::Relaxed);
         let mut hasher = DefaultHasher::new();
         self.websub_secret.hash(&mut hasher);
         url.hash(&mut hasher);
-        counter.hash(&mut hasher);
-        let token = format!("{:x}{counter:x}", hasher.finish());
-        let now = std::time::Instant::now();
-        let mut targets = self.proxy_targets.write().await;
-        targets.retain(|_, target| target.expires_at > now);
-        targets.insert(
-            token.clone(),
-            ProxyTarget {
-                url,
-                request_headers,
-                expires_at: now + ttl,
-            },
+        let counter = &self.proxy_counter;
+        let mint = move || {
+            let count = counter.fetch_add(1, Ordering::Relaxed);
+            count.hash(&mut hasher);
+            format!("{:x}{count:x}", hasher.finish())
+        };
+        let token = self.proxy_targets.write().await.token_for(
+            url,
+            request_headers,
+            ttl,
+            std::time::Instant::now(),
+            mint,
         );
         format!("{}/api/v1/playback/proxy/{token}", self.public_url)
     }
@@ -366,11 +365,18 @@ pub async fn playback_proxy(
     Path(token): Path<String>,
     request_headers: HeaderMap,
 ) -> Response {
-    let target = state.proxy_targets.read().await.get(&token).cloned();
+    let now = std::time::Instant::now();
+    let (target, needs_touch) = {
+        let targets = state.proxy_targets.read().await;
+        (
+            targets.get(&token).cloned(),
+            targets.needs_touch(&token, now),
+        )
+    };
     let Some(target) = target else {
         return media_proxy_error(StatusCode::NOT_FOUND, "Playback session was not found");
     };
-    if target.expires_at <= std::time::Instant::now() {
+    if needs_touch && !state.proxy_targets.write().await.touch(&token, now) {
         state.proxy_targets.write().await.remove(&token);
         return media_proxy_error(
             StatusCode::GONE,

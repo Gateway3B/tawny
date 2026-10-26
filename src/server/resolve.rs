@@ -166,12 +166,18 @@ impl AppServerState {
             .filter(|_| ytdlp_verified == Some(true))
             .and_then(|source| source.tracks.first())
             .map(|track| track.url.clone());
+        // yt-dlp's HLS playlist, which is all a live stream has. Its segments
+        // are not gated, so the session is held like a verified one: resolving
+        // a live stream again on every ask sent each retry, tab and device
+        // straight to YouTube, which soon flags the server as a bot.
+        let mut hls_from_ytdlp = false;
         if let Some(source) = ytdlp_source {
             crate::telemetry::diagnostic(crate::telemetry::Diagnostic::PlaybackTracksResolved);
             provider_sources.push(source);
         } else if let Some(source) = ytdlp_hls_source(&ytdlp_formats) {
             crate::telemetry::diagnostic(crate::telemetry::Diagnostic::PlaybackHlsFallback);
             provider_sources.push(source);
+            hls_from_ytdlp = true;
         }
 
         let ytdlp_urls = Self::ytdlp_url_map(&ytdlp_formats);
@@ -292,7 +298,7 @@ impl AppServerState {
                     alternatives: provider_sources,
                     fallback_url,
                 },
-                reusable,
+                reusable: reusable || hls_from_ytdlp,
             });
         }
 
