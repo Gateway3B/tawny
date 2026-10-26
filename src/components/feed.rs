@@ -171,6 +171,7 @@ pub fn Feed() -> Element {
                         page,
                         last: page + 1 == page_count,
                         has_more,
+                        empty_message: "Try another filter, or follow some channels from Explore.".to_string(),
                     }
                 }
 
@@ -186,12 +187,15 @@ pub fn Feed() -> Element {
 
 /// One page of the feed: its own cached read, so the pages above it stay put
 /// while it loads.
+///
+/// Also the search page's list of followed uploads, with its own `empty_message`.
 #[component]
-fn FeedPageView(
+pub(super) fn FeedPageView(
     query: ReadSignal<FeedQuery>,
     page: usize,
     last: ReadSignal<bool>,
     has_more: Signal<bool>,
+    empty_message: String,
 ) -> Element {
     let feed = use_cached(get_feed_page, (query(), page));
     // Copied out when the page's answer changes, not on every render.
@@ -232,10 +236,7 @@ fn FeedPageView(
                     }
                 }
                 if page == 0 || !found.videos.is_empty() {
-                    VideoGrid {
-                        videos,
-                        empty_message: "Try another filter, or follow some channels from Explore.".to_string(),
-                    }
+                    VideoGrid { videos, empty_message: empty_message.clone() }
                 }
             }
         }

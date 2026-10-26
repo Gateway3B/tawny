@@ -22,6 +22,27 @@ impl FeedFilter {
     }
 }
 
+/// Which list the search page shows with nothing typed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DiscoverList {
+    /// What YouTube recommended beside recent watches.
+    #[default]
+    Recommended,
+    /// The newest unwatched uploads from followed channels.
+    Following,
+}
+
+impl DiscoverList {
+    pub const ALL: [Self; 2] = [Self::Recommended, Self::Following];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Recommended => "Recommended",
+            Self::Following => "Following",
+        }
+    }
+}
+
 /// What a search looks for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExploreFilter {

@@ -50,6 +50,10 @@ pub struct SubscriptionChange {
 pub const HISTORY_LIMIT: usize = 250;
 
 #[cfg_attr(not(feature = "server"), allow(dead_code))]
+/// How many recommendations one page of the search page's list holds.
+pub const RECOMMENDATION_PAGE_SIZE: usize = 24;
+
+#[cfg_attr(not(feature = "server"), allow(dead_code))]
 /// How many videos one feed page holds.
 pub const FEED_PAGE_SIZE: usize = 24;
 

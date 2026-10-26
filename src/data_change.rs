@@ -6,8 +6,8 @@
 //! something new, add it here.
 
 use crate::api::{
-    get_channel_details, get_feed_page, get_playlist, get_playlist_previews, get_video_details,
-    get_videos, get_viewer,
+    get_channel_details, get_feed_page, get_playlist, get_playlist_previews, get_recommendations,
+    get_video_details, get_videos, get_viewer,
 };
 use g3_cache::invalidate_cached;
 
@@ -47,8 +47,15 @@ pub fn invalidate(change: DataChange) {
             invalidate_cached(get_playlist);
             invalidate_cached(get_playlist_previews);
         }
-        DataChange::Queue | DataChange::History => invalidate_cached(get_viewer),
+        DataChange::Queue => invalidate_cached(get_viewer),
+        // Recommendations are drawn from history and leave out what was
+        // watched, so both move them.
+        DataChange::History => {
+            invalidate_cached(get_viewer);
+            invalidate_cached(get_recommendations);
+        }
         DataChange::Watched => {
+            invalidate_cached(get_recommendations);
             invalidate_cached(get_feed_page);
             invalidate_cached(get_playlist);
             invalidate_cached(get_videos);

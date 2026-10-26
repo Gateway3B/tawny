@@ -48,6 +48,20 @@ pub async fn get_videos(ids: Vec<String>) -> Result<Vec<Video>> {
         .map_err(server_error)?)
 }
 
+/// One page of what YouTube recommended beside the videos this account
+/// watched lately: the search page with nothing typed.
+#[get(
+    "/api/v1/recommendations?page",
+    state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
+    owner: crate::auth::Owner
+)]
+pub async fn get_recommendations(page: usize) -> Result<FeedPage> {
+    Ok(state
+        .recommendations(&owner.0, page)
+        .await
+        .map_err(server_error)?)
+}
+
 /// A playlist and its videos, or `None` when this account has no such
 /// playlist.
 #[get(

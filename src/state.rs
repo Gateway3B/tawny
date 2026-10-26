@@ -126,6 +126,10 @@ pub struct AppState {
     /// page and coming back finds the same search. A reload clears them.
     pub explore_search: Signal<String>,
     pub explore_results: Signal<Option<crate::models::SearchResults>>,
+    /// The list the search page shows with nothing typed, and how many of its
+    /// pages are loaded: kept for the same reason as `feed_pages`.
+    pub explore_discover: Signal<crate::models::DiscoverList>,
+    pub explore_discover_pages: Signal<usize>,
     pub channel_tab: Signal<FeedFilter>,
     /// What the feed was showing, kept so leaving it and coming back finds the
     /// same filters and as many pages as were loaded, which is what lets a
@@ -1459,6 +1463,8 @@ pub fn AppStateProvider(children: Element) -> Element {
         explore_filter: Signal::new(crate::models::ExploreFilter::All),
         explore_search: Signal::new(String::new()),
         explore_results: Signal::new(None),
+        explore_discover: Signal::new(crate::models::DiscoverList::default()),
+        explore_discover_pages: Signal::new(1),
         channel_tab: Signal::new(FeedFilter::All),
         feed_group: Signal::new(crate::models::FeedGroup::All),
         feed_duration: Signal::new(None),

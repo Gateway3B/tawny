@@ -1,7 +1,9 @@
 use crate::{
-    api::{get_feed_page, search_catalog, search_catalog_page},
+    api::{get_feed_page, get_recommendations, search_catalog, search_catalog_page},
     app::Route,
-    models::{Channel, ExploreFilter, FeedFilter, FeedGroup, FeedQuery, Video},
+    models::{
+        AppSettings, Channel, DiscoverList, ExploreFilter, FeedFilter, FeedGroup, FeedQuery, Video,
+    },
     state::AppState,
 };
 use dioxus::prelude::*;
@@ -12,10 +14,7 @@ use g3_ui::{
     SegmentGroup, Shelf, Space, Spinner, Stack, StackAlign, Text, TextTone,
 };
 
-use super::{PageHeader, VideoGrid, VideoGridSkeleton};
-
-/// How many recent videos stand in for a query on an empty search page.
-const SUGGESTION_COUNT: usize = 24;
+use super::{PageHeader, VideoGrid, VideoGridSkeleton, feed::FeedPageView, use_duration_hydration};
 
 /// How many matches a query lays out before the reader asks for more.
 ///
@@ -39,23 +38,15 @@ pub fn Explore() -> Element {
         let _ = (needle(), explore_filter());
         visible_count.set(RESULT_PAGE_SIZE);
     });
-    // With nothing typed, the page suggests the newest unwatched uploads from
-    // what the viewer follows: the first page of an unwatched feed, which is
-    // also what type-ahead filters before Enter asks the server.
-    let thresholds = (&*app_state.settings.read()).into();
+    // With nothing typed, the page lists what YouTube recommended beside the
+    // videos watched lately, or the newest unwatched uploads from followed
+    // channels (`DiscoverLists`). Type-ahead filters the first page of each,
+    // the same cached reads, before Enter asks the server.
     let suggestions = use_cached(
         get_feed_page,
-        (
-            FeedQuery {
-                group: FeedGroup::All,
-                kind: FeedFilter::All,
-                duration: None,
-                hide_watched: true,
-                thresholds,
-            },
-            0,
-        ),
+        (following_query(&app_state.settings.read()), 0),
     );
+    let recommendations = use_cached(get_recommendations, (0,));
     // What the page shows: the server's results for this query, or the
     // suggestions matched on the device. Worked out when one of those, the
     // filter or the page size changes, not on every render (a keystroke
@@ -81,9 +72,19 @@ pub fn Explore() -> Element {
             Some(Ok(feed)) => &feed.videos,
             Some(Err(_)) => &[],
         };
+        let recommendations = recommendations.read();
+        let recommended: &[Video] = match &*recommendations {
+            Some(Ok(found)) => &found.videos,
+            _ => &[],
+        };
         let needle = needle.read();
+        // `DiscoverLists` has the page with nothing typed.
+        if needle.is_empty() {
+            return Shown::default();
+        }
         app_state.with_viewer(|viewer| {
-            let (videos, channels) = local_matches(suggested, &viewer.subscriptions, &needle);
+            let (videos, channels) =
+                local_matches(recommended, suggested, &viewer.subscriptions, &needle);
             paged(videos, channels, filter, page)
         })
     });
@@ -109,6 +110,7 @@ pub fn Explore() -> Element {
         let shown = shown.read();
         (shown.loading, shown.result_count, shown.remaining)
     };
+    let discovering = needle.read().is_empty() && filter != ExploreFilter::Channels;
     // Enter runs the remote search; typing filters the cache as it goes.
     let run_search = move |query: String| {
         let query = query.trim().to_string();
@@ -202,10 +204,8 @@ pub fn Explore() -> Element {
                         Spinner {}
                     }
                 }
-                Text { tone: TextTone::Secondary,
-                    if needle.read().is_empty() {
-                        "The newest unwatched uploads from channels you follow"
-                    } else {
+                if !needle.read().is_empty() {
+                    Text { tone: TextTone::Secondary,
                         "{result_count} results for “{search_value}”. Press Enter to search online."
                     }
                 }
@@ -228,37 +228,177 @@ pub fn Explore() -> Element {
                         }
                     }
                 }
-                if loading {
-                    VideoGridSkeleton { count: 8 }
+                if discovering {
+                    DiscoverLists {}
                 } else {
-                    VideoGrid { videos: shown.map(|shown| &shown.videos), empty_message: "No matches yet. Check the source connection or try another search.".to_string() }
-                }
-                InfiniteScroll {
-                    loading: searching(),
-                    complete: remaining == 0 && !has_next_page,
-                    on_load: load_more,
+                    if loading {
+                        VideoGridSkeleton { count: 8 }
+                    } else {
+                        VideoGrid { videos: shown.map(|shown| &shown.videos), empty_message: "No matches yet. Check the source connection or try another search.".to_string() }
+                    }
+                    InfiniteScroll {
+                        loading: searching(),
+                        complete: remaining == 0 && !has_next_page,
+                        on_load: load_more,
+                    }
                 }
             }
         }
     }
 }
 
-/// What the device has for `needle`: followed channels and suggested videos
-/// that match, or with no query, the suggestions themselves. Enter asks the
-/// server, which searches the whole catalog.
+/// The followed channels' newest unwatched uploads, as the search page asks
+/// for them.
+fn following_query(settings: &AppSettings) -> FeedQuery {
+    FeedQuery {
+        group: FeedGroup::All,
+        kind: FeedFilter::All,
+        duration: None,
+        hide_watched: true,
+        thresholds: settings.into(),
+    }
+}
+
+/// The search page with nothing typed: what YouTube recommended beside recent
+/// watches, or the newest uploads from followed channels, each a list that
+/// loads another page as the reader nears its end.
+#[component]
+fn DiscoverLists() -> Element {
+    let app_state = use_context::<AppState>();
+    let mut list = app_state.explore_discover;
+    // Kept in the app state like the feed's, so a returning scroll position
+    // has as many pages to land in as were loaded.
+    let mut pages = app_state.explore_discover_pages;
+    // Whether the last page on screen said there is more.
+    let has_more = use_signal(|| false);
+    let query = use_memo(move || following_query(&app_state.settings.read()));
+    // A different question starts again at one page. The first run is not
+    // one: the list and its pages are those this screen was left with.
+    let mut asked = use_signal(|| query.peek().clone());
+    use_effect(move || {
+        let current = query.read().clone();
+        if *asked.peek() != current {
+            asked.set(current);
+            pages.set(1);
+        }
+    });
+    let load_next_page = use_callback(move |_: ()| {
+        if *has_more.peek() {
+            pages += 1;
+        }
+    });
+    let shown = list();
+    let page_count = pages();
+
+    rsx! {
+        Shelf { aria_label: "Suggestions", gap: Space::Sm,
+            for option in DiscoverList::ALL {
+                Chip {
+                    key: "{option.label()}",
+                    selected: shown == option,
+                    onclick: move |_| {
+                        if *list.peek() != option {
+                            list.set(option);
+                            pages.set(1);
+                        }
+                    },
+                    "{option.label()}"
+                }
+            }
+        }
+        Text { tone: TextTone::Secondary,
+            match shown {
+                DiscoverList::Recommended => "Suggested by YouTube beside videos you watched",
+                DiscoverList::Following => "The newest unwatched uploads from channels you follow",
+            }
+        }
+        // Keyed by the list as well as the page, so switching lists builds
+        // fresh pages rather than handing one list's page to the other.
+        for page in 0..page_count {
+            match shown {
+                DiscoverList::Recommended => rsx! {
+                    RecommendationPageView {
+                        key: "recommended-{page}",
+                        page,
+                        last: page + 1 == page_count,
+                        has_more,
+                    }
+                },
+                DiscoverList::Following => rsx! {
+                    FeedPageView {
+                        key: "following-{page}",
+                        query,
+                        page,
+                        last: page + 1 == page_count,
+                        has_more,
+                        empty_message: "Follow some channels and their new uploads will show up here.".to_string(),
+                    }
+                },
+            }
+        }
+        InfiniteScroll {
+            loading: false,
+            complete: !has_more(),
+            on_load: load_next_page,
+        }
+    }
+}
+
+/// One page of recommendations: its own cached read, so the pages above it
+/// stay put while it loads, with a skeleton until it arrives.
+#[component]
+fn RecommendationPageView(page: usize, last: ReadSignal<bool>, has_more: Signal<bool>) -> Element {
+    let found = use_cached(get_recommendations, (page,));
+    let videos = use_memo(move || match &*found.read() {
+        Some(Ok(found)) => found.videos.clone(),
+        _ => Vec::new(),
+    });
+    let candidates = use_memo(move || match &*found.read() {
+        Some(Ok(found)) => found.unknown_durations.clone(),
+        _ => Vec::new(),
+    });
+    use_duration_hydration(candidates);
+    // The last page decides whether there is another.
+    use_effect(move || {
+        let more = matches!(&*found.read(), Some(Ok(found)) if found.has_more);
+        if last() && *has_more.peek() != more {
+            has_more.set(more);
+        }
+    });
+
+    match &*found.read() {
+        None => rsx! { VideoGridSkeleton { count: if page == 0 { 8 } else { 4 } } },
+        Some(Err(_)) if page == 0 => rsx! {
+            VideoGrid {
+                videos: Vec::new(),
+                empty_message: "Could not load recommendations. Check the server connection.".to_string(),
+            }
+        },
+        Some(Err(_)) => rsx! {},
+        Some(Ok(found)) if page == 0 || !found.videos.is_empty() => rsx! {
+            VideoGrid {
+                videos,
+                empty_message: "Watch a few videos and YouTube's suggestions for them will show up here.".to_string(),
+            }
+        },
+        Some(Ok(_)) => rsx! {},
+    }
+}
+
+/// What the device has for a typed `needle`: followed channels, and
+/// recommended and suggested videos, that match. Enter asks the server, which
+/// searches the whole catalog.
 fn local_matches<'a>(
+    recommended: &'a [Video],
     suggestions: &'a [Video],
     subscriptions: &'a [Channel],
     needle: &str,
 ) -> (Vec<&'a Video>, Vec<&'a Channel>) {
-    if needle.is_empty() {
-        return (
-            suggestions.iter().take(SUGGESTION_COUNT).collect(),
-            Vec::new(),
-        );
-    }
-    let videos = suggestions
+    let mut seen = std::collections::HashSet::new();
+    let videos = recommended
         .iter()
+        .chain(suggestions)
+        .filter(|video| seen.insert(video.id.as_str()))
         .filter(|video| {
             video.title.to_lowercase().contains(needle)
                 || video.channel_name.to_lowercase().contains(needle)

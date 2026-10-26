@@ -11,7 +11,8 @@
 use super::*;
 use crate::models::{
     DurationFilter, FEED_PAGE_SIZE, FeedFilter, FeedGroup, FeedPage, FeedQuery, HISTORY_LIMIT,
-    LibraryChange, LibraryChanges, PlaylistContents, PlaylistPreview, SubscriptionChange, Viewer,
+    LibraryChange, LibraryChanges, PlaylistContents, PlaylistPreview, RECOMMENDATION_PAGE_SIZE,
+    SubscriptionChange, Viewer,
 };
 
 /// Every column a `DbVideo` reads.
@@ -267,6 +268,76 @@ impl AppServerState {
             .take(0)?)
     }
 
+    /// What YouTube recommended beside the videos this account opened lately,
+    /// for the search page with nothing typed.
+    ///
+    /// Nothing new is stored for this: every watch page's related videos are
+    /// already kept in `video_detail_cache` and in the catalog, so this reads
+    /// them back for the newest history. It is derived from history, so
+    /// clearing history clears it. Watched and already-opened videos are left
+    /// out. One page of [`RECOMMENDATION_PAGE_SIZE`], for an endless list.
+    pub async fn recommendations(&self, owner: &str, page: usize) -> Result<FeedPage> {
+        let (_, history) = self.queue_and_history(owner).await?;
+        let sources = history
+            .iter()
+            .take(RECOMMENDATION_SOURCES)
+            .map(|entry| entry.video_id.clone())
+            .collect::<Vec<_>>();
+        if sources.is_empty() {
+            return Ok(FeedPage::default());
+        }
+        let cached: Vec<DbRelatedCache> = self
+            .db
+            .query("SELECT video_id, payload_json FROM video_detail_cache WHERE video_id IN $ids")
+            .bind(("ids", sources.clone()))
+            .await?
+            .check()?
+            .take(0)?;
+        // Newest watch first, so its shelf leads.
+        let shelves = sources
+            .iter()
+            .filter_map(|id| cached.iter().find(|row| &row.video_id == id))
+            .filter_map(|row| serde_json::from_str::<RelatedShelf>(&row.payload_json).ok())
+            .map(|shelf| {
+                shelf
+                    .related_videos
+                    .into_iter()
+                    .map(|video| video.id)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let watched = self.watched_ids(owner).await?;
+        let skip = history
+            .iter()
+            .map(|entry| entry.video_id.as_str())
+            .chain(watched.iter().map(String::as_str))
+            .collect::<HashSet<_>>();
+        // The whole ordering, then this page of it. A few hundred ids at most,
+        // and computing it each time keeps pages from needing server state.
+        let picked = interleave_shelves(&shelves, &skip, usize::MAX);
+        let start = page * RECOMMENDATION_PAGE_SIZE;
+        let ids = picked
+            .iter()
+            .skip(start)
+            .take(RECOMMENDATION_PAGE_SIZE)
+            .cloned()
+            .collect::<Vec<_>>();
+        let videos = self.videos_by_id(owner, &ids).await?;
+        // Related shelves often carry no length; the screen fills them in, as
+        // it does for the feed.
+        let unknown_durations = videos
+            .iter()
+            .filter(|video| video.duration_seconds == 0 && !video.is_live)
+            .map(|video| video.id.clone())
+            .collect();
+        Ok(FeedPage {
+            videos,
+            has_more: picked.len() > start + RECOMMENDATION_PAGE_SIZE,
+            without_duration: 0,
+            unknown_durations,
+        })
+    }
+
     /// Videos by id, in the order asked, with this viewer's progress. Ids the
     /// catalog does not hold are left out.
     pub async fn videos_by_id(&self, owner: &str, ids: &[String]) -> Result<Vec<Video>> {
@@ -487,6 +558,52 @@ impl AppServerState {
             .take(0)?;
         Ok(rows.into_iter().map(Into::into).collect())
     }
+}
+
+/// How many recent watches the search page's recommendations draw on. Enough
+/// for a list worth scrolling: each watch page offers about twenty.
+const RECOMMENDATION_SOURCES: usize = 40;
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbRelatedCache {
+    video_id: String,
+    payload_json: String,
+}
+
+/// The one part of a cached `VideoDetails` the recommendations read. Parsing
+/// only this skips the description and comments in each payload.
+#[derive(Deserialize)]
+struct RelatedShelf {
+    #[serde(default)]
+    related_videos: Vec<RelatedId>,
+}
+
+#[derive(Deserialize)]
+struct RelatedId {
+    id: String,
+}
+
+/// One id from each shelf in turn, then the second from each, and so on, so
+/// one video's shelf does not fill the page. Skips ids in `skip` and repeats.
+fn interleave_shelves(shelves: &[Vec<String>], skip: &HashSet<&str>, limit: usize) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut picked = Vec::new();
+    let longest = shelves.iter().map(Vec::len).max().unwrap_or(0);
+    for rank in 0..longest {
+        for shelf in shelves {
+            if picked.len() >= limit {
+                return picked;
+            }
+            let Some(id) = shelf.get(rank) else {
+                continue;
+            };
+            if skip.contains(id.as_str()) || !seen.insert(id.as_str()) {
+                continue;
+            }
+            picked.push(id.clone());
+        }
+    }
+    picked
 }
 
 /// The SQL for one length bucket. Videos and Shorts have separate edges; a
@@ -1334,6 +1451,92 @@ mod tests {
         let viewer = state.viewer(&owner).await.unwrap();
         assert!(viewer.playlist("later").is_none());
         assert_eq!(viewer.queue, ["a1"]);
+    }
+
+    #[test]
+    fn shelves_take_turns_without_repeats() {
+        let shelf = |ids: &[&str]| ids.iter().map(|id| id.to_string()).collect::<Vec<_>>();
+        let shelves = [shelf(&["a", "b", "c"]), shelf(&["x", "a", "y"])];
+        let skip = HashSet::from(["b"]);
+        assert_eq!(
+            interleave_shelves(&shelves, &skip, 10),
+            ["a", "x", "c", "y"]
+        );
+        assert_eq!(interleave_shelves(&shelves, &skip, 2), ["a", "x"]);
+    }
+
+    #[tokio::test]
+    async fn recommendations_come_from_what_was_watched() {
+        let (state, owner) = state_and_owner().await;
+        let related = [
+            video("r1", "UCr", 1, 600, false),
+            video("r2", "UCr", 2, 600, false),
+            video("seen", "UCr", 3, 600, false),
+            video("opened", "UCr", 4, 600, false),
+        ];
+        store(&state, &related).await;
+        store(&state, &[video("w", "UCw", 5, 600, false)]).await;
+        state
+            .write_video_details_cache(&VideoDetails {
+                video: video("w", "UCw", 5, 600, false),
+                channel: None,
+                description: String::new(),
+                like_count: 0,
+                dislike_count: 0,
+                captions: Vec::new(),
+                chapters: Vec::new(),
+                preview_frames: None,
+                related_videos: related.to_vec(),
+                comments: CommentsPage::default(),
+                remote_available: true,
+            })
+            .await
+            .unwrap();
+        state
+            .save_progress(
+                &owner,
+                &[VideoProgress {
+                    video_id: "seen".into(),
+                    watched: true,
+                    progress_seconds: 600,
+                    audio_only: false,
+                }],
+            )
+            .await
+            .unwrap();
+        state.record_history(&owner, "opened").await.unwrap();
+        state.record_history(&owner, "w").await.unwrap();
+
+        let found = state.recommendations(&owner, 0).await.unwrap();
+        assert_eq!(ids(&found.videos), ["r1", "r2"]);
+        assert!(!found.has_more);
+        assert!(
+            state
+                .recommendations(&owner, 1)
+                .await
+                .unwrap()
+                .videos
+                .is_empty()
+        );
+
+        let other = state.accounts().create_guest().await.unwrap().id;
+        assert!(
+            state
+                .recommendations(&other, 0)
+                .await
+                .unwrap()
+                .videos
+                .is_empty()
+        );
+        state.clear_history(&owner).await.unwrap();
+        assert!(
+            state
+                .recommendations(&owner, 0)
+                .await
+                .unwrap()
+                .videos
+                .is_empty()
+        );
     }
 
     #[tokio::test]
