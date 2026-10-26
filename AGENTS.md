@@ -74,10 +74,14 @@ src/models/             Types shared by client and server
 src/components/         Screens and the shell; player.rs is the persistent player
 src/cache.rs            use_persistent_signal (per-device settings)
 src/library_sync.rs     Refetching what another device changed; catching up a paused player
+src/playback_resolver.rs Where the player gets a session: the phone (Android) or the server
+src/local_streams.rs    Android: resolving playback on the phone (yt-dlp in the app), see docs/on-device-playback.md
+src/local_relay.rs      Android: 127.0.0.1 relay that hands phone-resolved streams to the player
 src/subscriptions_io.rs Importing and exporting subscription lists
 assets/                 tawny_transport.js and tawny_player_controls.js (the player's JS side)
 database/schema/        One .surql file per table (desired state, not migrations)
 docker/extractor/       The yt-dlp sidecar image
+android/localstreams/   The Android module behind local_streams: Chaquopy Python, yt-dlp, V8 sandbox
 docs/                   Human and agent documentation; docs/dioxus/ for the framework
 tests/                  Node tests for the player JS; tests/ui for Playwright
 ```
@@ -236,6 +240,7 @@ just dev                  # or reuse a server already on :8080
 - [docs/dioxus/patterns.md](docs/dioxus/patterns.md): Dioxus as used here, and its sharp edges
 - [docs/architecture.md](docs/architecture.md): the system, the caches, the server
 - [docs/playback.md](docs/playback.md), [docs/youtube.md](docs/youtube.md): the domain engines
+- [docs/on-device-playback.md](docs/on-device-playback.md): Android resolving and streaming without the server
 - [docs/deployment.md](docs/deployment.md), [docs/docker.md](docs/docker.md): images and hosting
 - The g3 crates' READMEs and source:
   [g3-ui](https://github.com/g3techhq/g3-ui),

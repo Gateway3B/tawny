@@ -8,7 +8,9 @@ use dioxus::prelude::*;
 use g3_route_transitions::ROUTE_TRANSITION_OVERLAY_REGION_CLASS;
 
 use super::{AccountSettings, BackendSettings, PageHeader};
-use dioxus_icons::lucide::{Captions, Download, Gauge, Languages, RotateCw, ShieldCheck, Upload};
+use dioxus_icons::lucide::{
+    Captions, Download, Gauge, Languages, RotateCw, ShieldCheck, Smartphone, Upload,
+};
 use g3_ui::{
     Button, ButtonFill, ButtonSize, Card, Color, Content, ContentWidth, Grid, GridColumns, Input,
     InputType, Item, List, ListLines, ListVariant, SegmentButton, SegmentGroup, Select,
@@ -162,6 +164,7 @@ pub fn SettingsPage() -> Element {
     let audio_language = use_signal(|| settings.preferred_audio_language.clone());
     let caption_language = use_signal(|| settings.preferred_caption_language.clone());
     let prefer_sabr = use_signal(|| settings.prefer_sabr);
+    let stream_from_device = use_signal(|| settings.stream_from_device);
     let appearance = use_signal(|| settings.appearance);
     let platform_style = use_signal(|| settings.platform_style);
     let hide_watched = use_signal(|| settings.hide_watched);
@@ -304,6 +307,22 @@ pub fn SettingsPage() -> Element {
                                         onchange: move |enabled| app_state.settings.write().prefer_sabr = enabled,
                                     }
                                 },
+                            }
+                            // A constant per build, so server and client render alike.
+                            if crate::playback_resolver::DEVICE_RESOLVE_AVAILABLE {
+                                Item {
+                                    wrap: true,
+                                    start: rsx! { Smartphone { size: 19 } },
+                                    label: "Stream from this phone",
+                                    description: "Get video straight from YouTube instead of through your server, which helps far from home. Your server is used whenever this fails.",
+                                    end: rsx! {
+                                        Toggle {
+                                            checked: stream_from_device,
+                                            aria_label: "Stream from this phone",
+                                            onchange: move |enabled| app_state.settings.write().stream_from_device = enabled,
+                                        }
+                                    },
+                                }
                             }
                         }
                     }

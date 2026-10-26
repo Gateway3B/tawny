@@ -10,7 +10,13 @@ mod db;
 #[cfg(feature = "server")]
 mod health;
 mod library_sync;
+// The relay is Android's; the server build compiles it only to test it.
+#[cfg(any(target_os = "android", all(test, feature = "server")))]
+mod local_relay;
+#[cfg(target_os = "android")]
+mod local_streams;
 mod models;
+mod playback_resolver;
 mod privacy;
 #[cfg(feature = "server")]
 mod server;

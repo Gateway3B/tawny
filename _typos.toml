@@ -9,6 +9,8 @@ extend-exclude = [
 ]
 
 [default.extend-words]
+# The Python CA bundle package the on-device resolver installs.
+certifi = "certifi"
 dioxus = "dioxus"
 partee = "partee"
 # A crate named in the upstream Dioxus notes (docs/dioxus/architecture).

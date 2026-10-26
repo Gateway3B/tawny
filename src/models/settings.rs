@@ -75,6 +75,11 @@ pub struct AppSettings {
     #[serde(default = "default_caption_language")]
     pub preferred_caption_language: String,
     pub prefer_sabr: bool,
+    /// On Android, resolve playback on the phone and stream straight from
+    /// YouTube, asking the server only when that fails. Far from home this
+    /// saves sending every byte through it.
+    #[serde(default = "default_true")]
+    pub stream_from_device: bool,
     pub po_token_provider_url: Option<String>,
     /// How each playlist is arranged, keyed by playlist id.
     ///
@@ -224,6 +229,7 @@ impl Default for AppSettings {
             preferred_audio_language: default_audio_language(),
             preferred_caption_language: default_caption_language(),
             prefer_sabr: true,
+            stream_from_device: true,
             po_token_provider_url: None,
             playlist_views: BTreeMap::new(),
         }

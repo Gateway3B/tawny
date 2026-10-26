@@ -1,7 +1,6 @@
 use crate::{
     api::{
         get_comments_page, get_sponsor_segments, get_video_details, get_video_progress, get_videos,
-        resolve_playback,
     },
     app::Route,
     models::{
@@ -9,6 +8,7 @@ use crate::{
         PlaybackSession, PlaybackSource, SponsorAction, SponsorBlockSettings, SponsorSegment,
         Video, VideoChapter, VideoComment, VideoDetails, VideoPreviewFrames,
     },
+    playback_resolver::resolve_session,
     state::AppState,
 };
 use dioxus::prelude::*;
@@ -659,6 +659,7 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
     let mut auto_retries = use_signal(|| 0_u8);
     let mut resolve_nonce = use_signal(|| 0_u32);
     let prefer_sabr = app_state.settings.read().prefer_sabr;
+    let from_device = app_state.settings.read().stream_from_device;
     let preferred_audio_language = app_state.settings.read().preferred_audio_language.clone();
 
     // The resolved session is tagged with the video it belongs to. `use_resource`
@@ -675,7 +676,14 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
                 Some(video) => {
                     let id = video.id.clone();
                     let fresh = stale_session_for.peek().as_deref() == Some(id.as_str());
-                    Some((id, resolve_playback(video.id, prefer_sabr, fresh).await))
+                    // A live stream is always played through the server (the
+                    // device resolver has no live path), so asking the phone
+                    // first would only add the seconds it takes to say no.
+                    let from_device = from_device && !video.is_live;
+                    Some((
+                        id,
+                        resolve_session(video.id, prefer_sabr, fresh, from_device).await,
+                    ))
                 }
                 None => None,
             }
@@ -714,7 +722,7 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
             return;
         }
         warmed_next.set(Some(next.clone()));
-        warm_playback(next.clone(), prefer_sabr);
+        warm_playback(next.clone(), prefer_sabr, from_device);
         spawn(async move {
             if let Ok(videos) = get_videos(vec![next.clone()]).await
                 && let Some(video) = videos.into_iter().find(|video| video.id == next)
@@ -1773,13 +1781,14 @@ fn local_details(video: Video, related_videos: Vec<Video>) -> VideoDetails {
     }
 }
 
-/// Have the server resolve a video's playback now, ahead of the player asking.
+/// Resolve a video's playback now, ahead of the player asking.
 ///
-/// The answer is dropped: what matters is that the server holds the session,
-/// or is already resolving it, when the player's own request arrives.
-fn warm_playback(video_id: String, prefer_sabr: bool) {
+/// The answer is dropped: what matters is that the server (or this phone, see
+/// `playback_resolver`) holds the session, or is already resolving it, when
+/// the player's own request arrives.
+fn warm_playback(video_id: String, prefer_sabr: bool, from_device: bool) {
     spawn(async move {
-        let _ = resolve_playback(video_id, prefer_sabr, false).await;
+        let _ = resolve_session(video_id, prefer_sabr, false, from_device).await;
     });
 }
 
@@ -1988,7 +1997,12 @@ fn VideoDetailInner(id: String) -> Element {
             .as_ref()
             .is_none_or(|active| active.id != warm_video_id)
         {
-            warm_playback(warm_video_id, app_state.settings.peek().prefer_sabr);
+            let settings = app_state.settings.peek();
+            warm_playback(
+                warm_video_id,
+                settings.prefer_sabr,
+                settings.stream_from_device,
+            );
         }
     });
 

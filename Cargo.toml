@@ -62,11 +62,25 @@ web-time = "1.1.0"
 web-sys = { version = "0.3", features = ["Location", "Storage", "Window"], optional = true }
 dirs = { version = "6", optional = true }
 
+# Resolving playback on an Android phone (`src/local_streams.rs`) calls its
+# Kotlin module through JNI, as g3-native-plugins does.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21.1"
+ndk-context = "0.1.1"
+
 [features]
 default = ["web"]
 web = ["dioxus/web", "dep:web-sys", "g3-cache/web"]
 desktop = ["dioxus/desktop", "dep:dirs", "g3-auth/desktop", "g3-cache/desktop"]
-mobile = ["dioxus/mobile", "tokio", "dep:dirs", "g3-auth/mobile", "g3-cache/mobile"]
+mobile = [
+    "dioxus/mobile",
+    "tokio",
+    "dep:dirs",
+    "g3-auth/mobile",
+    "g3-cache/mobile",
+    # The local relay that hands streams resolved on the phone to the player.
+    "reqwest",
+]
 server = [
     "dep:uuid",
     "dep:tracing",
