@@ -71,9 +71,7 @@ labels, source files or runtime environment. Do not export builder caches.
 ## Remaining rollout
 
 This milestone provides public discovery and native update presentation.
-Private legal review and exact-set receipts are implemented in the subsequent
-legal milestone below. A bounded private account download follows in the data milestone. Terms
-authorization, independent deletion recovery and offsite restore replay remain work. Those need Tawny's
+A bounded private account download follows in the data milestone. Independent deletion recovery and offsite restore replay remain work. Those need Tawny's
 own account/data inventory and reviewed policy configuration. The catalog
 service, hostname, published app listings, store distribution and CI app
 credentials still need deployment/configuration. No policy was published and
@@ -135,53 +133,13 @@ completed registration. An HTTP test verifies no-store headers on account
 successes, failures and missing endpoints through the CDN guard. Hydrated
 confirmation/account-switch and real-device cache cleanup remain unverified.
 
-## Private legal review
+## Legal review (removed)
 
-About shows the published `tawny`/`en` document set, exact revisions, effective
-dates and change summaries. An authenticated guest or registered account can
-explicitly acknowledge a notice or accept the applicable terms. The backend
-resolves the current set itself and re-fetches before recording an action; a
-stale digest, wrong account or unreviewed consent purpose is rejected. Notice
-acknowledgment does not satisfy a terms requirement or grant processing consent.
-
-Receipts live only in this app server's `brand_legal_receipt` table, with a
-server timestamp, account owner, account-derived subject digest, app, set
-digest and action. `expected_owner` is a review binding; the session chooses
-the account. Private status/actions are protected under `/api/v1/auth/` with
-no-store responses. Legal actions are limited to three per minute per session.
-No private status or receipt enters the shared public catalog or its cache.
-
-The receipt transaction touches the account row so it conflicts with concurrent
-deletion. Primary deletion erases the owner's receipts in the same transaction
-as its library/account. Later receipt writes fail instead of recreating an
-account or leaving orphaned evidence. The new table is part of the app's
-automatically embedded schema and owner-table deletion inventory. Backups
-still contain historical receipt copies until the operator's retention or
-future independent replay removes them. A bounded owner-projected account download is now implemented; see
-[the data inventory](privacy-data.md) for scope and remaining operator work.
-
-A dismissible change notice is keyed to account and document-set digest. It
-never counts dismissal as acceptance. About and Settings stay accessible, and
-store-update notices take precedence so the two do not compete for focus.
-Public update notices also remain mounted on the backend setup screen. A
-read-only public copy of legal documents can be read without an account or
-backend connection when the catalog is available/saved; it provides no private
-action or acceptance claim.
-
-No shared legal set has been published by this implementation. Server operators
-must review applicability, including their own processing/hosting obligations,
-before publishing documents for users. No consent purposes or backend terms
-enforcement are enabled. This is a notice/receipt pilot, not a compliance claim.
-
-Validation: 84 web and 168 server tests pass (one existing live YouTube test
-ignored), with strict Clippy for web/server/mobile/desktop on the host. Tests
-cover two-account isolation, exact revisions, terms-versus-notice semantics,
-rejected purposes, erasure, late writes and twelve concurrent deletion/receipt
-interleavings. Read-only legal markup was inspected at phone/wide dimensions
-in both modes/themes with published/missing synthetic content. No actual legal
-text was published or accepted. Hydrated alerts/acknowledgments, real native
-flows, database-editor WebSocket permissions and production/offsite recovery
-remain unverified for this milestone.
+Tawny has no legal review. About shows no terms or privacy documents, there is
+no change notice, and there are no `/api/v1/auth/legal-review` or
+`legal-action` endpoints or `G3_LEGAL_ENFORCEMENT` gate. Receipts recorded
+before the removal stay in `brand_legal_receipt`: the account download still
+includes them and account deletion still erases them.
 
 ## Account-data download
 
@@ -203,61 +161,3 @@ legacy formats hold startup/deletion for review. Database guards reject writes
 from an older untracked session adapter. See [the inventory](privacy-data.md)
 for retained fence data, device/process limits and recovery work. These source
 changes do not configure B2, deploy the service or make an old restore safe.
-
-## Optional backend terms checks
-
-`G3_LEGAL_ENFORCEMENT` defaults to `disabled`. After reviewed document
-publication and rollout validation, `required` checks protected API activity
-against the signed-in account's acceptance of the exact current document set.
-This includes guest accounts and registration of an existing guest. Future
-effective dates are respected. A notice acknowledgment, dismissal, another
-account's acceptance or an older set cannot authorize activity or processing
-consent. Missing documents, catalog/database failures and unverifiable state
-keep protected activity closed. Unknown modes refuse normal startup.
-
-Protected requests use a validated public catalog for at most 60 seconds before
-requiring a refresh; failure cannot authorize activity from an expired snapshot.
-requests share a ten-second failure cooldown, including forced review refreshes,
-so an outage cannot queue repeated slow fetches. Recovery must revalidate content.
-Normal authentication still guards private endpoints. Sign-in/guest bootstrap, account
-lookup, sign-out, legal review/actions and account export/deletion remain
-available without accepting changed terms. About and Settings remain public.
-Successful acceptance refreshes cached reads that the gate may have refused.
-Gate errors are `private, no-store` and do not expose private receipt details.
-
-Health, WebSub and playback proxy routes retain their existing sessionless
-boundaries: callback signatures and already issued short-lived proxy tokens
-still supply their own authorization. New playback sessions pass through the
-protected API. This setting neither deletes device caches nor revokes an
-already issued media capability. Keep the mode consistent across replicas and
-use a reviewed image containing the gate before enabling it.
-
-The in-process HTTP/session test uses the actual tracked session adapter and
-receipt transactions. It verifies account isolation, exact acceptance, changed
-sets, catalog failure, essential access and session retirement after deletion.
-No server, policy publication, consent purpose or deployment is enabled here.
-Hydrated acceptance/retry and native interactions remain rollout checks. The
-newer packaged image evidence follows below.
-
-Validation passes 210 ordinary server tests, 87 web tests and strict checks for
-server/web/mobile/desktop on the host. The separate database-editor fixture and
-live YouTube test remain opt-in; neither is included in that ordinary count.
-Nine JavaScript, ten extractor and twelve CI helper tests pass. Both Compose
-files resolve using synthetic settings. Web lint exits successfully with its
-existing 50 generated-CSS warnings; formatting passes. No UI markup changed.
-The real loopback catalog test covers the 60-second expiry boundary, failure
-cooldown, retry/recovery, forced refresh and a backwards clock. The actual
-WebAssembly strict check also passes.
-
-The full locked Linux web/server image built from `d38f65b` is
-`sha256:7b1370d550871696c8f54c9e24425051dd9d242facacb7bd36bb8298b21e4b5a`.
-The isolated encrypted-backup drill passes with required terms and an unavailable
-loopback catalog. It invokes the packaged Dioxus routes: guest creation/account
-lookup succeed, ordinary viewer activity is refused with 503, the authenticated
-account download and primary deletion succeed, and the removed account loses
-access. Private responses are `private, no-store`. The server runs as non-root,
-read-only, with database-scoped credentials; no public port, host data or provider
-access is used. Actual age encryption/import/repeated replay also pass, and all
-owned containers/networks are removed. This is a local image ID, not a published
-registry digest. Live publication/offsite expiry and actual client flows remain
-unverified; deployment enforcement stays disabled by default.

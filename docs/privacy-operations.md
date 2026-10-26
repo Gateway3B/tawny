@@ -275,3 +275,7 @@ The publishing gate now requires this additional check before pushing its tested
 candidate. All owned fixtures are removed. This closes the newer gate's local
 packaging gap, while hydrated acceptance, actual provider/offsite behavior and a
 reviewed registry digest remain separate rollout evidence.
+
+Tawny has since removed legal review and its effective-terms gate. The drill
+now runs without `G3_LEGAL_ENFORCEMENT` and expects ordinary viewer activity,
+account download and primary deletion to succeed.

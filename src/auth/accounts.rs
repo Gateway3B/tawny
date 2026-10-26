@@ -321,11 +321,6 @@ pub fn account_rate_limits() -> g3_auth::rate_limit::RateLimits {
             KeyBy::Global,
             10,
         ))
-        .limit(Limit::per_minute(
-            &["/api/v1/auth/legal-action"],
-            KeyBy::Session,
-            3,
-        ))
         .limit(Limit::per_hour(
             &["/api/v1/auth/guest"],
             KeyBy::ClientIp,

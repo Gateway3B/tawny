@@ -403,7 +403,6 @@ pub fn AppShell() -> Element {
         // An obsolete native client may fail before connecting to its server.
         // Public update help must stay available on the setup screen too.
         crate::brand::StoreUpdatePrompt {}
-        crate::brand::legal::LegalChangeNotice {}
         super::AccountGate { allow_offline: matches!(route, Route::AboutG3tech {}),
             ShellContent {}
         }

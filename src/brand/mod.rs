@@ -1,7 +1,6 @@
 //! Public catalog state belongs to the installation, never to a shared identity.
 //! Only validated public content and optional notice dismissals are persisted.
 use crate::app::Route;
-pub mod legal;
 mod store;
 use dioxus::prelude::*;
 use g3_brand::{
@@ -186,7 +185,7 @@ pub fn BrandProvider(children: Element) -> Element {
             let _ = eval.send("dispose");
         }
     });
-    rsx! { legal::LegalProvider { {children} } }
+    rsx! { {children} }
 }
 
 pub fn use_external_link() -> Option<EventHandler<String>> {
@@ -259,7 +258,7 @@ pub fn snooze(mut state: BrandState, policy: &ReleasePolicy) {
     }
 }
 
-/// Store requirements are announced globally, while help/legal/account controls
+/// Store requirements are announced globally, while help and account controls
 /// remain accessible. This is not a server-side authorization or version gate.
 #[component]
 pub fn StoreUpdatePrompt() -> Element {
@@ -325,7 +324,6 @@ pub fn AboutG3tech() -> Element {
                 catalog: cached.as_ref().map(|value| value.catalog.clone()).unwrap_or_else(empty_catalog),
                 now: (state.now)(), busy: (state.busy)(), offline: (state.offline)(), saved: cached.is_some(),
                 on_open_link, on_refresh,
-                legal::LegalReviewPanel {}
             }
         }
     }
@@ -341,7 +339,6 @@ fn AboutContent(
     saved: bool,
     on_open_link: Option<EventHandler<String>>,
     on_refresh: EventHandler<()>,
-    #[props(default)] children: Element,
 ) -> Element {
     use g3_ui::{Card, Content, ContentWidth, Stack, Text, TextTone};
     rsx! {
@@ -359,7 +356,6 @@ fn AboutContent(
                     }
                 }
                 g3_brand::ui::BrandPage { app, catalog, now: (now > 0).then_some(now), on_open_link }
-                {children}
                 Card { title: "Help and your data",
                     Stack {
                         Text { "Tawny stores your subscriptions and history on the server you choose. Account and server controls are in Settings." }
