@@ -539,6 +539,20 @@
     return options.refreshUrl && (options.refreshAttempts || 0) < 1;
   }
 
+  // How far a renewed session has to play before it may be renewed again.
+  // One renewal per video ran out on long background listening: the proxy's
+  // registrations expire after 90 minutes, and a network drop with the screen
+  // off spends the renewal too, so the next failure had nothing left and
+  // playback stopped. A renewal that plays on has worked, and earns another;
+  // one that fails at once does not, so a broken video cannot loop.
+  const REFRESH_EARNED_AFTER_SECONDS = 30;
+
+  function restoresRefresh(options, startPosition, position) {
+    return (
+      (options.refreshAttempts || 0) > 0 && position >= startPosition + REFRESH_EARNED_AFTER_SECONDS
+    );
+  }
+
   async function refreshPlaybackSession(video, options, generation, position) {
     recordTransportEvent({
       phase: "refreshing-session",
@@ -617,6 +631,9 @@
           if (position >= runtime.lastProgressPosition + 8) {
             runtime.lastProgressPosition = position;
             runtime.inPlaceRetries = 0;
+          }
+          if (restoresRefresh(recoveryOptions, resumeTime, position)) {
+            recoveryOptions.refreshAttempts = 0;
           }
         };
         runtime.endedHandler = () => {
@@ -887,6 +904,7 @@
     normalizePlaybackUrl,
     playbackServerBase,
     qualityState,
+    restoresRefresh,
     audioTrackState,
     setAudioTrack,
     setQuality,

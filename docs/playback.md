@@ -66,3 +66,19 @@ button does, the Android and iOS apps' own media sessions set it on the
 element, and in a browser the player takes over the Media Session's play,
 pause, stop and seek actions. Without that, a headset or lock-screen pause on
 a phone browser was resumed at once.
+
+On Android, a headset's single Play/Pause button asks the media element
+whether it is paused rather than trusting the session's last reported state,
+and every command's result is written back to the session. A pause that the
+page never reported (the browser had already paused the element) otherwise
+left the session saying "playing", and every press asked for Pause again. A
+paused player also keeps its foreground service for twenty minutes (Media3's
+default is ten) before letting it go: dropped at once, the app was cached and frozen in
+the background, a headset press could not reach it, and a resume was refused a
+new foreground start, so audio stopped with the screen off once the buffer
+ran out. The session and its notification stay until the player closes.
+
+The transport renews an expired playback session once, and a renewal that
+then plays for 30 seconds earns another. A single renewal per video ran out on
+long background listening, where proxy registrations expire after 90 minutes
+and a network drop also spends one.

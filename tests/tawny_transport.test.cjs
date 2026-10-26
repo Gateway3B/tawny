@@ -102,3 +102,11 @@ assert.throws(
   () => window.TawnyTransport.buildDashManifest({ tracks: [source.tracks[0]] }),
   /both video and audio/,
 );
+
+// A renewed session that plays on earns another renewal; one that fails
+// straight away does not, so a broken video cannot renew in a loop.
+const { restoresRefresh } = window.TawnyTransport;
+assert.equal(restoresRefresh({ refreshAttempts: 1 }, 600, 629), false);
+assert.equal(restoresRefresh({ refreshAttempts: 1 }, 600, 630), true);
+assert.equal(restoresRefresh({ refreshAttempts: 0 }, 600, 900), false);
+assert.equal(restoresRefresh({}, 0, 900), false);
