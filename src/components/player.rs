@@ -24,9 +24,9 @@ use g3_route_transitions::{
 };
 use g3_ui::{
     Avatar, AvatarSize, Badge, BottomSheet, Button, ButtonExpand, ButtonFill, ButtonSize, Card,
-    CardVariant, Chip, Color, Content, EmptyState, HeadingLevel, Item, LayoutSize, List, ListLines,
-    SheetBackdrop, Shelf, Skeleton, SkeletonShape, Space, Spinner, Stack, StackAlign, Text,
-    TextTone, TextVariant, use_layout_size,
+    CardVariant, Chip, Color, Content, EmptyState, HeadingLevel, InfiniteScroll, Item, LayoutSize,
+    List, ListLines, SheetBackdrop, Shelf, Skeleton, SkeletonShape, Space, Spinner, Stack,
+    StackAlign, Text, TextTone, TextVariant, use_layout_size,
 };
 
 use super::{VideoGrid, linkify::Linkified};
@@ -1984,6 +1984,30 @@ fn VideoDetailInner(id: String) -> Element {
     let mut comments_next_page = use_signal(|| None::<String>);
     let mut comments_initialized = use_signal(|| false);
     let mut comments_loading = use_signal(|| false);
+    // Made once, reading state when it runs: this page re-renders for its own
+    // reasons, and the infinite scroll in the comments sheet holds on to it.
+    // The page is keyed by video, so `id` cannot go stale here.
+    let comments_video_id = id.clone();
+    let load_more_comments = use_callback(move |_: ()| {
+        if *comments_loading.peek() {
+            return;
+        }
+        let Some(token) = comments_next_page.peek().clone() else {
+            return;
+        };
+        let video_id = comments_video_id.clone();
+        comments_loading.set(true);
+        spawn(async move {
+            match get_comments_page(video_id, token).await {
+                Ok(page) => {
+                    comments.write().extend(page.comments);
+                    comments_next_page.set(page.next_page);
+                }
+                Err(_) => app_state.show_toast("Could not load more comments", Color::Warning),
+            }
+            comments_loading.set(false);
+        });
+    });
     let mut details_cached = use_signal(|| false);
     // Keyed by video rather than a flag: this page is the only place history is
     // recorded, so it must still record when it is reused for another video.
@@ -2421,8 +2445,8 @@ fn VideoDetailInner(id: String) -> Element {
         }
 
         // No heading and no running count: the button that opened this already
-        // said "Comments", so the sheet is just the list. Load-more lives at the
-        // end of the scrolled list rather than pinned above it.
+        // said "Comments", so the sheet is just the list. More load as the
+        // end of the list scrolls into view.
         // On a phone, no backdrop: the sheet sits under the video, which stays
         // untinted and usable while the thread is open, and dragging the
         // handle down closes it. From a medium layout up the sheet is a
@@ -2457,35 +2481,33 @@ fn VideoDetailInner(id: String) -> Element {
                     for comment in comments() {
                         CommentCard { comment }
                     }
-                    if let Some(next_page) = comments_next_page() {
-                        Button {
-                            fill: ButtonFill::Outline,
-                            color: Color::Neutral,
-                            expand: ButtonExpand::Block,
-                            loading: comments_loading(),
-                            onclick: move |_| {
-                                let video_id = video.id.clone();
-                                let token = next_page.clone();
-                                comments_loading.set(true);
-                                spawn(async move {
-                                    match get_comments_page(video_id, token).await {
-                                        Ok(page) => {
-                                            comments.write().extend(page.comments);
-                                            comments_next_page.set(page.next_page);
-                                        }
-                                        Err(_) => app_state.show_toast(
-                                            "Could not load more comments",
-                                            Color::Warning,
-                                        ),
-                                    }
-                                    comments_loading.set(false);
-                                });
-                            },
-                            "Load more comments"
-                        }
+                    CommentsInfiniteScroll {
+                        open: comments_open,
+                        loading: comments_loading(),
+                        complete: comments_next_page.read().is_none(),
+                        on_load: load_more_comments,
                     }
                 }
             }
+        }
+    }
+}
+
+/// The comments sheet's load-more trigger, mounted only while the sheet is
+/// open. A closed sheet keeps its list in the DOM, and a sentinel there could
+/// fetch pages nobody is looking at; mounting on open also gives each opening
+/// a fresh observer. Its own component so opening the sheet re-renders this,
+/// not the whole video page.
+#[component]
+fn CommentsInfiniteScroll(
+    open: Signal<bool>,
+    loading: bool,
+    complete: bool,
+    on_load: Callback<()>,
+) -> Element {
+    rsx! {
+        if open() {
+            InfiniteScroll { loading, complete, on_load }
         }
     }
 }
