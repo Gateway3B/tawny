@@ -1,6 +1,7 @@
 use crate::{
     api::{get_playlist, get_playlist_previews},
     app::Route,
+    data_change::{DataChange, invalidate},
     models::{DurationFilter, PlaylistKind, PlaylistSort},
     state::AppState,
 };
@@ -183,6 +184,10 @@ pub fn Playlists() -> Element {
     // No filters here. The index is a set of covers to pick from, not a list to
     // work through - filtering it hides the playlist you came to open.
     let previews = use_cached(get_playlist_previews, ());
+    // Pull down to refetch. The device also refetches on its own when another
+    // one changes a playlist (`library_sync`), but only every few seconds and
+    // only while the server remembers the change; this is the sure way.
+    let refresh = use_callback(move |_: ()| invalidate(DataChange::Playlists));
     let rows = match &*previews.read() {
         Some(Ok(previews)) => previews
             .iter()
@@ -262,7 +267,7 @@ pub fn Playlists() -> Element {
                 }
             },
         }
-        Content {
+        Content { on_refresh: refresh, refreshing: previews.pending(),
             if rows.is_empty() {
                 EmptyState {
                     title: "No playlists yet",
@@ -520,12 +525,16 @@ pub fn PlaylistDetail(id: String) -> Element {
         videos
     });
 
+    // Pull down to refetch, as on the playlists page.
+    let refresh = use_callback(move |_: ()| invalidate(DataChange::Playlists));
+    let refreshing = contents.pending();
+
     let Some(playlist) = playlist else {
         // Still renders the bar: reaching a stale deep link with no way back was
         // a dead end.
         return rsx! {
             PageHeader { title: "Playlist".to_string(), back_to: Route::Playlists {} }
-            Content {
+            Content { on_refresh: refresh, refreshing,
                 if loading {
                     Spinner { center: true }
                 } else {
@@ -601,7 +610,7 @@ pub fn PlaylistDetail(id: String) -> Element {
                 }
             },
         }
-        Content {
+        Content { on_refresh: refresh, refreshing,
             Stack { gap: Space::Md,
                 if saved_count > 1 {
                     Shelf { aria_label: "Playlist filters and order", gap: Space::Sm,
