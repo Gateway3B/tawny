@@ -229,6 +229,24 @@
   .row-span-2 {
     grid-row: span 2 / span 2;
   }
+  .\!container {
+    width: 100% !important;
+    @media (width >= 40rem) {
+      max-width: 40rem !important;
+    }
+    @media (width >= 48rem) {
+      max-width: 48rem !important;
+    }
+    @media (width >= 64rem) {
+      max-width: 64rem !important;
+    }
+    @media (width >= 80rem) {
+      max-width: 80rem !important;
+    }
+    @media (width >= 96rem) {
+      max-width: 96rem !important;
+    }
+  }
   .container {
     width: 100%;
     @media (width >= 40rem) {
@@ -430,6 +448,9 @@
   }
   .text-\[var\(--g3-color-danger\)\] {
     color: var(--g3-color-danger);
+  }
+  .lowercase {
+    text-transform: lowercase;
   }
   .overline {
     text-decoration-line: overline;
