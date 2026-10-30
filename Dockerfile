@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-FROM rust:1.95-bookworm AS builder
+FROM rust:1.95-bookworm AS chef
 
 ARG CARGO_BUILD_JOBS=2
 
@@ -20,15 +20,39 @@ RUN apt-get update \
         pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /app
+# The cook and the final build must use the same toolchain.
+COPY rust-toolchain.toml ./
 RUN rustup target add wasm32-unknown-unknown \
+    && cargo install cargo-chef --version 0.1.78 --locked \
     && cargo install dioxus-cli --version 0.7.9 --locked
 
-WORKDIR /app
-COPY . .
-COPY --from=web-dependencies /app/node_modules /app/node_modules
 # Keep local sibling overrides outside the image and fetch the portable lockfile.
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true \
     GIT_TERMINAL_PROMPT=0
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+# Cook what `dx build --fullstack --release` compiles: the web client as
+# `wasm-release` for wasm32 with only `web`, and the server as `server-release`
+# for the host triple (dx always passes `--target`) with `server,web`. Any other
+# profile, target or feature set leaves dx recompiling every dependency.
+RUN cargo chef cook --recipe-path recipe.json --locked \
+        --profile wasm-release \
+        --target wasm32-unknown-unknown \
+        --no-default-features \
+        --features web \
+    && cargo chef cook --recipe-path recipe.json --locked \
+        --profile server-release \
+        --target "$(rustc -vV | sed -n 's/^host: //p')" \
+        --no-default-features \
+        --features server,web
+COPY . .
+COPY --from=web-dependencies /app/node_modules /app/node_modules
 RUN cargo fetch --locked
 RUN dx build --web --fullstack --release --locked --offline
 
