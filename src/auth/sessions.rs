@@ -2,8 +2,9 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{Result, anyhow};
+use g3_auth::RecordId;
 use surrealdb::{Surreal, engine::any::Any};
-use surrealdb_types::{RecordId, SurrealValue};
+use surrealdb_types::SurrealValue;
 
 pub(crate) async fn prepare(db: &Surreal<Any>) -> Result<()> {
     tokio::time::timeout(Duration::from_secs(180), migrate(db))

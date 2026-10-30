@@ -196,6 +196,10 @@ The full guide, with examples from this code, is
   the server applies them on start. `database/presync.surql` and
   `backfill.surql` run around the sync for data moves.
 - Tests use an in-memory database (`kv-mem`).
+- **Record ids are `g3_auth::RecordId`/`RecordIdKey`, never
+  `surrealdb_types`'s.** On the server they are the same type; on the client
+  g3-auth's copy keeps SurrealDB's `Value` (regex, geometry) out of the wasm,
+  about a megabyte. A test in `src/models/mod.rs` fails on the old import.
 
 ### Cross-platform
 

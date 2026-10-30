@@ -679,7 +679,7 @@ mod tests {
             "user_subscription",
         ] {
             for (account, expected_empty) in [(&first, true), (&second, false)] {
-                let ids: Vec<surrealdb_types::RecordId> = state
+                let ids: Vec<g3_auth::RecordId> = state
                     .db
                     .query(format!(
                         "SELECT VALUE id FROM {table} WHERE owner = type::record($owner)"

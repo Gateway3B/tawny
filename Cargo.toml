@@ -15,7 +15,7 @@ dioxus-icons = "=0.2.0-alpha.3"
 g3-route-transitions = { version = "0.5", features = ["native-back"] }
 g3-native-plugins = { version = "0.4.4", features = ["external-url", "appearance", "back-button", "clipboard", "media", "safe-area", "storage"] }
 g3-ui = { version = "0.6", features = ["transitions"] }
-g3-auth = "0.2"
+g3-auth = { version = "0.2", features = ["record-id"] }
 g3-cache = "0.2.0"
 manganis = "=0.8.0-alpha.3"
 serde = { version = "1.0.217", features = ["derive"] }
