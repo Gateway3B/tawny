@@ -123,12 +123,8 @@ async fn accept(listener: std::net::TcpListener, targets: Arc<Mutex<HashMap<Stri
     let Ok(listener) = TcpListener::from_std(listener) else {
         return;
     };
-    let client = match reqwest::Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .build()
-    {
-        Ok(client) => client,
-        Err(_) => return,
+    let Some(client) = client() else {
+        return;
     };
     loop {
         let Ok((stream, _)) = listener.accept().await else {
@@ -140,6 +136,23 @@ async fn accept(listener: std::net::TcpListener, targets: Arc<Mutex<HashMap<Stri
             let _ = serve(stream, &targets, &client).await;
         });
     }
+}
+
+/// The client that fetches from YouTube, trusting the bundled Mozilla roots.
+///
+/// reqwest 0.13 otherwise verifies through rustls-platform-verifier, which on
+/// Android needs a JNI context and its Kotlin component set up first; the app
+/// does neither, and the first handshake would panic. The bundled roots are
+/// what reqwest 0.12's `rustls-tls` used, so behaviour is unchanged.
+fn client() -> Option<reqwest::Client> {
+    let roots = webpki_root_certs::TLS_SERVER_ROOT_CERTS
+        .iter()
+        .filter_map(|cert| reqwest::Certificate::from_der(cert).ok());
+    reqwest::Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .tls_certs_only(roots)
+        .build()
+        .ok()
 }
 
 /// One request per connection: the player is on the same device, so a new
