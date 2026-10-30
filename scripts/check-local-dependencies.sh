@@ -1,7 +1,7 @@
 #!/bin/sh
 # Inspect the staged lockfile, not the working copy.
 set -eu
-shared='^(g3-auth(-macros)?|g3-brand|g3-cache(-macros)?|g3-native-plugins|g3-route-transitions|g3-ui)$'
+shared='^(g3-auth(-macros)?|g3-cache(-macros)?|g3-native-plugins|g3-route-transitions|g3-ui)$'
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
 if printf '%s\n' "$staged" | grep -qx 'Cargo.lock'; then
     # Packages defined inside this repository legitimately have no source.
@@ -31,7 +31,7 @@ if printf '%s\n' "$staged" | grep -qx 'Cargo.lock'; then
     '
 fi
 if printf '%s\n' "$staged" | grep -qx '.cargo/config.toml'; then
-    if git show :.cargo/config.toml | grep -Eq '^[[:space:]]*g3-(auth|brand|cache|native-plugins|route-transitions|ui)[[:space:]]*='; then
+    if git show :.cargo/config.toml | grep -Eq '^[[:space:]]*g3-(auth|cache|native-plugins|route-transitions|ui)[[:space:]]*='; then
         echo "Commit blocked: shared-library overrides belong outside the repository." >&2
         exit 1
     fi

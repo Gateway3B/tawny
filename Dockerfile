@@ -26,26 +26,11 @@ RUN rustup target add wasm32-unknown-unknown \
 WORKDIR /app
 COPY . .
 COPY --from=web-dependencies /app/node_modules /app/node_modules
-# Keep local sibling overrides outside the image. The portable lockfile pins
-# g3-brand and the reviewed native source revision.
+# Keep local sibling overrides outside the image and fetch the portable lockfile.
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true \
-    GIT_TERMINAL_PROMPT=0 \
-    GIT_CONFIG_COUNT=3 \
-    GIT_CONFIG_KEY_0=credential.helper \
-    GIT_CONFIG_VALUE_0="" \
-    GIT_CONFIG_KEY_1=credential.helper \
-    GIT_CONFIG_VALUE_1="!sh /app/ci/private-git-credential.sh" \
-    GIT_CONFIG_KEY_2=credential.useHttpPath \
-    GIT_CONFIG_VALUE_2=true
-
-RUN --mount=type=secret,id=g3_brand_token,required=true cargo fetch --locked
-
-ARG G3_CATALOG_ORIGIN=https://catalog.g3tech.net
-ARG G3_RELEASE_CHANNEL=production
-ENV G3_CATALOG_ORIGIN=${G3_CATALOG_ORIGIN} \
-    G3_RELEASE_CHANNEL=${G3_RELEASE_CHANNEL}
-
-RUN --mount=type=secret,id=g3_brand_token,required=true dx build --web --fullstack --release --locked --offline
+    GIT_TERMINAL_PROMPT=0
+RUN cargo fetch --locked
+RUN dx build --web --fullstack --release --locked --offline
 
 FROM debian:bookworm-slim AS runtime
 
