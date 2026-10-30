@@ -58,13 +58,13 @@ fn reload_client() {
 /// frame before the setup screen replaces it, which is the cheaper of the two
 /// mistakes to make.
 #[component]
-pub fn AccountGate(#[props(default)] allow_offline: bool, children: Element) -> Element {
+pub fn AccountGate(children: Element) -> Element {
     let session = use_session();
     let mut backend_chosen = use_signal(|| true);
 
     use_effect(move || backend_chosen.set(server_url::has_chosen_backend()));
 
-    if !allow_offline && !backend_chosen() {
+    if !backend_chosen() {
         return rsx! {
             BackendSetupScreen {
                 on_saved: move |_| {
@@ -76,7 +76,7 @@ pub fn AccountGate(#[props(default)] allow_offline: bool, children: Element) -> 
     }
 
     match (session.status)() {
-        SessionStatus::Failed(message) if !allow_offline => rsx! {
+        SessionStatus::Failed(message) => rsx! {
             BackendSetupScreen {
                 problem: message,
                 on_saved: move |_| reload_client(),
@@ -87,38 +87,6 @@ pub fn AccountGate(#[props(default)] allow_offline: bool, children: Element) -> 
         // cache, and blocking it would make a cold start feel like a network
         // failure.
         _ => rsx! { {children} },
-    }
-}
-
-#[cfg(test)]
-mod gate_tests {
-    use super::*;
-
-    #[component]
-    fn Fixture(allow_offline: bool) -> Element {
-        use_context_provider(|| crate::auth::Session {
-            account: Signal::new(None),
-            status: Signal::new(SessionStatus::Failed("Synthetic offline server".into())),
-        });
-        rsx! {
-            g3_ui::AppWrapper {
-                AccountGate { allow_offline, p { "Public help fixture" } }
-            }
-        }
-    }
-
-    #[test]
-    fn offline_help_can_render_while_library_pages_offer_server_setup() {
-        for allow_offline in [false, true] {
-            let mut dom = VirtualDom::new_with_props(Fixture, FixtureProps { allow_offline });
-            dom.rebuild_in_place();
-            let html = dioxus_ssr::render(&dom);
-            assert_eq!(html.contains("Public help fixture"), allow_offline);
-            assert_eq!(html.contains("Connect to a Tawny server"), !allow_offline);
-            if !allow_offline {
-                assert!(html.contains("About g3tech and other apps"));
-            }
-        }
     }
 }
 
@@ -169,10 +137,6 @@ fn BackendSetupScreen(problem: Option<String>, on_saved: EventHandler<()>) -> El
                         },
                         "Connect"
                     }
-                    Button { fill: ButtonFill::Clear,
-                        onclick: move |_| { spawn(g3_route_transitions::animated_navigate(crate::app::Route::AboutG3tech {})); },
-                        "About g3tech and other apps"
-                    }
                     Text { variant: TextVariant::Caption,
                         "Changing this restarts the app. On a packaged build, close and reopen it."
                     }
@@ -211,7 +175,6 @@ fn AccountForm(account: crate::models::Account) -> Element {
     let mut busy = use_signal(|| false);
     let mut signing_in = use_signal(|| false);
     let registration_owner = account.id.clone();
-    let mut deletion_saved = use_signal(|| false);
     let deletion_owner = account.id.clone();
     let sign_out_owner = account.id.clone();
     let is_guest = account.is_guest;
@@ -352,16 +315,16 @@ fn AccountForm(account: crate::models::Account) -> Element {
                     fill: ButtonFill::Outline,
                     color: Color::Danger,
                     expand: ButtonExpand::Block,
-                    disabled: busy() || deletion_saved(),
+                    disabled: busy(),
                     onclick: move |_| {
-                        if *busy.peek() || *deletion_saved.peek() || !session.matches(&deletion_owner) { return; }
+                        if *busy.peek() || !session.matches(&deletion_owner) { return; }
                         let reviewed_owner = deletion_owner.clone();
                         busy.set(true);
                         spawn(async move {
                         let buttons = vec![AlertButton::cancel("Cancel"), AlertButton::destructive("Delete account")];
                         if !alerts.show(AlertOptions {
                             title: "Delete account?".into(),
-                            message: Some("This requests removal of your account, subscriptions, playlists, queue and history from this server. If removal is queued, it continues after you close Tawny. Other devices lose account access when removal finishes. The server operator manages backups and other retained copies separately.".into()),
+                            message: Some("This deletes your account, subscriptions, playlists, queue, history and watch progress from this server. Other devices will be signed out.".into()),
                             buttons: buttons.clone(),
                             input: None,
                         }).await.confirmed(&buttons) { busy.set(false); return; }
@@ -369,7 +332,7 @@ fn AccountForm(account: crate::models::Account) -> Element {
                         let result = delete_account(Some(reviewed_owner.clone())).await;
                         if !session.matches(&reviewed_owner) { return; }
                         match result {
-                            Ok(crate::models::DeletionOutcome::Removed) => {
+                            Ok(()) => {
                                 // Finish cleanup before forgetting the session
                                 // unmounts this form and cancels its task.
                                 g3_cache::set_cache_owner(None).await;
@@ -378,10 +341,6 @@ fn AccountForm(account: crate::models::Account) -> Element {
                                 session.forget();
                                 reload_client();
                             }
-                            Ok(crate::models::DeletionOutcome::Queued { .. }) => {
-                                deletion_saved.set(true);
-                                app_state.show_toast("Your deletion request is saved. Removal is pending.", Color::Neutral);
-                            }
                             Err(problem) => app_state.show_toast(readable(&problem.to_string()), Color::Danger),
                         }
                         busy.set(false);
@@ -389,19 +348,9 @@ fn AccountForm(account: crate::models::Account) -> Element {
                     },
                     "Delete account"
                 }
-                if deletion_saved() {
-                    DeletionPendingNotice {}
-                }
             }
         }
     }
-}
-
-#[component]
-fn DeletionPendingNotice() -> Element {
-    rsx! { Text { tone: TextTone::Secondary,
-        "Your deletion request is saved. Account removal will continue after you close Tawny. Backups and other retained copies have separate schedules."
-    } }
 }
 
 /// The server section of the settings page.
@@ -444,48 +393,6 @@ pub fn BackendSettings() -> Element {
                         }
                     },
                     "Save and reconnect"
-                }
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod deletion_pending_tests {
-    use super::*;
-    use crate::{app::tawny_theme, models::Appearance};
-    use g3_ui::{AppWrapper, ComponentMode, Header};
-
-    #[component]
-    fn Preview(mode: ComponentMode, appearance: Appearance) -> Element {
-        rsx! { AppWrapper { mode, theme: tawny_theme(appearance),
-            Header { title: "Account" }
-            Content { width: ContentWidth::Readable,
-                Card { title: "Account", Stack {
-                    Button { fill: ButtonFill::Outline, color: Color::Danger, expand: ButtonExpand::Block, disabled: true, "Delete account" }
-                    DeletionPendingNotice {}
-                } }
-            }
-        } }
-    }
-
-    #[test]
-    fn saved_deletion_does_not_claim_that_every_copy_has_been_removed() {
-        for (mode_name, mode) in [("ios", ComponentMode::Ios), ("md", ComponentMode::Md)] {
-            for (appearance_name, appearance) in
-                [("light", Appearance::Light), ("dark", Appearance::Dark)]
-            {
-                let mut dom =
-                    VirtualDom::new_with_props(Preview, PreviewProps { mode, appearance });
-                dom.rebuild_in_place();
-                let html = dioxus_ssr::render(&dom);
-                assert!(html.contains("request is saved"));
-                assert!(html.contains("separate schedules"));
-                assert!(!html.contains("Deletion complete"));
-                if let Ok(directory) = std::env::var("G3_BRAND_PREVIEW_DIR") {
-                    let directory = std::path::Path::new(&directory);
-                    std::fs::create_dir_all(directory).unwrap();
-                    std::fs::write(directory.join(format!("deletion-{mode_name}-{appearance_name}.html")), format!("<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><link rel=stylesheet href=/g3-ui.css><link rel=stylesheet href=/app.css></head><body style=\"margin:0\">{html}</body></html>")).unwrap();
                 }
             }
         }

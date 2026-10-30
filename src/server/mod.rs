@@ -500,15 +500,14 @@ impl AppServerState {
         std::fs::create_dir_all(&data_dir).context("create Tawny data directory")?;
         let db = crate::db::connect().await?;
         crate::db::sync_schema(&db).await?;
-        crate::privacy::sessions::prepare(&db).await?;
+        crate::auth::prepare_sessions(&db).await?;
 
         let extractor_cache = std::env::var("TAWNY_EXTRACTOR_CACHE_DIR")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|_| data_dir.join("extractor"));
         let mut youtube_builder = RustyPipe::builder()
             .storage_dir(extractor_cache)
-            // The default file reporter persists raw request/response bodies
-            // outside the reviewed telemetry path and its retention controls.
+            // Diagnostics should not create a second on-disk response cache.
             .no_reporter()
             .po_token_cache();
         // Only honoured when the path actually exists. It is an optional
@@ -1540,7 +1539,7 @@ mod tests {
             .await
             .unwrap();
         state
-            .set_in_playlist(&owner, "saved-from-elsewhere", &video.id, true)
+            .set_in_playlist(&owner, "saved-from-elsewhere", &video.id, true, None)
             .await
             .unwrap();
 
@@ -1722,7 +1721,7 @@ mod tests {
             .await
             .unwrap();
         state
-            .set_in_playlist(&first, "watch-later", &video_id, true)
+            .set_in_playlist(&first, "watch-later", &video_id, true, None)
             .await
             .unwrap();
         state.record_history(&first, &video_id).await.unwrap();

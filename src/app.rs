@@ -1,4 +1,3 @@
-use crate::brand::{AboutG3tech, BrandProvider};
 use crate::{
     components::{
         AppOverlays, AppShell, ChannelDetail, Explore, Feed, HistoryPage, PlaylistDetail,
@@ -105,10 +104,6 @@ pub enum Route {
         #[public]
         #[route("/settings")]
         SettingsPage {},
-        #[transition(layer = sheet)]
-        #[public]
-        #[route("/about-g3tech")]
-        AboutG3tech {},
         #[transition(layer = stack_page)]
         #[public]
         #[route("/channel/:id")]
@@ -293,9 +288,7 @@ fn ThemedApp() -> Element {
             // as well would produce duplicate `overlay` snapshots and make the
             // browser abort every sheet/player transition.
             route_transition_overlay: false,
-            BrandProvider {
-                Router::<Route> {}
-            }
+            Router::<Route> {}
             AppOverlays {}
         }
     }

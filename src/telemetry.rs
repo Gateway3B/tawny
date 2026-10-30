@@ -8,7 +8,7 @@ use axum::{
 use std::time::Instant;
 use tracing_subscriber::{EnvFilter, fmt::MakeWriter};
 
-const TARGET: &str = "g3::telemetry";
+const TARGET: &str = "tawny::telemetry";
 
 fn subscriber<W>(writer: W) -> impl tracing::Subscriber + Send + Sync
 where
@@ -20,7 +20,7 @@ where
         // A caller-controlled RUST_LOG must not turn SDK payloads or database
         // diagnostics into retained personal data. Debug with synthetic local
         // fixtures when richer diagnostics are needed.
-        .with_env_filter(EnvFilter::new("off,g3::telemetry=info"))
+        .with_env_filter(EnvFilter::new("off,tawny::telemetry=info"))
         .with_current_span(false)
         .with_span_list(false)
         .with_target(false)
@@ -30,7 +30,7 @@ where
 
 pub(crate) fn init() {
     tracing::subscriber::set_global_default(subscriber(std::io::stderr))
-        .unwrap_or_else(|_| panic!("Failed to install the privacy-safe runtime logger."));
+        .unwrap_or_else(|_| panic!("Failed to install the runtime logger."));
     // Default panic payloads may contain provider responses or query values.
     std::panic::set_hook(Box::new(|_| diagnostic(Diagnostic::RuntimePanic)));
 }
@@ -83,7 +83,6 @@ pub(crate) enum Diagnostic {
     ExtractorShortsFailed,
     ExtractorFormatsFailed,
     RuntimePanic,
-    PrivacyRequestPending,
 }
 
 impl Diagnostic {
@@ -112,7 +111,6 @@ impl Diagnostic {
             Self::ExtractorShortsFailed => "extractor_shorts_failed",
             Self::ExtractorFormatsFailed => "extractor_formats_failed",
             Self::RuntimePanic => "runtime_panic",
-            Self::PrivacyRequestPending => "privacy_request_pending",
         }
     }
 }

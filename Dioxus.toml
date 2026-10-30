@@ -25,7 +25,7 @@ identifier = "net.gateway3.tawny"
 publisher = "Gateway3"
 category = "Entertainment"
 short_description = "A calm, local-first YouTube client."
-long_description = "Tawny is a privacy-minded, local-first YouTube client for mobile, web, and desktop."
+long_description = "Tawny is a self-hosted YouTube client for personal home labs, on mobile, web, and desktop."
 
 [ios]
 deployment_target = "15.0"

@@ -1,7 +1,6 @@
 mod api;
 mod app;
 mod auth;
-mod brand;
 mod cache;
 mod components;
 mod data_change;
@@ -17,7 +16,6 @@ mod local_relay;
 mod local_streams;
 mod models;
 mod playback_resolver;
-mod privacy;
 #[cfg(feature = "server")]
 mod server;
 mod server_url;
@@ -35,11 +33,6 @@ use dioxus::mobile::Config as NativeConfig;
 
 #[cfg(feature = "server")]
 fn main() {
-    // Recovery must never start HTTP handlers, pollers, clients or load .env.
-    let args = std::env::args().skip(1).collect::<Vec<_>>();
-    if args.first().is_some_and(|arg| arg == "privacy-replay") {
-        std::process::exit(privacy::restore::main(&args[1..]));
-    }
     let _ = dotenvy::dotenv();
     telemetry::init();
     dioxus::serve(|| async move {
@@ -56,8 +49,6 @@ fn main() {
         let state = server::AppServerState::initialize()
             .await
             .unwrap_or_else(|_| panic!("Tawny initialization failed; check configuration and private database migration status."));
-        privacy::recovery::start(Arc::clone(&state.db)).await
-            .unwrap_or_else(|_| panic!("Check privacy recovery configuration and pending requests before starting Tawny."));
         server::spawn_subscription_poller(state.clone());
 
         let db = Arc::clone(&state.db);

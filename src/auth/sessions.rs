@@ -40,7 +40,7 @@ async fn migrate(db: &Surreal<Any>) -> Result<()> {
         let full = rows.len() == 128;
         for row in rows {
             db.query(
-                "BEGIN TRANSACTION; fn::privacy_retire_sessions_v1($account); COMMIT TRANSACTION;",
+                "BEGIN TRANSACTION; fn::retire_account_sessions($account); COMMIT TRANSACTION;",
             )
             .bind(("account", row.session_account))
             .await?

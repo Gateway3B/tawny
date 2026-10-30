@@ -13,10 +13,9 @@ dioxus = { version = "=0.7.9", features = ["router", "fullstack"] }
 dioxus-fullstack = "=0.7.9"
 dioxus-icons = "0.1.0"
 g3-route-transitions = { version = "0.5", features = ["native-back"] }
-g3-native-plugins = { version = "0.4.4", features = ["app-info", "external-url", "appearance", "back-button", "clipboard", "media", "safe-area", "storage"] }
+g3-native-plugins = { version = "0.4.4", features = ["external-url", "appearance", "back-button", "clipboard", "media", "safe-area", "storage"] }
 g3-ui = { version = "0.6", features = ["transitions"] }
-g3-brand = { git = "https://github.com/g3techhq/g3-brand", rev = "07d3e99391fcafabfcc6b5e0a044ac9ab4f54d7d" }
-# Reviewed account-tracked session adapter until a maintainer-approved release.
+# Account-tracked session support until a published release is available.
 g3-auth = { git = "https://github.com/g3techhq/g3-auth", rev = "9f68e70c04f8358b4fc9b087624cb03199cf6fad" }
 g3-cache = "0.2.0"
 manganis = "=0.7.9"
@@ -26,7 +25,6 @@ surrealdb-types = { version = "=3.2.4" }
 cfg-if = "1.0.0"
 
 # Server-only
-uuid = { version = "1", features = ["v4"], optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "json", "env-filter"], optional = true }
 tokio = { version = "1.42.0", features = ["full"], optional = true }
@@ -82,10 +80,8 @@ mobile = [
     "reqwest",
 ]
 server = [
-    "dep:uuid",
     "dep:tracing",
     "dep:tracing-subscriber",
-    "g3-brand/server",
     "dioxus/server",
     "g3-auth/server",
     "g3-auth/rate-limit",
@@ -151,7 +147,7 @@ version = "0.2"
 features = ["js"]
 
 [patch.crates-io]
-# Reviewed app-info support until a maintainer-approved native release.
+# Pinned native runtime for consistent platform integrations.
 g3-native-plugins = { git = "https://github.com/g3techhq/g3-native-plugins", rev = "1896034867ae692db0503c38136cfbcfc804448a" }
 
 [dev-dependencies]

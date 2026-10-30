@@ -84,11 +84,24 @@ const ACCOUNT_COLUMNS: &str = "type::string(id) AS id, display_name, email, is_g
 
 // Delete relations before their source records; the shared YouTube catalogue
 // belongs to the server, not to this account.
-const DELETE_ACCOUNT_QUERY: &str = concat!(
-    "BEGIN TRANSACTION; IF count(SELECT id FROM privacy_request WHERE subject = crypto::sha256(type::string(type::record($owner)))) != 0 { THROW 'Use the saved deletion request'; };",
-    crate::privacy::primary::erase_primary_sql!(),
-    "COMMIT TRANSACTION;"
-);
+const DELETE_ACCOUNT_QUERY: &str = r#"BEGIN TRANSACTION;
+
+    LET $channels = SELECT VALUE channel_id FROM user_subscription WHERE owner = type::record($owner);
+    LET $playlists = SELECT VALUE id FROM playlist WHERE owner = type::record($owner);
+    DELETE playlist_item WHERE in IN $playlists;
+    DELETE playlist WHERE owner = type::record($owner);
+    DELETE subscription_group WHERE owner = type::record($owner);
+    DELETE library_state WHERE owner = type::record($owner);
+    DELETE video_progress WHERE owner = type::record($owner);
+    DELETE user_subscription WHERE owner = type::record($owner);
+    DELETE subscription WHERE in = type::record($owner);
+    FOR $channel_id IN $channels {
+        UPDATE channel SET subscribed = count(SELECT id FROM user_subscription WHERE channel_id = $channel_id AND subscribed = true) > 0 WHERE channel_id = $channel_id;
+    };
+    fn::retire_account_sessions(type::record($owner));
+    DELETE type::record($owner);
+    IF count(SELECT id FROM playlist_item WHERE in IN $playlists) != 0 { THROW 'Primary relation removal is pending'; };
+COMMIT TRANSACTION;"#;
 
 fn hash_password(password: &str) -> Result<String> {
     let salt = SaltString::generate(&mut OsRng);
@@ -184,7 +197,7 @@ impl<'db> Accounts<'db> {
                 r#"UPDATE type::record($id) SET
                     email = $email, password_hash = $password_hash, display_name = $email,
                     is_guest = false, updated_at = time::now()
-                WHERE is_guest = true AND email = NONE AND count(SELECT id FROM privacy_request WHERE account = type::record($id)) = 0
+                WHERE is_guest = true AND email = NONE
                 RETURN {ACCOUNT_COLUMNS}"#
             ))
             .bind(("id", account_id.to_string()))
@@ -308,16 +321,6 @@ pub fn account_rate_limits() -> g3_auth::rate_limit::RateLimits {
         ))
         .limit(Limit::per_minute(
             &["/api/v1/auth/delete"],
-            KeyBy::Global,
-            10,
-        ))
-        .limit(Limit::per_minute(
-            &["/api/v1/auth/export"],
-            KeyBy::Session,
-            1,
-        ))
-        .limit(Limit::per_minute(
-            &["/api/v1/auth/export"],
             KeyBy::Global,
             10,
         ))
