@@ -183,6 +183,9 @@ lazy-js-bundle = { git = "https://github.com/Gateway3B/dioxus", branch = "main" 
 dioxus-icons = { git = "https://github.com/Gateway3B/dioxus-icons", branch = "main" }
 # g3-auth's desktop and mobile cookie stores; no 0.8 release upstream.
 dioxus-cookie = { git = "https://github.com/Gateway3B/dioxus-cookie", branch = "main" }
+# g3-ui uses it. Published 0.8.0-alpha.3 still names the old
+# `dioxus::dioxus_core` paths, which the fork no longer has.
+dioxus-sdk-time = { git = "https://github.com/Gateway3B/sdk", branch = "main" }
 # g3 crates are not published until Dioxus 0.8.0:
 g3-auth = { git = "https://github.com/g3techhq/g3-auth", branch = "main" }
 g3-cache = { git = "https://github.com/g3techhq/g3-cache", branch = "main" }

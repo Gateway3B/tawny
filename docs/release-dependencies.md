@@ -6,8 +6,8 @@ Cargo discovers that file when invoked from a project beneath it. It patches
 the g3 crates, the Dioxus crates and the ecosystem forks using absolute paths.
 
 `Cargo.toml` names each shared crate by its crates.io version and puts its
-remote under `[patch.crates-io]`: the Dioxus crates, dioxus-icons and
-dioxus-cookie from their Gateway3B forks, and the g3 crates from
+remote under `[patch.crates-io]`: the Dioxus crates, dioxus-icons,
+dioxus-cookie and dioxus-sdk-time from their Gateway3B forks, and the g3 crates from
 `g3techhq/<crate>` `main`, since nothing is published until Dioxus 0.8.0. A
 config patch overrides a manifest patch for the same crate, so local builds use
 the sibling checkouts and CI and Docker use the remotes.
