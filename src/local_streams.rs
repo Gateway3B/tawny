@@ -116,7 +116,7 @@ fn through_relay(video_id: &str, mut source: PlaybackSource) -> Result<PlaybackS
     })
 }
 
-/// The Kotlin plugin, constructed once with the Activity.
+/// The Kotlin plugin, constructed once with the Application.
 struct Plugin {
     instance: GlobalRef,
     vm: JavaVM,
@@ -153,8 +153,14 @@ fn call_plugin(video_id: &str) -> Result<String, String> {
     Ok(answer.into())
 }
 
-/// Constructs the plugin through the Activity's own class loader: from a thread
+/// Constructs the plugin through the app's own class loader: from a thread
 /// attached from native code, `FindClass` only sees the system's classes.
+///
+/// `ndk_context` holds the Application, not the Activity, and that is what the
+/// plugin is built with: it only needs the application context, and a cached
+/// plugin holding an Activity would outlive activity recreation (rotation,
+/// dark mode). Anything that needs the Activity itself goes through
+/// `manganis::android::with_activity`.
 fn construct() -> Result<Plugin, String> {
     let android = ndk_context::android_context();
     let vm = unsafe { JavaVM::from_raw(android.vm().cast()) }
@@ -162,10 +168,10 @@ fn construct() -> Result<Plugin, String> {
     let mut env = vm
         .attach_current_thread_permanently()
         .map_err(|error| format!("Could not attach to the Android VM: {error}"))?;
-    let activity = unsafe { JObject::from_raw(android.context().cast()) };
+    let application = unsafe { JObject::from_raw(android.context().cast()) };
     let loader = env
         .call_method(
-            &activity,
+            &application,
             "getClassLoader",
             "()Ljava/lang/ClassLoader;",
             &[],
@@ -188,15 +194,15 @@ fn construct() -> Result<Plugin, String> {
     let instance = env
         .new_object(
             JClass::from(class),
-            "(Landroid/app/Activity;)V",
-            &[JValue::Object(&activity)],
+            "(Landroid/content/Context;)V",
+            &[JValue::Object(&application)],
         )
         .map_err(|error| format!("Could not start the device resolver: {error}"))?;
     let instance = env
         .new_global_ref(instance)
         .map_err(|error| format!("Could not keep the device resolver: {error}"))?;
-    // The Activity reference is the host's, not this wrapper's to release.
-    std::mem::forget(activity);
+    // The Application reference is the host's, not this wrapper's to release.
+    std::mem::forget(application);
     drop(env);
     Ok(Plugin { instance, vm })
 }

@@ -1,6 +1,5 @@
 package net.gateway3.tawny.localstreams
 
-import android.app.Activity
 import android.content.Context
 import androidx.javascriptengine.IsolateStartupParameters
 import androidx.javascriptengine.JavaScriptSandbox
@@ -13,11 +12,12 @@ import org.json.JSONObject
 
 /// Resolves a video's streams on the phone. Rust calls `resolveFromRust` from
 /// a worker thread (it blocks for the seconds yt-dlp takes) and gets back
-/// `{"source": PlaybackSource}` or `{"error": "why"}`.
-class LocalStreamsPlugin(private val activity: Activity) {
+/// `{"source": PlaybackSource}` or `{"error": "why"}`. Constructed with the
+/// Application, so it survives activity recreation.
+class LocalStreamsPlugin(private val app: Context) {
     fun resolveFromRust(videoId: String): String {
         return try {
-            val context = activity.applicationContext
+            val context = app.applicationContext
             JsSandbox.context = context
             if (!Python.isStarted()) Python.start(AndroidPlatform(context))
             val cacheDir = File(context.cacheDir, "yt-dlp").path
