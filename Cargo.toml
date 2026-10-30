@@ -135,6 +135,28 @@ inherits = "dev"
 debug = 0
 strip = "debuginfo"
 
+# dx builds release clients with these names (and the server with
+# `server-release`, left on Cargo's defaults so it keeps unwinding). Without
+# them the wasm gets Cargo's release defaults: measured on media-mancer, these
+# settings cut the brotli download by about a quarter.
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = false
+
+[profile.android-release]
+inherits = "release"
+# Phones run the UI here; CPU matters more than size.
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+
+[profile.ios-release]
+inherits = "android-release"
+
 [target.wasm32-unknown-unknown.dependencies.getrandom_v03]
 package = "getrandom"
 version = "0.3.3"

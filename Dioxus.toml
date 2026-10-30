@@ -6,6 +6,11 @@ out_dir = "dist"
 tailwind_input = "tailwind.css"
 tailwind_output = "assets/tailwind.css"
 
+[web]
+# Brotli at build time: smaller than a proxy compressing on the fly, and served
+# as is by the fullstack server whatever sits in front of it.
+pre_compress = true
+
 [web.app]
 title = "Tawny"
 
