@@ -1,13 +1,15 @@
 # Dioxus patterns for g3 apps
 
-How the g3 apps use Dioxus 0.7, and the mistakes that cost us time. The rest
+How the g3 apps use Dioxus, and the mistakes that cost us time. The rest
 of `docs/dioxus/` is the framework's own architecture notes, copied from
 upstream; this file is ours. When the two disagree about how *this* app should
 be written, this file wins.
 
-Pinned: `dioxus`, `dioxus-fullstack` and `manganis` `=0.7.9`, matching the `dx`
-CLI. Your training data probably describes 0.5 or 0.6; server functions,
-assets, signals and props all changed since.
+Pinned: `dioxus`, `dioxus-fullstack` and `manganis` `=0.8.0-alpha.3`, from the
+Gateway3B fork through `[patch.crates-io]`, matching a `dx` built from the same
+fork. Your training data probably describes 0.5 or 0.6; server functions,
+assets, signals and props all changed since, and upstream `main` renamed
+`dioxus-core` to `dioxus-vdom` (`dioxus::core` still works).
 
 ---
 
@@ -251,7 +253,8 @@ navigator directly (see `docs/navigation.md`).
 
 ## Tooling
 
-- **`dx` pins:** `dioxus*` and `manganis` must match the installed `dx`.
+- **`dx` pins:** `dioxus*` and `manganis` must come from the same fork commit
+  as the installed `dx`, or the client fails to hydrate.
 - **Do not set `rust-lld` as the linker on Windows**; `dx` builds break.
 - **Stop `dx serve` before editing Rust.** It tries to hot-patch fullstack
   apps and can leave a wasm whose JS imports `env`; the page then never
@@ -261,13 +264,15 @@ navigator directly (see `docs/navigation.md`).
 - **`debug = 0` in `[profile.wasm-dev]`** keeps rebuilds fast, and dx strips
   names, so a wasm panic's stack is `wasm-function[N]`. To find a signal
   borrow conflict, add
-  `generational-box = { version = "=0.7.10", features = ["debug_borrows"] }`
-  temporarily: the panic then names where the value was created.
+  `generational-box = { version = "=0.8.0-alpha.3", features = ["debug_borrows"] }`
+  temporarily, with a `[patch.crates-io]` line for it from the fork like the
+  other Dioxus crates: the panic then names where the value was created.
 - **A hidden tab never runs `requestAnimationFrame`.** Code that waits a frame
   stalls in a background tab or a hidden preview pane.
-- **Do not run `dx fmt` (0.7.9) on this code.** It has dropped `);` and
-  duplicated statements inside closures in `rsx!`. Format with `cargo fmt`;
-  `.vscode/settings.json` turns the Dioxus extension's formatter off.
+- **Do not run `dx fmt` on this code.** 0.7.9's dropped `);` and duplicated
+  statements inside closures in `rsx!`, and the fork's is unchecked. Format
+  with `cargo fmt`; `.vscode/settings.json` turns the Dioxus extension's
+  formatter off.
 - **IndexedDB requests must finish** even if the future awaiting them is
   dropped. g3-cache runs them on their own task.
 

@@ -36,12 +36,25 @@ Native compilation is intentionally separate from image publication and pull
 request CI. Run **Build Mobile Artifacts** manually, choose Android, iOS, or
 both, and enter the public HTTPS origin of the Tawny server the app should use.
 Android runs on Ubuntu and uploads an APK and AAB; iOS runs on macOS and uploads
-an unsigned IPA. Artifacts expire after 14 days.
+an IPA. Artifacts expire after 14 days. Both jobs install `dx` from the
+Gateway3B Dioxus fork, which must match the libraries the app builds against.
 
-These artifacts prove that the native targets compile, but they are not yet
-store-distributable. Android release signing needs an upload keystore, and iOS
-needs an Apple distribution certificate and provisioning profile. Add those as
-repository secrets only when the unsigned workflows are consistently green.
+Every run numbers its build with the workflow run number, so each store upload
+is higher than the last. Signing is optional and turns on when its repository
+secrets exist; without them the artifacts are unsigned:
+
+| Platform | Secrets | Effect |
+| --- | --- | --- |
+| Android | `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | Signs with the Play upload key (use Play App Signing). |
+| iOS | `IOS_DISTRIBUTION_CERTIFICATE_BASE64`, `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD`, `IOS_APPSTORE_PROFILE_BASE64` | Builds with `--appstore`: an Apple Distribution certificate (`.p12`) and an App Store provisioning profile. |
+
+The Android keystore and passwords are written to the runner only: the job
+appends `[android.signing]` to its copy of `Dioxus.toml` and decodes the
+keystore outside the checkout. The generated Gradle project holds the
+passwords, so only `artifacts/` is uploaded; never upload the build directory.
+The iOS certificate goes into a temporary keychain that is deleted when the job
+ends. See [mobile.md](mobile.md#builds) for what a first store submission still
+needs.
 
 ## Portainer stack
 

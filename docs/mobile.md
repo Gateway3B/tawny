@@ -15,8 +15,11 @@ just dev-desktop
 
 A native build has no page origin, so the server it talks to is compiled in
 (`SERVER_URL`) and can be changed in Settings. `src/server_url.rs` reads the
-choice before `dioxus::launch`, because Dioxus 0.7 keeps the first server URL
-it is given; changing it reloads the app. The player's transport fetches from
+choice before `dioxus::launch`, because the first render already calls server
+functions. Saving a new one repoints the server functions at once and reloads
+the app, which still holds the previous backend's session and library; a
+packaged build keeps that state across a reload and has to be reopened. The
+player's transport fetches from
 the webview directly, so it is told the chosen backend too
 (`playback_server_url` in `player.rs`).
 
@@ -57,3 +60,20 @@ Native builds initialize the cookie runtime before launch
 
 **Build Mobile** (`.github/workflows/build-mobile.yml`) produces the Android
 and iOS artifacts; see [deployment.md](deployment.md#native-mobile-artifacts).
+
+Release builds use the `android-release` and `ios-release` profiles in
+`Cargo.toml` (opt-level 3, fat LTO). Each run sets the Android `versionCode`
+and the Apple bundle version to the workflow's run number
+(`DX_ANDROID_VERSION_CODE`, `DX_BUNDLE_VERSION`), since every store upload
+needs a higher build number than the last.
+
+Before a first store submission:
+
+- **Icons.** `Dioxus.toml` has no `[bundle] icon`. iOS needs an opaque
+  1024x1024 PNG (the App Store rejects transparency), and Android generates
+  its launcher icons from the same setting.
+- **SDK levels.** `target_sdk` is 35; check Google Play's current minimum
+  before uploading.
+- **On a device:** rotate and toggle dark mode (Android recreates the
+  activity), leave the app in the background for several minutes and resume,
+  and select text in a release build.

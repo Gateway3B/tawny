@@ -8,9 +8,10 @@ Dioxus-specific ones are explained further in
 
 ## Setup
 
-**`dx and dioxus versions are incompatible`**
-The CLI and the `dioxus` crate must be the same version. `Cargo.toml` pins
-`=0.7.9`: `cargo binstall dioxus-cli@0.7.9 --force`.
+**`dx and dioxus versions are incompatible`**, or the page never hydrates
+The CLI must be built from the same Dioxus fork as the libraries
+(`=0.8.0-alpha.3` from Gateway3B/dioxus): `cargo install --git
+https://github.com/Gateway3B/dioxus --branch main dioxus-cli --locked --force`.
 
 **`Failed to connect to the database`**
 The services are not running, or `.env` points elsewhere. `just db-up`, then
@@ -56,8 +57,9 @@ from `Callback::__point_to`**
 A handler passed as a prop was a closure rebuilt on every render of a page
 that re-renders often. Make it a `use_callback` above any early return, reading
 what it needs when it runs (see patterns.md, "Handlers"). To find which one,
-add `generational-box = { version = "=0.7.10", features = ["debug_borrows"] }`
-to `Cargo.toml` for a build: the panic then names where the value was made.
+add `generational-box = { version = "=0.8.0-alpha.3", features = ["debug_borrows"] }`
+to `Cargo.toml` for a build, patched from the fork like the other Dioxus
+crates: the panic then names where the value was made.
 
 **A new guest's first requests show `401`**
 They run before the session cookie lands, and are retried once it exists.
@@ -83,6 +85,7 @@ Check the sidecar first, then the server log for the resolve.
 `http://127.0.0.1:8080` through `adb reverse`; a physical device needs
 `SERVER_URL` set to a reachable address. See [mobile.md](mobile.md).
 
-**A changed backend address is ignored**
-Dioxus 0.7 keeps the first server URL it is given; the app reloads to apply a
-new one.
+**A packaged app still shows the old server's library**
+Saving a backend address repoints the server functions at once, but a packaged
+build keeps its in-memory session and library across the reload. Close and
+reopen the app.

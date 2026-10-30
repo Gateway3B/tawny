@@ -20,11 +20,11 @@ built on the **g3 stack** (the same shape as
 
 | Piece | Version | Reference |
 | --- | --- | --- |
-| Dioxus (fullstack, router) | 0.7.9, pinned `=` | [docs/dioxus/](docs/dioxus/README.md), [dioxuslabs.com/learn/0.7](https://dioxuslabs.com/learn/0.7/) |
-| g3-ui (components, theme) | 0.4 | [docs/g3-ui.md](docs/g3-ui.md) |
-| g3-route-transitions (navigation) | 0.4 | [docs/navigation.md](docs/navigation.md) |
+| Dioxus (fullstack, router) | 0.8.0-alpha.3 from the Gateway3B fork, pinned `=` | [docs/dioxus/](docs/dioxus/README.md), [dioxuslabs.com/learn/0.7](https://dioxuslabs.com/learn/0.7/) |
+| g3-ui (components, theme) | 0.6 | [docs/g3-ui.md](docs/g3-ui.md) |
+| g3-route-transitions (navigation) | 0.5 | [docs/navigation.md](docs/navigation.md) |
 | g3-native-plugins (media, storage, back button) | 0.4 | [docs/mobile.md](docs/mobile.md) |
-| g3-auth (session guard, `#[public]`) | 0.1 | [docs/authentication.md](docs/authentication.md) |
+| g3-auth (session guard, `#[public]`, record ids) | 0.2 | [docs/authentication.md](docs/authentication.md) |
 | g3-cache (client and server caches) | 0.2 | [docs/architecture.md](docs/architecture.md#data-on-the-client) |
 | SurrealDB + SurrealKit | 3.2.4 | [database/README.md](database/README.md) |
 | rustypipe (YouTube extraction) | 0.11 | [docs/youtube.md](docs/youtube.md) |
@@ -33,7 +33,9 @@ built on the **g3 stack** (the same shape as
 | Tailwind (layout utilities only) | v4, run by `dx` | [docs/styling.md](docs/styling.md) |
 
 **Your training data is probably wrong about these.** Dioxus 0.7 changed server
-functions, assets and signals from earlier versions, and the g3 crates are new.
+functions, assets and signals from earlier versions, the fork tracks upstream
+`main` past 0.7 (`dioxus-core` is now `dioxus-vdom`; use `dioxus::core::..`),
+and the g3 crates are new.
 Read the linked doc before writing code against a library, not after it fails
 to compile. Prefer the patterns already in `src/` over what you remember.
 
@@ -159,8 +161,8 @@ The full guide, with examples from this code, is
   `Callback::__point_to` (see patterns.md).
 - **Borrow the one setting you need**: `app_state.settings.read().theater_mode`,
   not `app_state.settings()`, which clones the whole struct.
-- Format with `cargo fmt`. Do not run `dx fmt` 0.7.9: it corrupts closures
-  inside `rsx!`.
+- Format with `cargo fmt`. Do not run `dx fmt`: 0.7.9 corrupted closures
+  inside `rsx!`, and the fork's has not been checked.
 
 ### Reading and changing data
 

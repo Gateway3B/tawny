@@ -60,12 +60,15 @@ docker compose --profile production ps
 ```
 
 The Tawny image is multi-stage: Node installs the pinned browser transport,
-Rust/Dioxus builds the full-stack web release, and only the release output and
-runtime libraries enter the final image. Local sibling crate overrides stay
-outside the image. The portable lockfile resolves published UI/navigation
-dependencies and pinned public Git revisions
-for authentication and native support. A standalone clone needs no organization
-credentials or private repositories.
+cargo-chef cooks the dependencies, Rust/Dioxus builds the full-stack web
+release, and only the release output and runtime libraries enter the final
+image. The cook builds exactly what `dx` does (the web client as `wasm-release`
+for wasm32, the server as `server-release` for the host), so a source change
+reuses the cooked layer. `dx` is installed from the Gateway3B Dioxus fork the
+app builds against. Local sibling crate overrides stay outside the image. The
+portable lockfile resolves the Dioxus fork and the g3 crates from their public
+Git repositories (`[patch.crates-io]` in `Cargo.toml`). A standalone clone
+needs no organization credentials or private repositories.
 
 Place a TLS reverse proxy in front of port 8080. `TAWNY_PUBLIC_URL` must be the
 public HTTPS origin for proxy URLs and WebSub lease callbacks. If the explicit

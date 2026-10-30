@@ -33,7 +33,9 @@ You need [Rust](https://rustup.rs), [Docker](https://docker.com),
 
 ```bash
 cargo install cargo-binstall
-cargo binstall dioxus-cli@0.7.9 just cargo-nextest
+cargo binstall just cargo-nextest
+# dx must match the Dioxus fork the app builds against.
+cargo install --git https://github.com/Gateway3B/dioxus --branch main dioxus-cli --locked
 ```
 
 Then:

@@ -3,8 +3,14 @@
 Sibling overrides live outside this repository, in the parent directory:
 C:/Users/Matthew/Documents/Files/Projects/.cargo/config.toml.
 Cargo discovers that file when invoked from a project beneath it. It patches
-g3-auth, g3-cache, g3-native-plugins, g3-route-transitions and g3-ui using
-absolute paths. CI and Docker use versioned crates.io dependencies.
+the g3 crates, the Dioxus crates and the ecosystem forks using absolute paths.
+
+`Cargo.toml` names each shared crate by its crates.io version and puts its
+remote under `[patch.crates-io]`: the Dioxus crates, dioxus-icons and
+dioxus-cookie from their Gateway3B forks, and the g3 crates from
+`g3techhq/<crate>` `main`, since nothing is published until Dioxus 0.8.0. A
+config patch overrides a manifest patch for the same crate, so local builds use
+the sibling checkouts and CI and Docker use the remotes.
 
 Lefthook checks the staged Cargo.lock at commit time and rejects local shared
 libraries unless the package belongs to this repository. It also refuses a
@@ -12,12 +18,12 @@ staged .cargo/config.toml containing shared-library overrides. Install the
 hooks with lefthook install in a fresh checkout. Hooks can be bypassed with
 --no-verify; they protect normal commits, not deliberate bypasses.
 
-Local builds can change Cargo.lock. Before releasing, publish g3-native-plugins 0.4.5,
-g3-route-transitions 0.5.0, g3-ui 0.6.0 and g3-auth 0.2.0 through their gated
-workflows (g3-cache stays at 0.2.1).
-Temporarily rename the parent Cargo configuration, update the application
-lockfile from crates.io, and run the locked release checks. Restore the parent
-configuration afterward. Do not fabricate registry checksums.
+Local builds change Cargo.lock to point at the sibling paths, so leave it out
+of commits while the overrides are active. Before pushing, push the fork and
+g3 crate commits the app needs, temporarily rename the parent Cargo
+configuration, re-lock against the remotes, commit the lockfile and run the
+locked release checks. Restore the parent configuration afterward. Do not
+fabricate registry checksums.
 
 Any remaining repository-specific Cargo configuration contains unrelated
 settings, such as the Windows NASM workaround, rather than sibling patches.
