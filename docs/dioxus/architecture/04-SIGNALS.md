@@ -1,4 +1,4 @@
-<!-- Copied from DioxusLabs/dioxus at v0.7.10 (notes/architecture/04-SIGNALS.md). Describes the framework's internals, not this app. Do not edit here; refresh from upstream when Dioxus is upgraded. -->
+<!-- Copied from the Dioxus fork (Gateway3B/dioxus main: upstream main plus g3 commits) at 968ed55be (notes/architecture/04-SIGNALS.md). Describes the framework's internals, not this app. Do not edit here; refresh from the fork when it is rebased. -->
 
 # Signals and State Management
 

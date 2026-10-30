@@ -1,4 +1,4 @@
-<!-- Copied from DioxusLabs/dioxus at v0.7.10 (notes/architecture/00-OVERVIEW.md). Describes the framework's internals, not this app. Do not edit here; refresh from upstream when Dioxus is upgraded. -->
+<!-- Copied from the Dioxus fork (Gateway3B/dioxus main: upstream main plus g3 commits) at 968ed55be (notes/architecture/00-OVERVIEW.md). Describes the framework's internals, not this app. Do not edit here; refresh from the fork when it is rebased. -->
 
 # Dioxus Architecture Overview
 
@@ -23,7 +23,7 @@ This directory contains comprehensive architecture documentation for the Dioxus 
 
 ```
 dioxus (umbrella crate)
-├── dioxus-core (VirtualDOM, runtime, scheduler)
+├── dioxus-vdom (VirtualDOM, runtime, scheduler)
 │   └── generational-box (Copy semantics for references)
 ├── dioxus-rsx (macro parsing)
 │   └── dioxus-autofmt (code formatting)

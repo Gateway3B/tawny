@@ -1,4 +1,4 @@
-<!-- Copied from DioxusLabs/dioxus at v0.7.10 (notes/architecture/08-ASSETS.md). Describes the framework's internals, not this app. Do not edit here; refresh from upstream when Dioxus is upgraded. -->
+<!-- Copied from the Dioxus fork (Gateway3B/dioxus main: upstream main plus g3 commits) at 968ed55be (notes/architecture/08-ASSETS.md). Describes the framework's internals, not this app. Do not edit here; refresh from the fork when it is rebased. -->
 
 # Manganis Asset System Architecture
 
@@ -39,7 +39,7 @@ Two static link sections for backward compatibility:
    - For older CLIs (0.7.0-0.7.1)
 
 2. **New Format** (`__ASSETS__{hash}`):
-   - Uses const_serialize_08 (CBOR)
+   - Uses const_serialize (CBOR)
    - For dx >= 0.7.2
 
 Both start with `PLACEHOLDER_HASH` sentinel, replaced by CLI during build.
@@ -163,7 +163,7 @@ Used for asset paths and CSS identifiers. Serialized as List layout.
 ```
 For each __ASSETS__{hash}:
 1. Read serialized bytes from section
-2. Deserialize BundledAsset via const_serialize_08
+2. Deserialize BundledAsset via const_serialize
 3. Fall back to const_serialize_07 if fails
 4. Extract: absolute_source_path, bundled_path, options
 ```
@@ -174,13 +174,13 @@ For each __ASSETS__{hash}:
 
 **Phase 4: Asset Optimization**
 
-| Type | Processing |
-|------|------------|
-| Image | Resize, convert format, optimize |
-| CSS | Minify if enabled |
-| JS | Minify if enabled |
-| Folder | Recursive copy |
-| Unknown | Direct copy with optional hash |
+| Type    | Processing                       |
+| ------- | -------------------------------- |
+| Image   | Resize, convert format, optimize |
+| CSS     | Minify if enabled                |
+| JS      | Minify if enabled                |
+| Folder  | Recursive copy                   |
+| Unknown | Direct copy with optional hash   |
 
 **Phase 5: Binary Patching**
 ```
@@ -343,7 +343,7 @@ const API_KEY: Secret = secret!("DIOXUS_API_KEY");
 - Symbol: `__MANGANIS__{hash}`
 
 **Current (0.7.2+)**:
-- const_serialize_08 (CBOR)
+- const_serialize (CBOR)
 - Symbol: `__ASSETS__{hash}`
 
 **Migration**: CLI tries new format first, falls back to legacy if deserialization fails or PLACEHOLDER_HASH still present.

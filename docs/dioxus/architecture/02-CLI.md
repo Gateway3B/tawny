@@ -1,4 +1,4 @@
-<!-- Copied from DioxusLabs/dioxus at v0.7.10 (notes/architecture/02-CLI.md). Describes the framework's internals, not this app. Do not edit here; refresh from upstream when Dioxus is upgraded. -->
+<!-- Copied from the Dioxus fork (Gateway3B/dioxus main: upstream main plus g3 commits) at 968ed55be (notes/architecture/02-CLI.md). Describes the framework's internals, not this app. Do not edit here; refresh from the fork when it is rebased. -->
 
 # Dioxus CLI Architecture
 
@@ -163,6 +163,9 @@ BundleConfig
 ├── resources: Vec<PathBuf>
 ├── deb / macos / windows / android: Platform-specific
 ```
+### Android Gradle Generation
+
+`dx` generates an AGP 9 Android project and bundles source plugins as library subprojects. It enables `BuildConfig` for library modules and removes AGP 8 Kotlin plugin declarations, `kotlinOptions`, and library `targetSdk` before running Gradle.
 
 ## Hot-Patching
 
