@@ -1,15 +1,9 @@
 //! Client configuration that has to exist *before* the app does.
 //!
 //! The backend address lives here because it must be known before
-//! `dioxus::launch`. This does not use
-//! [`crate::cache::use_persistent_signal`] - that reads localStorage through
-//! `document::eval`, and there is no document yet.
-//!
-//! The backend URL in particular is once-only. `dioxus::fullstack::
-//! set_server_url` stores into a `OnceLock`, so the second call is silently
-//! ignored; the value has to be right the first time, and changing it means
-//! relaunching. That is a real constraint on the settings UI, not an
-//! implementation detail: see [`set_backend_url`].
+//! `dioxus::launch`: the first render already calls server functions. This
+//! does not use [`crate::cache::use_persistent_signal`] - that reads
+//! localStorage through `document::eval`, and there is no document yet.
 //!
 //! Each platform reads its own store directly - `localStorage` on web, the
 //! g3-native-plugins key-value store on Android, a small JSON file under the
@@ -93,26 +87,24 @@ pub fn has_chosen_backend() -> bool {
         .is_some()
 }
 
-/// Record the backend to use from the *next* launch onwards.
+/// Save the backend and point the server functions at it.
 ///
-/// Deliberately does not try to apply it now. `set_server_url` has already been
-/// called for this process and will ignore a second call, so a caller that
-/// pretended otherwise would leave the app talking to the old backend while the
-/// UI claimed the new one. Callers must send the viewer through a relaunch -
-/// on the web, a page reload is one.
+/// The running app still holds the previous backend's session and library,
+/// so callers send the viewer through a reload as well.
 pub fn set_backend_url(url: &str) -> Option<String> {
     let normalized = normalize_backend_url(url)?;
     store(BACKEND_URL_KEY, &normalized);
+    install();
     Some(normalized)
 }
 
 /// Point this process's server-function client at the configured backend.
 ///
-/// Called once from `main`, before `dioxus::launch`.
+/// Called from `main` before `dioxus::launch`, and again whenever the backend
+/// changes.
 pub fn install() {
-    // Leaked deliberately: `set_server_url` takes `&'static str` and keeps it
-    // for the life of the process, which is exactly how long this lives. One
-    // leak per launch, of one URL.
+    // Leaked deliberately: `set_server_url` takes `&'static str`. One small
+    // leak per launch or change of backend.
     let url: &'static str = Box::leak(backend_url().into_boxed_str());
     dioxus::fullstack::set_server_url(url);
 }

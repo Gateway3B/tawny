@@ -112,9 +112,9 @@ fn main() {
 fn main() {
     g3_auth::init();
     g3_ui::init_auto_mode();
-    // Before `launch`, not after: `set_server_url` keeps only its first value.
-    // The cookie runtime is initialized above so the first request can restore
-    // its session. See `config` for why the URL cannot come from the usual
+    // Before `launch`: the first render already calls server functions. The
+    // cookie runtime is initialized above so the first request can restore its
+    // session. See `server_url` for why the URL cannot come from the usual
     // persistence helper.
     server_url::install();
     #[cfg(any(feature = "desktop", feature = "mobile"))]

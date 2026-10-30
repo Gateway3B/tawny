@@ -263,7 +263,6 @@ navigator directly (see `docs/navigation.md`).
   borrow conflict, add
   `generational-box = { version = "=0.7.10", features = ["debug_borrows"] }`
   temporarily: the panic then names where the value was created.
-- **`set_server_url` keeps its first value** (fixed in Dioxus 0.8).
 - **A hidden tab never runs `requestAnimationFrame`.** Code that waits a frame
   stalls in a background tab or a hidden preview pane.
 - **Do not run `dx fmt` (0.7.9) on this code.** It has dropped `);` and

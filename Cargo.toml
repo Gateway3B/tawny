@@ -52,10 +52,10 @@ sha2 = { version = "0.10", optional = true }
 time = { version = "0.3.55", features = ["parsing"] }
 web-time = "1.1.0"
 
-# The backend URL has to be known before `dioxus::launch`, because
-# `set_server_url` writes a `OnceLock` and a second call is silently ignored.
-# That rules out the localStorage helper in `cache`, which needs a running app
-# to eval, so each client platform reads its own store directly instead.
+# The backend URL has to be known before `dioxus::launch`, because the first
+# render already calls server functions. That rules out the localStorage helper
+# in `cache`, which needs a running app to eval, so each client platform reads
+# its own store directly instead.
 web-sys = { version = "0.3", features = ["Location", "Storage", "Window"], optional = true }
 dirs = { version = "6", optional = true }
 

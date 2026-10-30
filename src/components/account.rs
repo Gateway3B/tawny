@@ -26,12 +26,12 @@ use crate::{
     state::AppState,
 };
 
-/// Reload the client so a new backend URL takes effect.
+/// Reload the client after a change of backend or account.
 ///
-/// `set_server_url` keeps only the first value it is given, so there is no way
-/// to repoint a running process - see `config`. On the web a reload is a fresh
-/// process; a packaged client has to be restarted by hand, which is what the
-/// setup screen says.
+/// The running app holds the previous session and library in memory. On the
+/// web a reload is a fresh process; a packaged client keeps its state across a
+/// WebView reload and has to be restarted by hand, which is what the setup
+/// screen says.
 fn reload_client() {
     // Signing in/out unmounts the account's keyed form. Keep the reload in
     // the root scope so that removing that form cannot cancel it.
