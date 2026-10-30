@@ -21,11 +21,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-# The cook and the final build must use the same toolchain.
+# The cook and the final build must use the same toolchain. dx must come from
+# the same Dioxus fork as the libraries, or the client fails to hydrate.
 COPY rust-toolchain.toml ./
 RUN rustup target add wasm32-unknown-unknown \
     && cargo install cargo-chef --version 0.1.78 --locked \
-    && cargo install dioxus-cli --version 0.7.9 --locked
+    && cargo install --git https://github.com/Gateway3B/dioxus --branch main dioxus-cli --locked
 
 # Keep local sibling overrides outside the image and fetch the portable lockfile.
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true \

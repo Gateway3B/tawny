@@ -27,7 +27,6 @@ permissions:
   contents: read
 
 env:
-  DIOXUS_CLI_VERSION: 0.7.9
   SERVER_URL: ${{ inputs.server_url }}
 
 jobs:
@@ -60,11 +59,10 @@ jobs:
       - name: Fetch dependencies
         run: cargo fetch --locked
 
-      - name: Install cargo-binstall
-        uses: cargo-bins/cargo-binstall@94dc7fe43d6ed7bfa6a6ea24f60f85e3f41dd104
-
+      # dx must come from the same Dioxus fork as the libraries, or the app
+      # fails to hydrate; the fork publishes no binaries yet.
       - name: Install Dioxus CLI
-        run: cargo binstall "dioxus-cli@${DIOXUS_CLI_VERSION}" --no-confirm --force
+        run: cargo install --git https://github.com/Gateway3B/dioxus --branch main dioxus-cli --locked
 
       - name: Validate compiled configuration
         shell: bash
@@ -158,11 +156,10 @@ jobs:
       - name: Fetch dependencies
         run: cargo fetch --locked
 
-      - name: Install cargo-binstall
-        uses: cargo-bins/cargo-binstall@94dc7fe43d6ed7bfa6a6ea24f60f85e3f41dd104
-
+      # dx must come from the same Dioxus fork as the libraries, or the app
+      # fails to hydrate; the fork publishes no binaries yet.
       - name: Install Dioxus CLI
-        run: cargo binstall "dioxus-cli@${DIOXUS_CLI_VERSION}" --no-confirm --force
+        run: cargo install --git https://github.com/Gateway3B/dioxus --branch main dioxus-cli --locked
 
       - name: Validate compiled configuration
         shell: bash
