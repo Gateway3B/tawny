@@ -76,7 +76,52 @@ jobs:
             exit 1
           }
 
+      # Optional: sign with the Play upload key when its secrets exist,
+      # otherwise build unsigned. dx reads the keystore and passwords only from
+      # `[android.signing]` in Dioxus.toml, so the section is appended to the
+      # runner's copy here and never committed. The keystore is written outside
+      # the checkout.
+      - name: Configure Android upload signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$ANDROID_KEYSTORE_BASE64" ]]; then
+            echo "No upload keystore configured; building unsigned bundles."
+            exit 0
+          fi
+          : "${ANDROID_KEYSTORE_PASSWORD:?Configure ANDROID_KEYSTORE_PASSWORD with the keystore}"
+          : "${ANDROID_KEY_ALIAS:?Configure ANDROID_KEY_ALIAS with the keystore}"
+          : "${ANDROID_KEY_PASSWORD:?Configure ANDROID_KEY_PASSWORD with the keystore}"
+          export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/upload-keystore.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_FILE"
+          # JSON string escapes are valid TOML basic strings, so any password
+          # characters survive.
+          python3 - <<'PY'
+          import json, os
+          keys = {
+              "jks_file": os.environ["ANDROID_KEYSTORE_FILE"],
+              "jks_password": os.environ["ANDROID_KEYSTORE_PASSWORD"],
+              "key_alias": os.environ["ANDROID_KEY_ALIAS"],
+              "key_password": os.environ["ANDROID_KEY_PASSWORD"],
+          }
+          with open("Dioxus.toml", "a", encoding="utf-8") as config:
+              config.write("\n[android.signing]\n")
+              for key, value in keys.items():
+                  config.write(f"{key} = {json.dumps(value)}\n")
+          PY
+
+      # The build number must rise with every store upload; the run number does.
+      # Only `artifacts/` is uploaded: the generated Gradle project under
+      # `target/` holds the signing passwords.
       - name: Build Android release bundles
+        env:
+          DX_ANDROID_VERSION_CODE: ${{ github.run_number }}
+          DX_BUNDLE_VERSION: ${{ github.run_number }}
         run: >
           dx bundle --android --release --locked --no-default-features
           --fullstack false --package-types apk --package-types aab
@@ -129,11 +174,74 @@ jobs:
             exit 1
           }
 
-      - name: Build unsigned iOS release bundle
-        run: >
-          dx bundle --ios --release --locked --no-default-features
-          --fullstack false --package-types ipa --codesign false
-          --out-dir artifacts/ios
+      # Optional: sign for the App Store when the distribution certificate and
+      # profile exist in secrets, otherwise build unsigned. The certificate goes
+      # into a temporary keychain that is deleted when the job ends.
+      - name: Configure App Store signing
+        id: ios-signing
+        env:
+          IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          IOS_APPSTORE_PROFILE_BASE64: ${{ secrets.IOS_APPSTORE_PROFILE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$IOS_DISTRIBUTION_CERTIFICATE_BASE64" ]]; then
+            echo "No distribution certificate configured; building unsigned."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          : "${IOS_DISTRIBUTION_CERTIFICATE_PASSWORD:?Configure IOS_DISTRIBUTION_CERTIFICATE_PASSWORD with the certificate}"
+          : "${IOS_APPSTORE_PROFILE_BASE64:?Configure IOS_APPSTORE_PROFILE_BASE64 with the certificate}"
+
+          keychain="$RUNNER_TEMP/app-signing.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+          certificate="$RUNNER_TEMP/distribution.p12"
+          printf '%s' "$IOS_DISTRIBUTION_CERTIFICATE_BASE64" | base64 --decode > "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -P "$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain"
+          # dx finds the identity with `security find-identity`, which only
+          # searches the user's keychain list.
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$certificate"
+
+          # dx reads profiles from Xcode 16's folder when it exists, else the
+          # older one; install into both.
+          for folder in "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" \
+            "$HOME/Library/MobileDevice/Provisioning Profiles"; do
+            mkdir -p "$folder"
+            printf '%s' "$IOS_APPSTORE_PROFILE_BASE64" | base64 --decode > "$folder/tawny-appstore.mobileprovision"
+          done
+          echo "keychain=$keychain" >> "$GITHUB_OUTPUT"
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      # The build number must rise with every store upload; the run number does.
+      - name: Build iOS release bundle
+        env:
+          DX_ANDROID_VERSION_CODE: ${{ github.run_number }}
+          DX_BUNDLE_VERSION: ${{ github.run_number }}
+          SIGNED: ${{ steps.ios-signing.outputs.configured }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$SIGNED" == true ]]; then
+            signing=(--appstore)
+          else
+            signing=(--codesign false)
+          fi
+          dx bundle --ios --release --locked --no-default-features \
+            --fullstack false --package-types ipa "${signing[@]}" \
+            --out-dir artifacts/ios
+
+      - name: Remove signing keychain
+        if: always() && steps.ios-signing.outputs.keychain != ''
+        env:
+          KEYCHAIN: ${{ steps.ios-signing.outputs.keychain }}
+        run: security delete-keychain "$KEYCHAIN"
 
       - name: Upload iOS artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
