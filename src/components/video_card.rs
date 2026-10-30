@@ -53,6 +53,9 @@ pub fn VideoGrid(
     // follows once the slide has finished. That puts every list-bearing page's
     // first frame at the same small price, cached or not.
     let settled = super::use_after_route_transition();
+    use_effect(move || {
+        let _ = document::eval(include_str!("../../assets/tawny_video_grid.js"));
+    });
     let limit = if settled() {
         usize::MAX
     } else {
@@ -74,6 +77,7 @@ pub fn VideoGrid(
         } else {
             // Shorts are portrait, so more of them fit across.
             Grid {
+                class: "video-grid relative content-start",
                 columns: GridColumns::Fit(if shorts { 10.0 } else { 18.0 }),
                 gap: Space::Lg,
                 for video in videos.iter().take(limit) {
@@ -156,11 +160,9 @@ pub fn VideoCard(
         }
     };
     let remove = playlist_id.clone().map(|playlist_id| {
-        let video_id = video.id.clone();
+        let video = video.clone();
         move |_| {
-            if app_state.remove_from_playlist(&video_id, &playlist_id) {
-                app_state.show_toast("Removed from playlist", Color::Neutral);
-            }
+            app_state.remove_from_playlist(&video, &playlist_id);
         }
     });
     let desktop_remove = remove.clone();

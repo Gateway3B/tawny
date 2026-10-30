@@ -7,6 +7,28 @@ const {
 } = require("./fixtures/app.cjs");
 
 test.describe("Tawny library interactions", () => {
+  test("undo restores a removed playlist video and its saved order", async ({
+    appPage,
+  }, testInfo) => {
+    if (testInfo.project.name === "mobile-chromium") {
+      await appPage.setViewportSize({ width: 390, height: 844 });
+    }
+    await openPlaylistWithVideos(appPage);
+    const cards = appPage.locator(".video-grid .video-card-frame");
+    const ids = () => cards.evaluateAll((nodes) => nodes.map((node) => node.dataset.scrollAnchor));
+    await expect(cards).toHaveCount(2);
+    const before = await ids();
+    await cards.first().locator('button[aria-label="Remove from playlist"]:visible').click();
+    await expect(cards).toHaveCount(1);
+    await expect(appPage.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+    await appPage.screenshot({ path: `target/undo-removal-${testInfo.project.name}.png` });
+    await appPage.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect.poll(ids).toEqual(before);
+    await expect(appPage.getByText("Restored to playlist", { exact: true })).toBeVisible();
+    await openApp(appPage, "/playlists/favorites");
+    await expect.poll(ids).toEqual(before);
+  });
+
   test("validates and creates a local playlist", async ({ appPage }) => {
     await openApp(appPage, "/playlists");
     await appPage.getByRole("button", { name: "New playlist", exact: true }).first().click();

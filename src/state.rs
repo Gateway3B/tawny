@@ -29,7 +29,7 @@ use crate::{
 };
 use dioxus::prelude::*;
 use g3_cache::{Cached, update_all_cached, update_cached, use_cached};
-use g3_ui::{Color, ToastOptions, Toaster};
+use g3_ui::{Color, ToastId, ToastOptions, Toaster};
 
 /// What saving a video to a playlist did. A swipe that lands on a video the
 /// playlist already holds has changed nothing, and saying so in the same
@@ -37,6 +37,13 @@ use g3_ui::{Color, ToastOptions, Toaster};
 pub enum PlaylistSave {
     Saved(String),
     AlreadyThere(String),
+}
+
+#[derive(Clone, PartialEq)]
+pub struct RemovedPlaylistVideo {
+    pub video: Video,
+    pub playlist_id: String,
+    pub position: usize,
 }
 
 /// A snapshot of the playlist run, resolved the same way autoplay resolves it.
@@ -82,6 +89,9 @@ pub struct AppState {
     /// this state, so a component inside the wrapper hands it over once it
     /// mounts. Until then a notice has nowhere to show and is dropped.
     pub toaster: Signal<Option<Toaster>>,
+    pub undo_removal: Signal<Option<RemovedPlaylistVideo>>,
+    last_toast: Signal<Option<ToastId>>,
+    toast_revision: Signal<u64>,
     pub playlist_picker_video: Signal<Option<Video>>,
     pub playlist_picker_open: Signal<bool>,
     pub video_actions_video: Signal<Option<Video>>,
@@ -242,11 +252,14 @@ impl AppState {
         (self.active_video)()
     }
 
-    pub fn show_toast(self, message: impl Into<String>, color: Color) {
+    pub fn show_toast(mut self, message: impl Into<String>, color: Color) {
+        self.toast_revision += 1;
+        self.undo_removal.set(None);
         if let Some(toaster) = *self.toaster.peek() {
             // Most notices confirm an action that can be repeated at once -
             // a swipe, a toggle - so the latest replaces rather than queues.
-            toaster.show(ToastOptions::new(message).color(color).replace());
+            let id = toaster.show(ToastOptions::new(message).color(color).replace());
+            self.last_toast.set(Some(id));
         }
     }
 
@@ -330,6 +343,8 @@ impl AppState {
     /// Discard account state without saving playback progress to a deleted
     /// account. The persistent read cache is cleared by the caller.
     pub fn forget_account(mut self) {
+        self.toast_revision += 1;
+        self.undo_removal.set(None);
         self.pending_progress.write().clear();
         self.unshown_progress.write().clear();
         self.stop_playback();
@@ -510,20 +525,24 @@ impl AppState {
         });
         self.send(
             DataChange::Playlists,
-            api::set_in_playlist(playlist_id.to_string(), video.id.clone(), true),
+            api::set_in_playlist(playlist_id.to_string(), video.id.clone(), true, None),
         );
         Some(PlaylistSave::Saved(playlist.name))
     }
 
-    pub fn remove_from_playlist(self, video_id: &str, playlist_id: &str) -> bool {
-        let present = self.peek_viewer(|viewer| {
+    pub fn remove_from_playlist(mut self, video: &Video, playlist_id: &str) -> bool {
+        let video_id = &video.id;
+        let removed = self.peek_viewer(|viewer| {
             viewer
                 .playlist(playlist_id)
-                .is_some_and(|playlist| playlist.video_ids.iter().any(|id| id == video_id))
+                .and_then(|playlist| playlist.video_ids.iter().position(|id| id == video_id))
         });
-        if !present {
+        let Some(position) = removed else {
             return false;
-        }
+        };
+        self.undo_removal.set(None);
+        self.toast_revision += 1;
+        let revision = *self.toast_revision.peek();
         self.edit_viewer(|viewer| {
             if let Some(playlist) = viewer.playlists.iter_mut().find(|p| p.id == playlist_id) {
                 playlist.video_ids.retain(|id| id != video_id);
@@ -532,14 +551,93 @@ impl AppState {
         update_cached(get_playlist, (playlist_id.to_string(),), |contents| {
             if let Some(contents) = contents {
                 contents.playlist.video_ids.retain(|id| id != video_id);
-                contents.videos.retain(|video| video.id != video_id);
+                contents.videos.retain(|video| video.id != *video_id);
             }
         });
-        self.send(
-            DataChange::Playlists,
-            api::set_in_playlist(playlist_id.to_string(), video_id.to_string(), false),
-        );
+        let removal = RemovedPlaylistVideo {
+            video: video.clone(),
+            playlist_id: playlist_id.to_string(),
+            position,
+        };
+        // The card's scope disappears with the optimistic edit. Keep the
+        // request alive, and offer Undo only after that request has finished.
+        dioxus::core::spawn_forever(async move {
+            let result = api::set_in_playlist(
+                removal.playlist_id.clone(),
+                removal.video.id.clone(),
+                false,
+                None,
+            )
+            .await;
+            invalidate(DataChange::Playlists);
+            match result {
+                Ok(_) if *self.toast_revision.peek() == revision => {
+                    if let Some(toaster) = *self.toaster.peek()
+                        && let Some(id) = self.last_toast.write().take()
+                    {
+                        toaster.dismiss(id);
+                    }
+                    self.undo_removal.set(Some(removal));
+                }
+                Ok(_) => {}
+                Err(_) => self.show_toast("Could not remove that video", Color::Danger),
+            }
+        });
         true
+    }
+
+    pub fn undo_playlist_removal(mut self) {
+        let Some(removed) = self.undo_removal.write().take() else {
+            return;
+        };
+        let video_id = &removed.video.id;
+        let playlist_id = &removed.playlist_id;
+        self.edit_viewer(|viewer| {
+            if let Some(playlist) = viewer.playlists.iter_mut().find(|p| p.id == *playlist_id)
+                && !playlist.video_ids.contains(video_id)
+            {
+                playlist.video_ids.insert(
+                    removed.position.min(playlist.video_ids.len()),
+                    video_id.clone(),
+                );
+            }
+        });
+        update_cached(get_playlist, (playlist_id.clone(),), |contents| {
+            if let Some(contents) = contents
+                && !contents.playlist.video_ids.contains(video_id)
+            {
+                contents.playlist.video_ids.insert(
+                    removed.position.min(contents.playlist.video_ids.len()),
+                    video_id.clone(),
+                );
+                contents.videos.insert(
+                    removed.position.min(contents.videos.len()),
+                    removed.video.clone(),
+                );
+            }
+        });
+        dioxus::core::spawn_forever(async move {
+            let result = api::set_in_playlist(
+                removed.playlist_id,
+                removed.video.id,
+                true,
+                Some(removed.position),
+            )
+            .await;
+            invalidate(DataChange::Playlists);
+            self.show_toast(
+                if result.is_ok() {
+                    "Restored to playlist"
+                } else {
+                    "Could not restore that video"
+                },
+                if result.is_ok() {
+                    Color::Success
+                } else {
+                    Color::Danger
+                },
+            );
+        });
     }
 
     /// Create a playlist, returning its id. The id is made here so the
@@ -573,7 +671,7 @@ impl AppState {
         let (created, video_id) = (id.clone(), video.id.clone());
         self.send(DataChange::Playlists, async move {
             api::save_playlist(created.clone(), name).await?;
-            api::set_in_playlist(created, video_id, true).await?;
+            api::set_in_playlist(created, video_id, true, None).await?;
             Ok(())
         });
         id
@@ -1437,6 +1535,9 @@ pub fn AppStateProvider(children: Element) -> Element {
         unshown_progress: Signal::new(HashMap::new()),
         server_position: Signal::new(None),
         toaster: Signal::new(None),
+        undo_removal: Signal::new(None),
+        last_toast: Signal::new(None),
+        toast_revision: Signal::new(0),
         playlist_picker_video: Signal::new(None),
         playlist_picker_open: Signal::new(false),
         video_actions_video: Signal::new(None),

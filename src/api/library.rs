@@ -138,9 +138,14 @@ pub async fn reorder_playlists(playlist_ids: Vec<String>) -> Result<()> {
     state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
     owner: crate::auth::Owner
 )]
-pub async fn set_in_playlist(playlist_id: String, video_id: String, member: bool) -> Result<bool> {
+pub async fn set_in_playlist(
+    playlist_id: String,
+    video_id: String,
+    member: bool,
+    position: Option<usize>,
+) -> Result<bool> {
     let done = state
-        .set_in_playlist(&owner.0, &playlist_id, &video_id, member)
+        .set_in_playlist(&owner.0, &playlist_id, &video_id, member, position)
         .await
         .map_err(server_error)?;
     state.note_change(&owner.0, LibraryChange::Playlists);

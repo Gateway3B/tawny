@@ -393,17 +393,41 @@ fn ToasterBridge() -> Element {
     let mut app_state = use_context::<AppState>();
     let toaster = use_toast();
     use_hook(move || app_state.toaster.set(Some(toaster)));
-    rsx! {}
+    rsx! {
+        if let Some(removed) = app_state.undo_removal.read().as_ref() {
+            UndoRemovalToast { key: "{removed.playlist_id}:{removed.video.id}" }
+        }
+    }
+}
+
+/// ToastOptions in g3-ui 0.6 cannot carry an action. Keep this action-bearing
+/// toast in the app's bridge so it survives the card and page that opened it.
+#[component]
+fn UndoRemovalToast() -> Element {
+    let mut app_state = use_context::<AppState>();
+    let open = use_signal(|| true);
+    rsx! {
+        g3_ui::Toast {
+            open,
+            message: "Removed from playlist",
+            duration: g3_ui::ToastDuration::Long,
+            on_dismiss: move |_| app_state.undo_removal.set(None),
+            action: rsx! {
+                Button {
+                    fill: ButtonFill::Clear,
+                    size: g3_ui::ButtonSize::Sm,
+                    onclick: move |_| app_state.undo_playlist_removal(),
+                    "Undo"
+                }
+            },
+        }
+    }
 }
 
 #[component]
 pub fn AppShell() -> Element {
-    let route = use_route::<Route>();
     rsx! {
-        // An obsolete native client may fail before connecting to its server.
-        // Public update help must stay available on the setup screen too.
-        crate::brand::StoreUpdatePrompt {}
-        super::AccountGate { allow_offline: matches!(route, Route::AboutG3tech {}),
+        super::AccountGate {
             ShellContent {}
         }
     }
@@ -540,10 +564,7 @@ fn BasePage(route: Route, covered: bool) -> Element {
 fn is_auxiliary_route(route: &Route) -> bool {
     matches!(
         route,
-        Route::SettingsPage {}
-            | Route::QueuePage {}
-            | Route::HistoryPage {}
-            | Route::AboutG3tech {}
+        Route::SettingsPage {} | Route::QueuePage {} | Route::HistoryPage {}
     )
 }
 
@@ -591,7 +612,6 @@ mod tests {
                 Route::Feed {},
                 Route::QueuePage {},
                 Route::SettingsPage {},
-                Route::AboutG3tech {},
                 watch,
                 next,
             ]),
@@ -615,6 +635,5 @@ mod tests {
     fn a_sheet_opened_first_has_nothing_beneath_it() {
         assert_eq!(walk(&[Route::VideoDetail { id: "video".into() }]), None);
         assert_eq!(walk(&[Route::SettingsPage {}]), None);
-        assert_eq!(walk(&[Route::AboutG3tech {}]), None);
     }
 }

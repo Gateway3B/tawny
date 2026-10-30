@@ -756,14 +756,15 @@ impl AppServerState {
             .collect())
     }
 
-    /// Put a video in a playlist (at the top) or take it out. Returns whether
-    /// that changed anything.
+    /// Put a video in a playlist or take it out. Undo supplies its previous
+    /// position; ordinary saves go at the top. Existing members stay put.
     pub async fn set_in_playlist(
         &self,
         owner: &str,
         playlist_id: &str,
         video_id: &str,
         member: bool,
+        position: Option<usize>,
     ) -> Result<bool> {
         let _guard = self.sync_lock.lock().await;
         let mut playlist = self
@@ -775,7 +776,10 @@ impl AppServerState {
             return Ok(false);
         }
         if member {
-            playlist.video_ids.insert(0, video_id.to_string());
+            playlist.video_ids.insert(
+                position.unwrap_or(0).min(playlist.video_ids.len()),
+                video_id.to_string(),
+            );
         } else {
             playlist.video_ids.retain(|id| id != video_id);
         }
@@ -1330,6 +1334,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn undo_restores_a_playlist_position_without_replacing_other_edits() {
+        let (state, owner) = state_and_owner().await;
+        state.save_playlist(&owner, "later", "Later").await.unwrap();
+        for id in ["c", "b", "a"] {
+            state
+                .set_in_playlist(&owner, "later", id, true, None)
+                .await
+                .unwrap();
+        }
+        state
+            .set_in_playlist(&owner, "later", "b", false, None)
+            .await
+            .unwrap();
+        state
+            .set_in_playlist(&owner, "later", "d", true, None)
+            .await
+            .unwrap();
+        state
+            .set_in_playlist(&owner, "later", "b", true, Some(1))
+            .await
+            .unwrap();
+        let playlist = state.find_playlist(&owner, "later").await.unwrap().unwrap();
+        assert_eq!(playlist.video_ids, ["d", "b", "a", "c"]);
+        assert!(
+            !state
+                .set_in_playlist(&owner, "later", "b", true, Some(1))
+                .await
+                .unwrap()
+        );
+        state
+            .set_in_playlist(&owner, "later", "e", true, Some(usize::MAX))
+            .await
+            .unwrap();
+        let playlist = state.find_playlist(&owner, "later").await.unwrap().unwrap();
+        assert_eq!(playlist.video_ids, ["d", "b", "a", "c", "e"]);
+    }
+
+    #[tokio::test]
     async fn playlist_membership_is_set_not_toggled() {
         let (state, owner) = state_and_owner().await;
         store(&state, &[video("a1", "UCa", 1, 600, false)]).await;
@@ -1337,14 +1379,14 @@ mod tests {
 
         assert!(
             state
-                .set_in_playlist(&owner, "later", "a1", true)
+                .set_in_playlist(&owner, "later", "a1", true, None)
                 .await
                 .unwrap()
         );
         // A second device that saw the old state sends the same answer.
         assert!(
             !state
-                .set_in_playlist(&owner, "later", "a1", true)
+                .set_in_playlist(&owner, "later", "a1", true, None)
                 .await
                 .unwrap()
         );
@@ -1358,13 +1400,13 @@ mod tests {
 
         assert!(
             state
-                .set_in_playlist(&owner, "later", "a1", false)
+                .set_in_playlist(&owner, "later", "a1", false, None)
                 .await
                 .unwrap()
         );
         assert!(
             !state
-                .set_in_playlist(&owner, "later", "a1", false)
+                .set_in_playlist(&owner, "later", "a1", false, None)
                 .await
                 .unwrap()
         );

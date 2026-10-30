@@ -64,7 +64,7 @@ pub fn AppOverlays() -> Element {
                     let save_video = video.clone();
                     let watched_video = video.clone();
                     let share_video = video.clone();
-                    let remove_id = video.id.clone();
+                    let remove_video = video.clone();
                     // Only offered when the sheet was opened from a playlist
                     // the video is still in.
                     let remove_from = (app_state.video_actions_playlist)().and_then(|playlist_id| {
@@ -152,9 +152,7 @@ pub fn AppOverlays() -> Element {
                                         description: "{playlist_name}",
                                         onclick: move |_| {
                                             app_state.video_actions_open.set(false);
-                                            if app_state.remove_from_playlist(&remove_id, &playlist_id) {
-                                                app_state.show_toast(format!("Removed from {playlist_name}"), Color::Neutral);
-                                            }
+                                            app_state.remove_from_playlist(&remove_video, &playlist_id);
                                         },
                                     }
                                 }
@@ -185,8 +183,8 @@ pub fn AppOverlays() -> Element {
                                     description: format!("{} videos", playlist.video_ids.len()),
                                     onclick: move |_| {
                                         if already_saved {
-                                            if app_state.remove_from_playlist(&video_id, &playlist_id) {
-                                                app_state.show_toast(format!("Removed from {playlist_name}"), Color::Neutral);
+                                            if let Some(video) = picked.as_ref() {
+                                                app_state.remove_from_playlist(video, &playlist_id);
                                             }
                                         } else if let Some(saved) = picked.as_ref().and_then(|video| app_state.add_to_playlist(video, &playlist_id)) {
                                             match saved {
