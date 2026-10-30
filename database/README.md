@@ -42,62 +42,15 @@ Before switching an existing production database to operator-controlled
 rollouts, first move release startup schema changes and `backfill.surql` into
 the reviewed rollout workflow. Until then, startup remains authoritative.
 
-## Runtime identity on the shared server
+## Runtime database identity
 
-Set `SURREALDB_AUTH_LEVEL=database` with explicit namespace, database, username
-and password. Tawny authenticates at that exact scope; a failed scoped login
-never retries as root. Missing credentials or an unknown auth level fail
-startup without printing the supplied values. Existing standalone deployments
-keep the `root` default for compatibility; the local template names it
-explicitly. This default is not suitable for shared-host app credentials.
+The local home-lab setup defaults to root authentication. To use a database-scoped
+identity, set `SURREALDB_AUTH_LEVEL=database` and explicitly provide the namespace,
+database, username and password. Tawny authenticates at that scope and does not
+retry a failed scoped login as root. Startup still applies the schema and data
+backfills, so the chosen identity must be allowed to perform those operations.
 
-Apply the schema with a separate migration identity, provision a per-app
-EDITOR using g3-platform's reviewed provisioning flow, and retire older root
-connections before enabling shared traffic. Startup still runs SurrealKit and
-backfills; operator-controlled release rollouts remain work as stated above.
-g3-platform's optional `compose.tawny.yml` provides the shared service inventory;
-its `docs/tawny.md` describes scoped credentials, app-directory custody and
-migration. The overlay remains opt-in. Source changes do not move a database or
-provision a production identity.
-
-`python ci/privacy_auth_drill.py` creates a memory-only SurrealDB 3.2.4 fixture,
-with outbound SQL networking and scripting disabled, no host data volume,
-read-only filesystem, resource limits and no retained container logs. It binds
-only a random loopback port and cleans up the exact returned container/network
-IDs. It runs the explicitly ignored WebSocket test outside sibling Cargo patch
-scopes, using the locked, pre-fetched dependencies. Ordinary tests always use
-isolated memory connections and ignore deployment database environment values.
-The server CI job also runs this drill after fetching its private dependency.
-
-The wire drill covers startup schema/backfills on an empty database, legacy
-subscription duplicate repair, private receipt writes, transactional account
-and session removal, delayed-write refusal, denial of root-user creation,
-and foreign private-data read/write isolation. It also checks that supplying
-valid root credentials in database mode fails without a root retry. Pre-sync
-binds its subscription SELECT before iterating; this fixes the remote 3.2.4
-empty-iterator failure exposed by the drill.
-
-Validation: 187 server tests and 85 web tests pass, with strict checks for all
-four host builds. The full server run excludes the existing live YouTube test
-and the explicit wire drill; the wire drill also passes when run separately.
-Eight Python CI tests, workflow lint, formatting, spelling and both Compose
-layouts pass. This uses only synthetic data in newly created local fixtures;
-existing services, host database volumes and production credentials are untouched.
-
-
-The same disposable drill now checks recovery-first deletion and a real logical
-old-snapshot export/import. It restores into its own `restore/tawny` database,
-replays an independently supplied synthetic deletion event twice and verifies
-actual primary/session removal while preserving another account, shared video
-facts, relations and unowned demo rows. See [privacy operations](../docs/privacy-operations.md)
-for the release-specific quarantine boundary. This test does not build the final
-Linux app image or contact B2; encrypted offsite recovery remains required.
-
-
-Separately, `ci/privacy_linux_drill.py` exercises the packaged Linux server with
-an encrypted old synthetic backup and verifies non-root/read-only startup using
-scoped credentials. The publishing workflow gates the app image on that check
-and pushes the tested candidate. Runtime packaging includes `database/setup.surql`
-because SurrealKit reads it even with embedded app schema; it must not attempt
-to create the file in a read-only working directory. See the latest local-image
-evidence and offsite limitations in the privacy operations guide.
+Tests use isolated in-memory databases and ignore deployment database credentials.
+Account deletion removes the account's library and sessions in one transaction,
+while preserving the shared YouTube catalog and other accounts. Back up and
+restore the SurrealDB volume using your own home-lab backup process.

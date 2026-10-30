@@ -6,6 +6,10 @@ too. Follow these over your defaults.
 
 ## What this is
 
+Tawny is an independent personal project for individuals running their own
+home-lab server. Keep product UI and deployment independent of company branding,
+shared company services, and regulatory compliance workflows.
+
 **Tawny** is a calm, self-hosted YouTube client: a subscription feed, search,
 channels, playlists, a queue and history, and a persistent player, with no
 Piped instance in between. The server talks to YouTube directly (rustypipe,
@@ -213,6 +217,10 @@ The full guide, with examples from this code, is
 ---
 
 ## Verifying in a browser
+
+Do not start `dx serve` commands on your own. Use the provided server on port
+8080 for verification. Stop the watcher before editing Rust to avoid broken hot
+updates, and have the server restarted after the edits are ready.
 
 ```bash
 just db-up

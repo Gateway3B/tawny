@@ -118,10 +118,8 @@ belongs on a specific disk. Switching an existing stack between the two does
 not move anything: copy the contents across first, or the containers come up
 empty.
 
-See [privacy operations](privacy-operations.md) before configuring log retention
-or serving a restored backup. The live deletion/session guards do not replace
-independent erasure replay, which Tawny still needs. Health checks alone cannot
-clear an older restore for service.
+Stop the app before restoring a database backup and restart it afterward.
+Backups and storage retention are managed by the individual running the server.
 
 ## Reverse proxy
 

@@ -2,7 +2,7 @@
 
 Sessions, guests and accounts. The code is `src/auth/` (`accounts.rs` on the server, `session.rs` on the client) and the guard in `src/main.rs`.
 
-Sessions come from `g3-auth`, the same stack as Greenside Partee and Media Mancer: cookie sessions stored in SurrealDB, resolved to an `app_user` (`auth::AppUser`) on every request. First launch creates a guest account, seeded with the default playlists and no follows; registration promotes that row in place. Native clients initialize the Dioxus cookie runtime before launch, so the cookie stays outside application state.
+Sessions come from the `g3-auth` library: cookie sessions stored in SurrealDB, resolved to an `app_user` (`auth::AppUser`) on every request. First launch creates a guest account, seeded with the default playlists and no follows; registration promotes that row in place. Native clients initialize the Dioxus cookie runtime before launch, so the cookie stays outside application state.
 
 The guard (`g3_auth::require_session`) refuses every server function without a signed-in account unless it is marked `#[g3_auth::public]`: only guest creation, sign-in and sign-out are, and a test pins that list. Every page is public, because the client signs a first visit in from whichever page it opened. Health, the playback proxy and the WebSub callback sit outside the session layers: probes and YouTube's hub have no cookie, and a proxy token is itself the capability, fetched by native media elements without the app's cookie.
 
@@ -39,9 +39,7 @@ The client discards pending playback progress, stops playback and clears its
 cache before reloading. Auth user caching is disabled so another device cannot
 keep using a deleted row. Saved sessions are now indexed before serving and
 removed transactionally with the account; a private identity fence prevents
-late responses from recreating them. Unknown legacy formats hold startup or
-deletion for review. See [the data inventory](privacy-data.md) for deployment,
-retention and recovery limits.
+late responses from recreating them. Session migration runs before the server begins accepting requests.
 
 Guest creation and registration allow ten requests an hour per client;
 sign-in allows five a minute. The three endpoints also share a sixty-per-minute

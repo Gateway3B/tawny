@@ -91,6 +91,6 @@ The current slice covers the main navigation and interaction model. LibreTube pa
 2. native SABR/UMP adapter and background playback controls;
 3. SponsorBlock, Return YouTube Dislike, DeArrow, and live chat;
 4. downloads, and suggested channels from what the viewer watches;
-5. import/export, notification controls, and privacy settings.
+5. subscription import/export and notification controls.
 
 Keeping those integrations behind source/provider traits prevents volatile YouTube details from spreading through the Dioxus UI.

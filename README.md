@@ -4,6 +4,8 @@ Tawny is a calm, self-hosted YouTube client built with Dioxus and `g3-ui`. The s
 
 Tawny is designed as a self-hosted replacement for a LibreTube plus Piped deployment. The Dioxus backend performs search, feeds, channels, video details, comments, captions, and stream orchestration directly against YouTube; its deployment-local yt-dlp and PO-token sidecars are included in this repository, and no public Piped instance is contacted.
 
+Tawny is an independent personal project for individuals running their own home-lab server.
+
 This repository currently contains a working vertical slice:
 
 - cached subscription feed with All, Videos, Shorts, and Live filters;
@@ -74,9 +76,6 @@ for yt-dlp. See [docs/docker.md](docs/docker.md).
 | [docs/youtube.md](docs/youtube.md) | Search, channels, the feed, RSS and WebSub |
 | [docs/playback.md](docs/playback.md) | Resolving, proxying and playing streams |
 | [docs/mobile.md](docs/mobile.md) | Android, iOS and desktop |
-| [docs/g3-brand.md](docs/g3-brand.md) | Shared g3tech catalog, update notices and private builds |
-| [docs/privacy-data.md](docs/privacy-data.md) | Account download scope, primary deletion and remaining retention work |
-| [docs/privacy-operations.md](docs/privacy-operations.md) | Runtime logging, retained copies and recovery rollout limits |
 | [docs/docker.md](docs/docker.md), [docs/deployment.md](docs/deployment.md) | Compose, images, Portainer, backups |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Known failure modes |
 | [database/README.md](database/README.md), [tests/README.md](tests/README.md) | Schema workflow, test suite |
