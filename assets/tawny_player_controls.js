@@ -101,7 +101,8 @@
     if (!(target instanceof Element)) return false;
     const stage = target.closest("#tawny-player");
     if (!stage || !stage.closest(".persistent-player.expanded")) return false;
-    if (target.closest("button, a, input, select, .player-options-menu")) return false;
+    if (target.closest("button, a, input, select, .player-options-menu, .g3-overlay-layer"))
+      return false;
     const media = document.getElementById("tawny-player-media");
     return !(media && controllers.has(media));
   }
@@ -1050,10 +1051,13 @@
     // data-attribute controls missed the buttons that carry a Dioxus handler
     // instead - Back, and the hidden bridges that `runAction` clicks - so their
     // clicks bubbled to the root and toggled playback on the way out.
+    // `.g3-overlay-layer` is the chapters sheet, mounted inside the player so
+    // it stays usable while the player is fullscreen. Its taps and drags are
+    // its own, not the video's.
     const isPlayerChrome = (target) =>
       !!(target instanceof Element) &&
       !!target.closest(
-        "button, a, input, select, [role='button'], [data-player-action], [data-player-progress], .player-options-menu",
+        "button, a, input, select, [role='button'], [data-player-action], [data-player-progress], .player-options-menu, .g3-overlay-layer",
       );
 
     listen(root, "click", (event) => {
@@ -1304,6 +1308,8 @@
     });
     listen(root, "keydown", (event) => {
       if (event.target instanceof HTMLInputElement) return;
+      // Arrow keys and Space inside the chapters sheet move through its rows.
+      if (event.target instanceof Element && event.target.closest(".g3-overlay-layer")) return;
       const key = event.key.toLowerCase();
       if (key === "escape" && optionsMenu && !optionsMenu.hidden) {
         event.preventDefault();

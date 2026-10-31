@@ -1643,6 +1643,7 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
                         ChevronLeft { size: 26 }
                     }
                 }
+                PlayerChapters {}
             }
             if !expanded {
                 button {
@@ -1659,6 +1660,57 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
                     aria_label: "Close player",
                     onclick: move |_| app_state.stop_playback(),
                     X { size: 20 }
+                }
+            }
+        }
+    }
+}
+
+/// The chapter list, inside `#tawny-player` on purpose. While the player is
+/// fullscreen the browser treats everything outside it as inert, the way a
+/// modal dialog does: a sheet mounted with the watch page still drew on top,
+/// but every tap went through it to the video, and neither the backdrop nor
+/// the handle could close it. The controls script counts the sheet's layer as
+/// player chrome, so its taps are not also read as taps on the video.
+#[component]
+fn PlayerChapters() -> Element {
+    let app_state = use_context::<AppState>();
+    let mut open = app_state.chapters_sheet_open;
+    let chapters = app_state.active_chapters;
+    // A closed sheet still renders its list, and a long upload has a hundred
+    // rows, so they are built on the first open and kept for the closing
+    // slide after that.
+    let mut opened = use_signal(|| false);
+    use_effect(move || {
+        if open() && !*opened.peek() {
+            opened.set(true);
+        }
+    });
+    let rows = if open() || opened() {
+        chapters()
+    } else {
+        Vec::new()
+    };
+
+    rsx! {
+        BottomSheet { open, title: "Chapters", class: "player-sheet",
+            max_height: "74dvh",
+            List { lines: ListLines::Inset,
+                for chapter in rows {
+                    {
+                        let start_seconds = chapter.start_seconds;
+                        rsx! {
+                            Item {
+                                key: "{chapter.start_seconds}",
+                                label: chapter.title.clone(),
+                                metadata: chapter.timestamp_label(),
+                                onclick: move |_| {
+                                    seek_player(start_seconds);
+                                    open.set(false);
+                                },
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2403,31 +2455,8 @@ fn VideoDetailInner(id: String) -> Element {
             }
         }
 
-        BottomSheet { open: chapters_open, title: "Chapters", class: "player-sheet",
-            max_height: "74dvh",
-            List { lines: ListLines::Inset,
-                // A closed sheet still renders its list. This one cannot be
-                // open while the route that owns it is animating in, so it is
-                // pure cost there - and a long upload has a hundred rows.
-                for chapter in if transition_settled() { chapters.clone() } else { Vec::new() } {
-                    {
-                        let start_seconds = chapter.start_seconds;
-                        rsx! {
-                            Item {
-                                key: "{chapter.start_seconds}",
-                                label: chapter.title.clone(),
-                                metadata: chapter.timestamp_label(),
-                                onclick: move |_| {
-                                    seek_player(start_seconds);
-                                    chapters_open.set(false);
-                                },
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
+        // Chapters has no sheet here: it lives in the player, see
+        // `PlayerChapters`.
         BottomSheet { open: captions_open, title: "Captions", class: "player-sheet",
             max_height: "74dvh",
             CaptionPicker {
