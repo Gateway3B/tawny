@@ -216,3 +216,7 @@ dioxus-ssr = "=0.8.0-alpha.3"
 # The server build compiles the Android relay to test it.
 webpki-root-certs = "1"
 tower = { version = "0.5", features = ["util"] }
+
+[lints.clippy]
+cloned_instead_of_copied = "warn"
+allow_attributes_without_reason = "warn"

@@ -1,16 +1,29 @@
 mod account;
+
 mod deferred;
+
 mod durations;
+
 mod explore;
+
 mod feed;
+
 mod library;
+
 mod linkify;
+
 mod overlays;
+
 mod player;
+
 mod playlists;
+
 mod settings;
+
 mod shell;
+
 mod subscriptions;
+
 mod video_card;
 
 pub use account::{AccountGate, AccountSettings, BackendSettings};

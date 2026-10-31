@@ -111,7 +111,13 @@ impl Video {
 
     /// `published_at` for a date known only roughly, at `timestamp`: see
     /// [`APPROXIMATE_MARK`].
-    #[cfg_attr(not(feature = "server"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "server"),
+        allow(
+            dead_code,
+            reason = "Shared definitions are used by selected platform, server or test builds."
+        )
+    )]
     pub fn approximate_published_at(timestamp: i64) -> String {
         // Written out by hand: the web client builds `time` without its
         // formatting feature.
@@ -134,7 +140,13 @@ impl Video {
     /// for, marked approximate, so it reads correctly later. Anything else is
     /// left as it is: a date already pins the day, and "Streaming now" or
     /// "Yesterday" are not worth the guess.
-    #[cfg_attr(not(feature = "server"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "server"),
+        allow(
+            dead_code,
+            reason = "Shared definitions are used by selected platform, server or test builds."
+        )
+    )]
     pub fn settle_relative_date(&mut self) {
         let value = self.published_at.trim();
         if value.starts_with(APPROXIMATE_MARK)
@@ -206,7 +218,13 @@ impl Video {
         0
     }
 
-    #[cfg_attr(not(feature = "server"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "server"),
+        allow(
+            dead_code,
+            reason = "Shared definitions are used by selected platform, server or test builds."
+        )
+    )]
     /// How exactly `published_at` pins the upload down: 3 for a timestamp, 2 for
     /// a calendar date, 1 for relative text ("3 days ago") or an approximate
     /// moment, 0 for nothing usable.
@@ -229,7 +247,13 @@ impl Video {
         if self.published_epoch() != 0 { 1 } else { 0 }
     }
 
-    #[cfg_attr(not(feature = "server"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "server"),
+        allow(
+            dead_code,
+            reason = "Shared definitions are used by selected platform, server or test builds."
+        )
+    )]
     /// Keep `previous`'s publish date when it is more exact than this one.
     ///
     /// A video's date does not change, but the sources describing it do: the

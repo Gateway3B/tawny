@@ -28,6 +28,7 @@ use super::{
 /// swipe row with an image, and a long playlist built them all before the push
 /// animation could start.
 const PLAYLIST_PAGE_SIZE: usize = 24;
+
 /// Enough cards to fill the first screen, phone or desktop, before the rest.
 const PLAYLIST_FIRST_SCREEN: usize = 8;
 
@@ -259,6 +260,7 @@ pub fn Playlists() -> Element {
                         }
                     }
                 }
+
                 Button {
                     fill: ButtonFill::Clear,
                     aria_label: "New playlist",
@@ -267,6 +269,7 @@ pub fn Playlists() -> Element {
                 }
             },
         }
+
         Content { on_refresh: refresh, refreshing: previews.pending(),
             if rows.is_empty() {
                 EmptyState {
@@ -348,6 +351,7 @@ pub fn Playlists() -> Element {
                     }
                 }
             }
+
             BottomSheet { open: menu_open, title: "{menu_name}",
                 List { variant: ListVariant::Raised, lines: ListLines::Inset,
                     Item {
@@ -385,6 +389,7 @@ pub fn Playlists() -> Element {
                     }
                 }
             }
+
             Modal {
                 open: rename_open,
                 title: "Rename playlist",
@@ -420,6 +425,7 @@ pub fn Playlists() -> Element {
                     delete_target.set(None);
                 },
             }
+
             Modal {
                 open: create_open,
                 title: "New playlist",
@@ -499,6 +505,7 @@ pub fn PlaylistDetail(id: String) -> Element {
             _ => Vec::new(),
         }
     });
+
     use_duration_hydration(candidates);
     let mut visible_count = use_signal(|| PLAYLIST_PAGE_SIZE);
     // The cards on screen, as a memo so the grid only renders again when they
@@ -610,6 +617,7 @@ pub fn PlaylistDetail(id: String) -> Element {
                 }
             },
         }
+
         Content { on_refresh: refresh, refreshing,
             Stack { gap: Space::Md,
                 if saved_count > 1 {
@@ -687,6 +695,7 @@ pub fn PlaylistDetail(id: String) -> Element {
                         },
                         span { class: "playlist-collapse-label", "Play all" }
                     }
+
                     Button {
                         class: "playlist-icon-only",
                         aria_label: "Shuffle",

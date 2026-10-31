@@ -10,9 +10,13 @@ use dioxus::prelude::*;
 use crate::models::LibraryChange;
 
 mod account;
+
 mod catalog;
+
 mod feed;
+
 mod library;
+
 mod playback;
 
 pub use account::*;

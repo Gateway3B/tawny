@@ -408,6 +408,7 @@ pub fn SettingsPage() -> Element {
 #[component]
 fn SubscriptionTransferCard() -> Element {
     let app_state = use_context::<AppState>();
+
     rsx! {
         Card {
             title: "Subscriptions",
@@ -548,6 +549,7 @@ fn SponsorBlockSettingsCard() -> Element {
 fn SponsorCategoryRow(category: SponsorCategory) -> Element {
     let mut app_state = use_context::<AppState>();
     let value = use_signal(|| app_state.settings.peek().sponsor_block.action_for(category));
+
     rsx! {
         Item {
             label: category.label(),

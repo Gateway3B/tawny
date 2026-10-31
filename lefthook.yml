@@ -3,6 +3,8 @@ min_version: 2.1.12
 pre-commit:
   parallel: true
   commands:
+    rust-style:
+      run: python scripts/rust_style.py --staged
     format:
       run: just format-check
     spelling:

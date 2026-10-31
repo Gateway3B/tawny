@@ -1,26 +1,42 @@
 mod api;
+
 mod app;
+
 mod auth;
+
 mod cache;
+
 mod components;
+
 mod data_change;
+
 #[cfg(feature = "server")]
 mod db;
+
 #[cfg(feature = "server")]
 mod health;
+
 mod library_sync;
 // The relay is Android's; the server build compiles it only to test it.
 #[cfg(any(target_os = "android", all(test, feature = "server")))]
 mod local_relay;
+
 #[cfg(target_os = "android")]
 mod local_streams;
+
 mod models;
+
 mod playback_resolver;
+
 #[cfg(feature = "server")]
 mod server;
+
 mod server_url;
+
 mod state;
+
 mod subscriptions_io;
+
 #[cfg(feature = "server")]
 mod telemetry;
 
@@ -28,6 +44,7 @@ use app::App;
 // Both features re-export the same `dioxus-desktop` crate.
 #[cfg(all(feature = "desktop", not(feature = "mobile")))]
 use dioxus::desktop::Config as NativeConfig;
+
 #[cfg(feature = "mobile")]
 use dioxus::mobile::Config as NativeConfig;
 
@@ -117,10 +134,12 @@ fn main() {
     // session. See `server_url` for why the URL cannot come from the usual
     // persistence helper.
     server_url::install();
+
     #[cfg(any(feature = "desktop", feature = "mobile"))]
     dioxus::LaunchBuilder::new()
         .with_cfg(NativeConfig::new().with_custom_head(app::native_head()))
         .launch(App);
+
     #[cfg(not(any(feature = "desktop", feature = "mobile")))]
     dioxus::launch(App);
 }

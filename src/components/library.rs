@@ -184,6 +184,7 @@ pub fn HistoryPage() -> Element {
             .map(|entry| entry.video_id.clone())
             .collect::<Vec<_>>()
     });
+
     let history = use_cached(get_videos, (history_ids,));
     let (videos, total) = match &*history.read() {
         Some(Ok(found)) => (
@@ -285,6 +286,7 @@ fn ChannelHero(channel: ReadSignal<Channel>) -> Element {
                         }
                     }
                 }
+
                 Stack { horizontal: true, gap: Space::Sm, wrap: true,
                     Button {
                         fill: if is_subscribed { ButtonFill::Outline } else { ButtonFill::Solid },
@@ -334,6 +336,7 @@ fn ChannelHero(channel: ReadSignal<Channel>) -> Element {
                 }
             }
         }
+
         BottomSheet { open: description_open, title: "About",
             Text { class: "whitespace-pre-line", "{channel.description}" }
         }
@@ -615,6 +618,7 @@ pub fn ChannelDetail(id: String) -> Element {
         Some(Ok(details)) => Some(details.channel.clone()),
         _ => None,
     });
+
     use_effect(move || {
         if let Some(fresh) = channel_metadata() {
             update_cached(crate::api::get_viewer, (), move |viewer| {
@@ -638,6 +642,7 @@ pub fn ChannelDetail(id: String) -> Element {
         )),
         _ => None,
     });
+
     use_effect(move || {
         if let Some((videos, shorts, live, _)) = tokens() {
             extra_videos.set(Vec::new());

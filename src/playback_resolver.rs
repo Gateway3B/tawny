@@ -24,6 +24,7 @@ pub async fn resolve_session(
             ),
         }
     }
+
     #[cfg(not(target_os = "android"))]
     let _ = from_device;
     resolve_playback(video_id, prefer_sabr, fresh).await

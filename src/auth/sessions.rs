@@ -29,6 +29,7 @@ async fn migrate(db: &Surreal<Any>) -> Result<()> {
     crate::auth::session_pool(Arc::new(db.clone()))
         .index_account_sessions("sessions")
         .await?;
+
     #[derive(SurrealValue)]
     struct Orphan {
         id: RecordId,

@@ -3,6 +3,7 @@ use dioxus::prelude::*;
 use dioxus_icons::lucide::{
     History, House, List as ListIcon, ListVideo, Play, Search, Settings, Users,
 };
+
 #[cfg(target_os = "android")]
 use g3_native_plugins::NativePlugins;
 use g3_route_transitions::{
@@ -136,6 +137,7 @@ fn NativeMediaCoordinator() -> Element {
             let _ = plugins.media.write().set_playback_active(true, title);
         }
     });
+
     rsx! {}
 }
 
@@ -144,6 +146,7 @@ fn NativeMediaCoordinator() -> Element {
 fn NativeMediaCoordinator() -> Element {
     rsx! {}
 }
+
 /// Remembers how far each page was scrolled, and puts it back when the page
 /// returns: by Back, by closing the player over it, or by tapping its tab.
 ///
@@ -164,6 +167,7 @@ fn ScrollMemory(path: String) -> Element {
         let path = serde_json::to_string(&path).unwrap_or_default();
         document::eval(&SCROLL_MEMORY_JS.replace("__PATH__", &path));
     });
+
     rsx! {}
 }
 
@@ -367,12 +371,14 @@ pub fn PageHeader(
                         onclick: move |_| { spawn(animated_navigate(Route::QueuePage {})); },
                         ListVideo { size: 20 }
                     }
+
                     Button {
                         fill: ButtonFill::Clear,
                         aria_label: "History",
                         onclick: move |_| { spawn(animated_navigate(Route::HistoryPage {})); },
                         History { size: 20 }
                     }
+
                     Button {
                         fill: ButtonFill::Clear,
                         aria_label: "Settings",
@@ -393,6 +399,7 @@ fn ToasterBridge() -> Element {
     let mut app_state = use_context::<AppState>();
     let toaster = use_toast();
     use_hook(move || app_state.toaster.set(Some(toaster)));
+
     rsx! {
         if let Some(removed) = app_state.undo_removal.read().as_ref() {
             UndoRemovalToast { key: "{removed.playlist_id}:{removed.video.id}" }
@@ -406,6 +413,7 @@ fn ToasterBridge() -> Element {
 fn UndoRemovalToast() -> Element {
     let mut app_state = use_context::<AppState>();
     let open = use_signal(|| true);
+
     rsx! {
         g3_ui::Toast {
             open,
@@ -551,6 +559,7 @@ fn BasePage(route: Route, covered: bool) -> Element {
     let current = use_context_provider(|| BaseRoute(Rc::new(RefCell::new(route.clone()))));
     *current.0.borrow_mut() = route.clone();
     let class = covered.then(|| "tawny-covered-page".to_string());
+
     rsx! {
         // The page's own header and body, captured as one image, so the bar
         // slides with the page it belongs to. Level 1: the leaf beneath the

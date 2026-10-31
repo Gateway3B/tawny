@@ -101,6 +101,7 @@ fn GroupMemberRow(
             checked.set(member);
         }
     });
+
     let toggle_group = group_id.clone();
     let toggle_channel = channel.id.clone();
     let check_channel = channel.id.clone();
@@ -440,6 +441,7 @@ pub fn Subscriptions() -> Element {
                         },
                         "Rename"
                     }
+
                     Button { onclick: move |_| editor_open.set(false), "Done" }
                 },
                 Stack {
@@ -515,6 +517,7 @@ pub fn Subscriptions() -> Element {
                         },
                         "Cancel"
                     }
+
                     Button {
                         disabled: picked_count == 0,
                         onclick: move |_| {

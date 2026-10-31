@@ -263,3 +263,8 @@ just dev                  # or reuse a server already on :8080
   [g3-native-plugins](https://github.com/g3techhq/g3-native-plugins),
   [g3-auth](https://github.com/g3techhq/g3-auth),
   [g3-cache](https://github.com/g3techhq/g3-cache)
+
+## Readability
+
+Follow [docs/code-style.md](docs/code-style.md) for Rust imports, section spacing
+and RSX layout. Run `python scripts/rust_style.py --staged` before committing.

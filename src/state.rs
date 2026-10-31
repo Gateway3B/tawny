@@ -1528,6 +1528,7 @@ impl AppState {
 /// before the server has seen it.
 fn random_suffix() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
+
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let nanos = web_time::SystemTime::now()
         .duration_since(web_time::UNIX_EPOCH)

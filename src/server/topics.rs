@@ -21,8 +21,11 @@ use tokenizers::{PaddingParams, Tokenizer, TruncationParams};
 /// Names the model and revision that made a stored vector. Vectors from any
 /// other model are not comparable and are made again.
 const MODEL_ID: &str = "all-MiniLM-L6-v2@1110a24";
+
 const MODEL_REPO: &str = "sentence-transformers/all-MiniLM-L6-v2";
+
 const MODEL_REVISION: &str = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41";
+
 /// Each file the model needs, with its SHA-256 at that revision.
 const MODEL_FILES: [(&str, &str); 3] = [
     (
@@ -38,33 +41,45 @@ const MODEL_FILES: [(&str, &str); 3] = [
         "53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db",
     ),
 ];
+
 /// The model was trained on 256 tokens; past that it only costs time.
 const MAX_TOKENS: usize = 256;
+
 /// Texts per forward pass. Each pass runs in one blocking task, so a long
 /// first run still lets the runtime breathe between batches.
 const EMBED_BATCH: usize = 32;
+
 /// Recent titles say what a channel makes now, and the feed already has them.
 const TITLES_PER_CHANNEL: usize = 15;
+
 /// Descriptions are mostly links and sponsor copy after the first lines.
 const DESCRIPTION_CHARS: usize = 400;
+
 /// How far above the average follow's score a channel must be, in standard
 /// deviations. Measured on a 724-channel account: 3 kept the two real
 /// cooking channels and nothing else, while 2 still listed most of 40 tech
 /// channels for a broad "Coding and tech".
 const LIKELY_Z: f32 = 3.0;
+
 const MAYBE_Z: f32 = 2.0;
+
 /// A smaller account has fewer channels on any subject, so fewer clear 2:
 /// on 60 follows, The Verge sat at 1.9 for "Tech". The best few that are at
 /// least somewhat above average are always offered, unticked.
 const MIN_MAYBE: usize = 10;
+
 const FLOOR_Z: f32 = 1.0;
+
 const MAX_SUGGESTIONS: usize = 40;
+
 /// With too few follows the spread means nothing, so all are listed, unticked.
 const MIN_FOR_SPREAD: usize = 8;
+
 /// How much the group's name counts against the channels already in it.
 const NAME_WEIGHT: f32 = 0.5;
 
 static TOPIC_MODEL: tokio::sync::OnceCell<Arc<TopicModel>> = tokio::sync::OnceCell::const_new();
+
 /// One embedding run at a time: two groups asked for at once on a fresh
 /// server would otherwise embed every channel twice.
 static EMBED_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());

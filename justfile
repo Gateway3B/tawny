@@ -106,3 +106,13 @@ pre-push: format-check check-web lint-local test-local spell
 quality: format-check check lint test spell
 
 ci: quality security
+
+# Readability rules inside RSX, checked without rewriting source.
+style-check:
+    python scripts/rust_style.py
+
+style-report:
+    python scripts/rust_style.py --report
+
+style-test:
+    python scripts/test_rust_style.py

@@ -106,6 +106,7 @@ pub fn Feed() -> Element {
             refresh();
         }
     });
+
     let load_next_page = move |_| {
         if has_more() {
             pages += 1;
@@ -117,6 +118,7 @@ pub fn Feed() -> Element {
         PageHeader {
             toolbar: rsx! { FeedFilterSegments { value: app_state.feed_filter } },
         }
+
         Content {
             // Pull down to refresh, replacing the button that sat in the intro row.
             on_refresh: move |_| refresh(),
@@ -203,10 +205,12 @@ pub(super) fn FeedPageView(
         Some(Ok(found)) => found.videos.clone(),
         _ => Vec::new(),
     });
+
     let candidates = use_memo(move || match &*feed.read() {
         Some(Ok(found)) => found.unknown_durations.clone(),
         _ => Vec::new(),
     });
+
     use_duration_hydration(candidates);
     // The last page decides whether there is another.
     use_effect(move || {

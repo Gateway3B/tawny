@@ -105,6 +105,7 @@ pub(super) fn linkify(text: &str) -> Vec<Piece> {
 #[component]
 pub(super) fn Linkified(text: String, on_seek: EventHandler<u64>) -> Element {
     let pieces = linkify(&text);
+
     rsx! {
         for piece in pieces {
             match piece {

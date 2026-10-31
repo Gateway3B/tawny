@@ -56,6 +56,7 @@ pub fn VideoGrid(
     use_effect(move || {
         let _ = document::eval(include_str!("../../assets/tawny_video_grid.js"));
     });
+
     let limit = if settled() {
         usize::MAX
     } else {
@@ -67,6 +68,7 @@ pub fn VideoGrid(
     let candidates = use_memo(move || super::duration_candidates(videos.read().iter(), usize::MAX));
     super::use_duration_hydration(candidates);
     let videos = videos.read();
+
     rsx! {
         if videos.is_empty() {
             EmptyState {
@@ -93,6 +95,7 @@ pub fn VideoGrid(
 #[component]
 pub fn VideoGridSkeleton(count: usize, shorts_layout: Option<bool>) -> Element {
     let shorts = shorts_layout.unwrap_or(false);
+
     rsx! {
         Grid {
             columns: GridColumns::Fit(if shorts { 10.0 } else { 18.0 }),
@@ -165,6 +168,7 @@ pub fn VideoCard(
             app_state.remove_from_playlist(&video, &playlist_id);
         }
     });
+
     let desktop_remove = remove.clone();
     let start_video = video.clone();
     let end_video = video.clone();

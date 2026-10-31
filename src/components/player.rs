@@ -39,7 +39,10 @@ fn playback_server_url() -> String {
 }
 
 // One argument per field of the player-metadata message it posts to the page.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "The player bridge passes independently controlled media settings."
+)]
 fn sync_player_metadata(
     video_id: String,
     tracks: Vec<CaptionTrack>,
@@ -127,6 +130,7 @@ fn sync_player_metadata(
 #[component]
 fn NativePlayerBridges(title: String) -> Element {
     let mut plugins = use_context::<g3_native_plugins::NativePlugins>();
+
     rsx! {
         button {
             r#type: "button", class: "player-caption-state-bridge", tabindex: "-1", aria_hidden: "true",
@@ -181,6 +185,7 @@ fn NativePlayerBridges(title: String) -> Element {
 #[component]
 fn NativePlayerBridges(title: String) -> Element {
     let mut plugins = use_context::<g3_native_plugins::NativePlugins>();
+
     rsx! {
         button {
             r#type: "button", class: "player-caption-state-bridge", tabindex: "-1", aria_hidden: "true",
@@ -199,6 +204,7 @@ fn NativePlayerBridges(title: String) -> Element {
 #[component]
 fn NativePlayerBridges(title: String) -> Element {
     let _ = title;
+
     rsx! {}
 }
 
@@ -382,7 +388,10 @@ fn persist_player_speed(mut app_state: AppState, is_short: bool) {
 }
 
 // One argument per field of the attach call it makes on the page's player.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "The player bridge passes independently controlled media settings."
+)]
 fn attach_player_session(
     session: PlaybackSession,
     playback_rate: f64,
@@ -677,6 +686,7 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
             .active_video()
             .map(|video| (video.id, video.is_live))
     });
+
     let playback_resource = use_resource(move || {
         let target = playback_target();
         let attempt = playback_attempt();
@@ -832,6 +842,7 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
             });
         (resolve_failed_for_now || playback_failed()).then_some(attempts)
     });
+
     use_effect(move || {
         let Some(attempt) = auto_retry_attempt() else {
             return;
@@ -854,6 +865,7 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
             resolve_nonce += 1;
         });
     });
+
     let progress_state = app_state;
     // The reporter's JS disposes the previous video's timers itself, but its
     // eval channel stays open, so without cancelling here each video left a
@@ -990,6 +1002,7 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
             .active_video()
             .map(|video| (video.id, video.audio_only, video.is_short))
     });
+
     use_effect(move || {
         let Some((video_id, _audio_only, is_short)) = synced_video() else {
             return;
@@ -1047,6 +1060,7 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
                 video.id
             )
         });
+
     let playback_source = playback_session.as_ref().map(|session| {
         if source_is_transportable(&session.primary) {
             session.primary.clone()
@@ -1196,13 +1210,16 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
                             }
                         }
                     }
+
                     div { class: "player-buffering-indicator", aria_hidden: "true",
                         div { class: "player-buffering-ring" }
                     }
+
                     div { class: "player-seek-feedback player-seek-feedback-left", aria_hidden: "true",
                         RotateCcw { size: 30 }
                         span { "10 seconds" }
                     }
+
                     div { class: "player-seek-feedback player-seek-feedback-right", aria_hidden: "true",
                         RotateCw { size: 30 }
                         span { "10 seconds" }
@@ -1222,6 +1239,7 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
                         span { "Skip" }
                         ChevronRight { size: 16 }
                     }
+
                     div {
                         class: "tawny-player-controls controls-visible",
                         role: "group",
@@ -1653,6 +1671,7 @@ pub fn PersistentPlayer(expanded: bool) -> Element {
                     Text { variant: TextVariant::Label, class: "truncate", "{video.title}" }
                     Text { variant: TextVariant::Caption, class: "truncate", "{video.channel_name}" }
                 }
+
                 Button {
                     class: "mini-player-close self-center",
                     fill: ButtonFill::Clear,
@@ -1686,6 +1705,7 @@ fn PlayerChapters() -> Element {
             opened.set(true);
         }
     });
+
     let rows = if open() || opened() {
         chapters()
     } else {
@@ -2032,6 +2052,7 @@ fn VideoDetailInner(id: String) -> Element {
             }
         });
     });
+
     let mut comments = use_signal(Vec::<VideoComment>::new);
     let mut comments_next_page = use_signal(|| None::<String>);
     let mut comments_initialized = use_signal(|| false);
@@ -2060,6 +2081,7 @@ fn VideoDetailInner(id: String) -> Element {
             comments_loading.set(false);
         });
     });
+
     let mut details_cached = use_signal(|| false);
     // Keyed by video rather than a flag: this page is the only place history is
     // recorded, so it must still record when it is reused for another video.
@@ -2154,6 +2176,7 @@ fn VideoDetailInner(id: String) -> Element {
             .clone()
             .map(|video| local_details(video, Vec::new()))
     });
+
     let player_details_resource = details_resource;
     let local_for_player = cached_video.clone();
     use_effect(move || {
@@ -2324,6 +2347,7 @@ fn VideoDetailInner(id: String) -> Element {
                         },
                         if is_watched { "Unwatched" } else { "Watched" }
                     }
+
                     Button {
                         fill: ButtonFill::Outline,
                         color: Color::Neutral,
@@ -2335,6 +2359,7 @@ fn VideoDetailInner(id: String) -> Element {
                         },
                         "Save"
                     }
+
                     Button {
                         fill: ButtonFill::Outline,
                         color: Color::Neutral,
@@ -2343,6 +2368,7 @@ fn VideoDetailInner(id: String) -> Element {
                         onclick: move |_| app_state.open_share(share_video.clone()),
                         "Share"
                     }
+
                     Button {
                         fill: ButtonFill::Outline,
                         color: Color::Neutral,

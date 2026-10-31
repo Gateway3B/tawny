@@ -332,6 +332,7 @@ impl AppServerState {
         }
         Ok(videos)
     }
+
     pub(crate) async fn adaptive_tail_is_available(&self, source: &PlaybackSource) -> bool {
         if source.tracks.is_empty()
             || !matches!(
@@ -608,6 +609,7 @@ impl AppServerState {
             .collect()
     }
 }
+
 /// What the viewer is told when no ungated stream could be found.
 pub(crate) fn no_stream_failure(
     ytdlp_failure: Option<PlaybackFailure>,

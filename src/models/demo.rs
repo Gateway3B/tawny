@@ -1,6 +1,12 @@
 use super::*;
 
-#[cfg_attr(not(feature = "server"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "server"),
+    allow(
+        dead_code,
+        reason = "Shared definitions are used by selected platform, server or test builds."
+    )
+)]
 /// The seed catalog: a few videos and their channels, which the server writes
 /// on first start, and the empty playlists every account starts with. A new
 /// account follows none of the channels, so its feed starts empty.
@@ -11,7 +17,13 @@ pub struct DemoLibrary {
     pub playlists: Vec<Playlist>,
 }
 
-#[cfg_attr(not(feature = "server"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "server"),
+    allow(
+        dead_code,
+        reason = "Shared definitions are used by selected platform, server or test builds."
+    )
+)]
 /// What a new account starts with: the two default playlists, empty, and no
 /// queue, follows or groups.
 pub fn demo_viewer() -> Viewer {
@@ -25,7 +37,13 @@ pub fn demo_viewer() -> Viewer {
     }
 }
 
-#[cfg_attr(not(feature = "server"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "server"),
+    allow(
+        dead_code,
+        reason = "Shared definitions are used by selected platform, server or test builds."
+    )
+)]
 impl DemoLibrary {
     pub fn demo() -> Self {
         let channels = vec![

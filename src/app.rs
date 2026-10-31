@@ -22,9 +22,13 @@ const TAILWIND_CSS: Asset = asset!(
     "/assets/tailwind.css",
     AssetOptions::css().with_static_head(true)
 );
+
 const SHAKA_PLAYER_JS: Asset = asset!("/node_modules/shaka-player/dist/shaka-player.compiled.js");
+
 const TAWNY_TRANSPORT_JS: Asset = asset!("/assets/tawny_transport.js");
+
 const TAWNY_PLAYER_CONTROLS_JS: Asset = asset!("/assets/tawny_player_controls.js");
+
 const FAVICON_SVG: Asset = asset!("/assets/favicon.svg");
 
 /// Stylesheet links for the native WebView's initial `index.html`.
@@ -202,6 +206,7 @@ fn system_dark() -> Option<bool> {
         let mut plugins = try_consume_context::<g3_native_plugins::NativePlugins>()?;
         plugins.appearance.with_mut(|appearance| appearance.dark())
     }
+
     #[cfg(not(target_os = "android"))]
     None
 }

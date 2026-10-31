@@ -31,10 +31,13 @@ use crate::models::PlaybackRequestHeader;
 /// How long a registered stream is served. YouTube's own URLs last about six
 /// hours; a stream nobody has asked for in that long is not coming back.
 const TARGET_LIFETIME: Duration = Duration::from_secs(6 * 60 * 60);
+
 /// A wedged upstream has to surface as an error the player can recover from,
 /// not hang a fetch forever.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
 const CHUNK_TIMEOUT: Duration = Duration::from_secs(20);
+
 /// The longest request head accepted. Shaka's are a few hundred bytes.
 const MAX_HEAD: usize = 16 * 1024;
 

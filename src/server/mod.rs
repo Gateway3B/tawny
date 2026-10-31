@@ -47,15 +47,25 @@ use surrealdb::{Surreal, engine::any::Any};
 use surrealdb_types::SurrealValue;
 
 mod browse;
+
 mod feed;
+
 mod proxy;
+
 mod resolve;
+
 mod segments;
+
 mod store;
+
 mod topics;
+
 mod viewer;
+
 mod websub;
+
 mod youtube;
+
 mod ytdlp;
 pub(crate) use feed::*;
 pub(crate) use proxy::*;
@@ -246,14 +256,18 @@ pub(crate) struct ResolvedPlayback {
 /// roughly six hours; proxy registrations are minted per hand-out and do not
 /// count against it.
 const PLAYBACK_SESSION_TTL: Duration = Duration::from_secs(60 * 60);
+
 /// Plenty for every client's current and next video.
 const PLAYBACK_SESSION_LIMIT: usize = 64;
 
 const FEED_RECONCILE_BATCH_SIZE: usize = 48;
+
 /// New follows that make subscribing wait for their RSS, so the feed that
 /// reloads right after already has their latest uploads.
 const FIRST_FETCH_WAIT_MAX: usize = 4;
+
 const FEED_RSS_CONCURRENCY: usize = 32;
+
 /// How many channels one refresh will ask for video lengths, at most.
 ///
 /// One call covers a channel's recent uploads, so this is the number of extra
@@ -261,24 +275,32 @@ const FEED_RSS_CONCURRENCY: usize = 32;
 /// runtimes, so this covers enough of the recent backlog for duration filters
 /// to work before those videos are opened.
 const FEED_DURATION_BACKFILL_CHANNELS: usize = 24;
+
 /// How many rows to look at when deciding which channels those are.
 const FEED_DURATION_SCAN_ROWS: usize = 600;
+
 /// Exact player lookups are reserved for the cards a viewer can actually see.
 /// One page is 24 cards; the API cap allows a loaded second page in one call
 /// without turning the endpoint into an unbounded extractor proxy.
 const FEED_DURATION_VISIBLE_BATCH: usize = 24;
+
 /// Hard cap on one on-screen hydration request, from any page. Mirrored by the
 /// client's look-ahead so a duration filter can ask about a page's worth of
 /// cards plus the ones that will not land in the selected bucket.
 const DURATION_HYDRATION_LIMIT: usize = 48;
+
 const WEBSUB_RENEW_CONCURRENCY: usize = 12;
+
 /// Channel pages requested at once while backfilling avatars and subscriber
 /// counts. Each is a full channel extraction, so this stays well below the
 /// WebSub figure, which is a single small POST each.
 const CHANNEL_METADATA_CONCURRENCY: usize = 4;
+
 /// Channel pages one backfill pass may request.
 const CHANNEL_METADATA_BATCH: usize = 100;
+
 const SEARCH_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+
 /// Search results by query and filter. Shared by every account: the results
 /// are YouTube's, and follow state is applied per viewer on the way out.
 static SEARCHES: ServerCache<(String, String), SearchResults> =
@@ -359,7 +381,10 @@ struct DbVideo {
     channel_name: String,
     thumbnail_url: String,
     published_at: String,
-    #[allow(dead_code)]
+    #[allow(
+        dead_code,
+        reason = "Shared definitions are used by selected platform, server or test builds."
+    )]
     published_sort: String,
     duration_seconds: i64,
     view_count: String,
@@ -470,10 +495,12 @@ fn default_data_dir() -> std::path::PathBuf {
     if let Ok(path) = std::env::var("TAWNY_DATA_DIR") {
         return path.into();
     }
+
     #[cfg(all(not(test), target_os = "windows"))]
     if let Ok(path) = std::env::var("LOCALAPPDATA") {
         return std::path::PathBuf::from(path).join("Tawny");
     }
+
     #[cfg(all(not(test), target_os = "macos"))]
     if let Ok(path) = std::env::var("HOME") {
         return std::path::PathBuf::from(path)
@@ -481,10 +508,12 @@ fn default_data_dir() -> std::path::PathBuf {
             .join("Application Support")
             .join("Tawny");
     }
+
     #[cfg(not(test))]
     if let Ok(path) = std::env::var("XDG_DATA_HOME") {
         return std::path::PathBuf::from(path).join("tawny");
     }
+
     #[cfg(not(test))]
     if let Ok(path) = std::env::var("HOME") {
         return std::path::PathBuf::from(path)
@@ -492,6 +521,7 @@ fn default_data_dir() -> std::path::PathBuf {
             .join("share")
             .join("tawny");
     }
+
     #[cfg(not(test))]
     std::env::temp_dir().join("tawny")
 }
@@ -1210,6 +1240,7 @@ mod tests {
         let resumed_from: usize = seen[1].split_once('-').unwrap().0.parse().unwrap();
         assert!(resumed_from > 1000 && resumed_from <= 76_000, "{seen:?}");
     }
+
     #[test]
     fn bounds_local_reconciliation_when_push_is_active() {
         assert_eq!(reconciliation_limit(700, true), 48);
@@ -2021,6 +2052,7 @@ mod tests {
                 .all(|pair| { pair[0].published_epoch() >= pair[1].published_epoch() })
         );
     }
+
     /// Header layout measured from a real YouTube itag 160 stream:
     /// ftyp@0+28, moov@28+710, sidx@738+3812.
     fn mp4_head(boxes: &[(&[u8; 4], u32)]) -> Vec<u8> {
@@ -2161,6 +2193,7 @@ mod tests {
 /// Segments change when someone submits or votes, which is slow enough that an
 /// hour is generous and short enough that a correction lands the same evening.
 const SPONSOR_CACHE_TTL: Duration = Duration::from_secs(60 * 60);
+
 /// Segments by video and the category set asked for, because those are
 /// different answers for the same video.
 static SPONSOR_SEGMENTS: ServerCache<(String, String), Vec<SponsorSegment>> =

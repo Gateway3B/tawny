@@ -22,7 +22,13 @@ pub enum SponsorCategory {
     Highlight,
 }
 
-#[cfg_attr(not(feature = "server"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "server"),
+    allow(
+        dead_code,
+        reason = "Shared definitions are used by selected platform, server or test builds."
+    )
+)]
 impl SponsorCategory {
     /// Every category Tawny asks the API for, in the order the settings list
     /// them.

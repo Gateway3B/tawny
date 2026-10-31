@@ -89,6 +89,7 @@ impl AppServerState {
         details
     }
 }
+
 pub(crate) fn proxy_error(status: StatusCode, message: &str) -> Response {
     let mut response = Response::new(Body::from(message.to_string()));
     *response.status_mut() = status;
@@ -285,17 +286,21 @@ pub(crate) fn resumable_range_stream(
     upstream: reqwest::Response,
 ) -> futures_util::stream::BoxStream<'static, std::result::Result<Bytes, std::io::Error>> {
     use futures_util::StreamExt;
+
     type UpstreamBody =
         futures_util::stream::BoxStream<'static, std::result::Result<Bytes, String>>;
+
     fn upstream_body(response: reqwest::Response) -> UpstreamBody {
         response
             .bytes_stream()
             .map(|chunk| chunk.map_err(|error| error.to_string()))
             .boxed()
     }
+
     fn failed_body(reason: String) -> UpstreamBody {
         futures_util::stream::once(async move { Err(reason) }).boxed()
     }
+
     struct Resume {
         state: AppServerState,
         target: ProxyTarget,

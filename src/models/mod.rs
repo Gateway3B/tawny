@@ -3,22 +3,32 @@ use std::collections::BTreeMap;
 use surrealdb_types::SurrealValue;
 
 mod channel;
+
 mod content;
+
 mod filters;
+
 mod library;
+
 mod playlist;
+
 mod settings;
+
 mod video;
 // The seed catalog and demo viewer: only the server seeds with them.
 mod account;
+
 #[cfg(feature = "server")]
 mod demo;
+
 mod playback;
+
 mod sponsor;
 
 pub use account::*;
 pub use channel::*;
 pub use content::*;
+
 #[cfg(feature = "server")]
 pub use demo::*;
 pub use filters::*;

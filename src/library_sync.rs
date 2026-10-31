@@ -57,6 +57,7 @@ pub fn LibrarySync() -> Element {
     use_effect(move || {
         spawn(watch(app_state));
     });
+
     rsx! {}
 }
 

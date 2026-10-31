@@ -10,7 +10,13 @@
 //! user's config directory on desktop and iOS - because that is the only thing
 //! available this early.
 
-#![cfg_attr(feature = "server", allow(dead_code))]
+#![cfg_attr(
+    feature = "server",
+    allow(
+        dead_code,
+        reason = "Shared definitions are used by selected platform, server or test builds."
+    )
+)]
 
 /// Baked in at build time: the answer for a packaged client whose viewer never
 /// opens settings. The web does not use it; see [`default_backend_url`].

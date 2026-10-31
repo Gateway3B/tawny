@@ -86,6 +86,7 @@ pub(crate) fn ebml_vint(bytes: &[u8], offset: usize, keep_marker: bool) -> Optio
 }
 
 pub(crate) const EBML_SEGMENT_ID: u64 = 0x1853_8067;
+
 pub(crate) const EBML_CUES_ID: u64 = 0x1C53_BB6B;
 
 /// Find the `Cues` element that indexes a WebM stream.
@@ -252,6 +253,7 @@ pub(crate) fn rustypipe_segment_ranges(
             range(stream.index_range.as_ref()?),
         ))
     });
+
     let audio = player.audio_streams.iter().filter_map(|stream| {
         Some((
             stream.itag,

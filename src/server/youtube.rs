@@ -380,6 +380,7 @@ pub(crate) fn normalize_rusty_video_details(
                 frames_per_page_y: frames.frames_per_page_y,
             })
     });
+
     let description = details.description.to_plaintext();
     // YouTube only reports structured chapters when the uploader's markers were
     // recognised. Plenty of videos just list timestamps in the description, so

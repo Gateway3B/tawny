@@ -284,6 +284,7 @@ impl g3_auth::AuthUser for AppUser {
 /// The database, the auth session and the resolved user, for server functions
 /// that sign in or out.
 pub type SessionContext = g3_auth::SessionContext<AppUser, Any>;
+
 pub type AuthSession = g3_auth::AuthSession<AppUser, Any>;
 
 /// Serving and migration use the same account-tracked adapter.

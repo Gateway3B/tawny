@@ -119,6 +119,7 @@ impl AppServerState {
         Ok(self.refresh_feed("").await?.imported)
     }
 }
+
 #[derive(Debug, Deserialize)]
 pub struct WebSubVerification {
     #[serde(rename = "hub.mode")]
@@ -214,6 +215,7 @@ pub async fn youtube_websub_notification(
             crate::telemetry::diagnostic(crate::telemetry::Diagnostic::WebsubIngestionFailed);
         }
     });
+
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NO_CONTENT;
     response

@@ -34,6 +34,7 @@ pub fn AppOverlays() -> Element {
     let mut create_group_open = use_signal(|| false);
     let mut new_group_name = use_signal(String::new);
     let mut new_group_channel = use_signal(|| None::<GroupPickerChannel>);
+
     #[cfg(any(
         target_arch = "wasm32",
         target_os = "android",
@@ -192,11 +193,13 @@ pub fn AppOverlays() -> Element {
                 }
             }
         }
+
         BottomSheet { open: app_state.playlist_picker_open, title: "Save to playlist",
             Stack { gap: Space::Md,
                 if let Some(video) = &target {
                     Text { tone: TextTone::Secondary, class: "line-clamp-2", "{video.title}" }
                 }
+
                 List { variant: ListVariant::Raised, lines: ListLines::Inset,
                     for playlist in app_state.with_viewer(|viewer| viewer.playlists.clone()) {
                         {
@@ -235,6 +238,7 @@ pub fn AppOverlays() -> Element {
                         }
                     }
                 }
+
                 Button {
                     fill: ButtonFill::Outline,
                     color: Color::Neutral,
@@ -254,6 +258,7 @@ pub fn AppOverlays() -> Element {
                 }
             }
         }
+
         BottomSheet { open: app_state.group_picker_open, title: "Channel groups",
             Stack { gap: Space::Md,
                 if let Some(channel) = &group_target {
@@ -282,6 +287,7 @@ pub fn AppOverlays() -> Element {
                         }
                     }
                 }
+
                 Stack { horizontal: true, gap: Space::Sm,
                     Button {
                         fill: ButtonFill::Outline,
@@ -298,6 +304,7 @@ pub fn AppOverlays() -> Element {
                         },
                         "New group"
                     }
+
                     Button {
                         class: "flex-1",
                         onclick: move |_| app_state.group_picker_open.set(false),
@@ -306,6 +313,7 @@ pub fn AppOverlays() -> Element {
                 }
             }
         }
+
         Modal {
             open: create_group_open,
             title: "New group",
@@ -319,6 +327,7 @@ pub fn AppOverlays() -> Element {
                     },
                     "Cancel"
                 }
+
                 Button {
                     disabled: new_group_name().trim().is_empty(),
                     onclick: move |_| {
@@ -338,6 +347,7 @@ pub fn AppOverlays() -> Element {
             },
             Input { label: "Group name", value: new_group_name, placeholder: "Documentaries", autofocus: true }
         }
+
         Modal {
             open: create_playlist_open,
             title: "New playlist",
@@ -348,6 +358,7 @@ pub fn AppOverlays() -> Element {
                     onclick: move |_| create_playlist_open.set(false),
                     "Cancel"
                 }
+
                 Button {
                     disabled: new_playlist_name().trim().is_empty(),
                     onclick: move |_| {
@@ -370,6 +381,7 @@ pub fn AppOverlays() -> Element {
             },
             Input { label: "Playlist name", value: new_playlist_name, autofocus: true }
         }
+
         Modal {
             open: app_state.share_open,
             title: "Share video",
@@ -379,6 +391,7 @@ pub fn AppOverlays() -> Element {
                     onclick: move |_| app_state.share_open.set(false),
                     "Cancel"
                 }
+
                 Button {
                     start: rsx! { Share2 { size: 17 } },
                     onclick: move |_| {
@@ -414,6 +427,7 @@ pub fn AppOverlays() -> Element {
                     label: "Start at {timestamp_label((app_state.share_timestamp_seconds)())}",
                     helper: "Add the current playback position to the link",
                 }
+
                 Button {
                     fill: ButtonFill::Outline,
                     color: Color::Neutral,

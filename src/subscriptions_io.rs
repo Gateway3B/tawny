@@ -544,6 +544,7 @@ mod tests {
     }
 
     const ID_A: &str = "UCsXVk37bltHxD1rDPwtNM8Q";
+
     const ID_B: &str = "UC_x5XG1OV2P6uZZ5FSM9Ttw";
 
     #[test]

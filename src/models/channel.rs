@@ -21,7 +21,13 @@ impl SubscriptionContent {
     /// SurrealDB stores this as a plain string so the column stays readable and
     /// an unknown value degrades to "everything" instead of failing the row.
     /// Only the server reads and writes it.
-    #[cfg_attr(not(feature = "server"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "server"),
+        allow(
+            dead_code,
+            reason = "Shared definitions are used by selected platform, server or test builds."
+        )
+    )]
     pub fn from_storage(value: &str) -> Self {
         match value {
             "videos" => Self::Videos,
@@ -30,7 +36,13 @@ impl SubscriptionContent {
         }
     }
 
-    #[cfg_attr(not(feature = "server"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "server"),
+        allow(
+            dead_code,
+            reason = "Shared definitions are used by selected platform, server or test builds."
+        )
+    )]
     pub fn as_storage(self) -> &'static str {
         match self {
             Self::All => "all",
@@ -65,7 +77,13 @@ pub struct Channel {
 }
 
 impl Channel {
-    #[cfg_attr(not(feature = "server"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "server"),
+        allow(
+            dead_code,
+            reason = "Shared definitions are used by selected platform, server or test builds."
+        )
+    )]
     /// Merge metadata discovered by another YouTube surface without letting a
     /// sparse search result erase the richer channel record already cached.
     /// Subscription state is local state and is therefore never replaced.
@@ -101,7 +119,13 @@ impl Channel {
     }
 }
 
-#[cfg_attr(not(feature = "server"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "server"),
+    allow(
+        dead_code,
+        reason = "Shared definitions are used by selected platform, server or test builds."
+    )
+)]
 pub(crate) fn compact_count_value(value: &str) -> Option<f64> {
     let trimmed = value.trim();
     let numeric = trimmed

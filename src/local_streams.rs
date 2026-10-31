@@ -40,6 +40,7 @@ const PLUGIN_CLASS: &str = "net.gateway3.tawny.localstreams.LocalStreamsPlugin";
 /// A first resolve also starts Python and the JavaScript sandbox. Past this
 /// the server is asked instead.
 const RESOLVE_TIMEOUT: Duration = Duration::from_secs(45);
+
 /// How long a resolved session is reused, as the server holds its own. The
 /// URLs last about six hours.
 const SESSION_LIFETIME: Duration = Duration::from_secs(60 * 60);

@@ -88,6 +88,7 @@ pub fn Explore() -> Element {
             paged(videos, channels, filter, page)
         })
     });
+
     let filter = explore_filter();
     let search_value = search();
     // The next page of the server's results for what is typed, if there is one.
@@ -106,6 +107,7 @@ pub fn Explore() -> Element {
     let has_next_page = results.read().as_ref().is_some_and(|remote| {
         remote.next_page.is_some() && remote.query.trim().eq_ignore_ascii_case(search().trim())
     });
+
     let (loading, result_count, remaining) = {
         let shown = shown.read();
         (shown.loading, shown.result_count, shown.remaining)
@@ -190,6 +192,7 @@ pub fn Explore() -> Element {
                 }
             },
         }
+
         Content {
             Stack { gap: Space::Md,
                 Stack { horizontal: true, gap: Space::Sm, align: StackAlign::Center,
@@ -282,11 +285,13 @@ fn DiscoverLists() -> Element {
             pages.set(1);
         }
     });
+
     let load_next_page = use_callback(move |_: ()| {
         if *has_more.peek() {
             pages += 1;
         }
     });
+
     let shown = list();
     let page_count = pages();
 
@@ -353,10 +358,12 @@ fn RecommendationPageView(page: usize, last: ReadSignal<bool>, has_more: Signal<
         Some(Ok(found)) => found.videos.clone(),
         _ => Vec::new(),
     });
+
     let candidates = use_memo(move || match &*found.read() {
         Some(Ok(found)) => found.unknown_durations.clone(),
         _ => Vec::new(),
     });
+
     use_duration_hydration(candidates);
     // The last page decides whether there is another.
     use_effect(move || {

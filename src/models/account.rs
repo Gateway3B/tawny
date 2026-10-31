@@ -67,6 +67,7 @@ impl CredentialProblem {
 /// Argon2 is deliberately slow, so a password long enough to be a denial of
 /// service is rejected before it reaches the hasher.
 pub const PASSWORD_MIN_LENGTH: usize = 8;
+
 pub const PASSWORD_MAX_LENGTH: usize = 512;
 
 /// Shared by both sides so a client-side form and the server agree on what is

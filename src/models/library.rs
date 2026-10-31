@@ -49,11 +49,23 @@ pub struct SubscriptionChange {
 /// How many history entries an account keeps.
 pub const HISTORY_LIMIT: usize = 250;
 
-#[cfg_attr(not(feature = "server"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "server"),
+    allow(
+        dead_code,
+        reason = "Shared definitions are used by selected platform, server or test builds."
+    )
+)]
 /// How many recommendations one page of the search page's list holds.
 pub const RECOMMENDATION_PAGE_SIZE: usize = 24;
 
-#[cfg_attr(not(feature = "server"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "server"),
+    allow(
+        dead_code,
+        reason = "Shared definitions are used by selected platform, server or test builds."
+    )
+)]
 /// How many videos one feed page holds.
 pub const FEED_PAGE_SIZE: usize = 24;
 
@@ -240,7 +252,13 @@ impl LibraryChanges {
     }
 
     /// Counted on the server, as each write lands.
-    #[cfg_attr(not(any(feature = "server", test)), allow(dead_code))]
+    #[cfg_attr(
+        not(any(feature = "server", test)),
+        allow(
+            dead_code,
+            reason = "Shared definitions are used by selected platform, server or test builds."
+        )
+    )]
     pub fn note(&mut self, change: LibraryChange) {
         let count = self.count_mut(change);
         *count = count.wrapping_add(1);

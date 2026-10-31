@@ -63,6 +63,7 @@ pub fn use_session_provider() -> Session {
         account: Signal::new(None),
         status: Signal::new(SessionStatus::Connecting),
     });
+
     let mut started = use_signal(|| false);
 
     use_effect(move || {

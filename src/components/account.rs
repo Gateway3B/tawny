@@ -125,6 +125,7 @@ fn BackendSetupScreen(problem: Option<String>, on_saved: EventHandler<()>) -> El
                         error: Some(error()).filter(|message| !message.is_empty()),
                         oninput: move |_| error.set(String::new()),
                     }
+
                     Button {
                         expand: ButtonExpand::Block,
                         onclick: move |_| {
@@ -151,6 +152,7 @@ fn BackendSetupScreen(problem: Option<String>, on_saved: EventHandler<()>) -> El
 pub fn AccountSettings() -> Element {
     let session = use_session();
     let account = session.account.read();
+
     rsx! {
         if let Some(account) = account.as_ref() {
             // Draft credentials and in-flight confirmations belong to one
@@ -208,6 +210,7 @@ fn AccountForm(account: crate::models::Account) -> Element {
                         error: Some(error()).filter(|message| !message.is_empty()),
                         oninput: move |_| error.set(String::new()),
                     }
+
                     Button {
                         expand: ButtonExpand::Block,
                         loading: busy(),
@@ -311,6 +314,7 @@ fn AccountForm(account: crate::models::Account) -> Element {
                         "Sign out"
                     }
                 }
+
                 Button {
                     fill: ButtonFill::Outline,
                     color: Color::Danger,
@@ -377,6 +381,7 @@ pub fn BackendSettings() -> Element {
                         saved.set(false);
                     },
                 }
+
                 Button {
                     fill: ButtonFill::Outline,
                     color: Color::Neutral,

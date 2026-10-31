@@ -42,7 +42,10 @@ impl AppServerState {
         #[derive(Debug, Deserialize, SurrealValue)]
         struct Row {
             channel_id: String,
-            #[allow(dead_code)]
+            #[allow(
+                dead_code,
+                reason = "Shared definitions are used by selected platform, server or test builds."
+            )]
             published_sort: String,
         }
         let rows: Vec<Row> = self
@@ -105,6 +108,7 @@ impl AppServerState {
         if owner.is_empty() {
             return Ok(HashSet::new());
         }
+
         #[derive(Debug, Deserialize, SurrealValue)]
         struct Row {
             video_ids: Vec<String>,
@@ -519,6 +523,7 @@ impl AppServerState {
         })
     }
 }
+
 #[derive(Default)]
 pub(crate) struct FeedEntry {
     pub(crate) video_id: String,
