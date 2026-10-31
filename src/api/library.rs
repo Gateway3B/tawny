@@ -245,6 +245,20 @@ pub async fn set_in_group(group_id: String, channel_id: String, member: bool) ->
 }
 
 #[post(
+    "/api/v1/groups/rename",
+    state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
+    owner: crate::auth::Owner
+)]
+pub async fn rename_group(group_id: String, name: String) -> Result<()> {
+    state
+        .rename_group(&owner.0, &group_id, &name)
+        .await
+        .map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::Groups);
+    Ok(())
+}
+
+#[post(
     "/api/v1/groups/delete",
     state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
     owner: crate::auth::Owner

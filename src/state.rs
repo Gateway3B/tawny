@@ -46,6 +46,14 @@ pub struct RemovedPlaylistVideo {
     pub position: usize,
 }
 
+/// A channel to sort into groups. A video carries only its channel's id and
+/// name, so the picker asks for no more than that.
+#[derive(Clone, PartialEq)]
+pub struct GroupPickerChannel {
+    pub id: String,
+    pub name: String,
+}
+
 /// A snapshot of the playlist run, resolved the same way autoplay resolves it.
 pub struct PlaylistRunStatus {
     pub playlist_id: String,
@@ -99,6 +107,9 @@ pub struct AppState {
     /// take the video out of it.
     pub video_actions_playlist: Signal<Option<String>>,
     pub video_actions_open: Signal<bool>,
+    /// The channel whose groups the group picker edits.
+    pub group_picker_channel: Signal<Option<GroupPickerChannel>>,
+    pub group_picker_open: Signal<bool>,
     pub share_video: Signal<Option<Video>>,
     pub share_open: Signal<bool>,
     pub share_with_timestamp: Signal<bool>,
@@ -355,6 +366,8 @@ impl AppState {
         self.video_actions_open.set(false);
         self.video_actions_video.set(None);
         self.video_actions_playlist.set(None);
+        self.group_picker_open.set(false);
+        self.group_picker_channel.set(None);
         self.share_open.set(false);
         self.share_video.set(None);
     }
@@ -925,7 +938,8 @@ impl AppState {
         self.send(DataChange::Groups, api::save_groups(groups));
     }
 
-    pub fn create_subscription_group(self, name: String) -> String {
+    /// Make a group, holding these channels from the start.
+    pub fn create_subscription_group(self, name: String, channel_ids: Vec<String>) -> String {
         let slug = name
             .to_lowercase()
             .chars()
@@ -948,9 +962,60 @@ impl AppState {
         self.save_groups(vec![SubscriptionGroup {
             id: id.clone(),
             name,
-            channel_ids: Vec::new(),
+            channel_ids,
         }]);
         id
+    }
+
+    /// Give a group a new name. Returns false when there is nothing to change.
+    pub fn rename_subscription_group(self, group_id: &str, name: &str) -> bool {
+        let name = name.trim().to_string();
+        let current = self.peek_viewer(|viewer| {
+            viewer
+                .subscription_groups
+                .iter()
+                .find(|group| group.id == group_id)
+                .map(|group| group.name.clone())
+        });
+        if name.is_empty() || current.is_none_or(|current| current == name) {
+            return false;
+        }
+        let shown = name.clone();
+        self.edit_viewer(|viewer| {
+            if let Some(group) = viewer
+                .subscription_groups
+                .iter_mut()
+                .find(|group| group.id == group_id)
+            {
+                group.name = shown;
+            }
+        });
+        self.send(
+            DataChange::Groups,
+            api::rename_group(group_id.to_string(), name),
+        );
+        true
+    }
+
+    /// The names of the groups a channel is in, in the viewer's order.
+    pub fn group_names_for(self, channel_id: &str) -> Vec<String> {
+        self.with_viewer(|viewer| {
+            viewer
+                .subscription_groups
+                .iter()
+                .filter(|group| group.channel_ids.iter().any(|id| id == channel_id))
+                .map(|group| group.name.clone())
+                .collect()
+        })
+    }
+
+    /// Open the picker that sorts one channel into groups.
+    pub fn open_group_picker(mut self, channel_id: &str, channel_name: &str) {
+        self.group_picker_channel.set(Some(GroupPickerChannel {
+            id: channel_id.to_string(),
+            name: channel_name.to_string(),
+        }));
+        self.group_picker_open.set(true);
     }
 
     pub fn delete_subscription_group(self, group_id: &str) -> Option<String> {
@@ -970,17 +1035,8 @@ impl AppState {
         Some(name)
     }
 
-    /// Put a channel in a group or take it out. Returns whether it is in the
-    /// group now.
-    pub fn toggle_channel_in_group(self, group_id: &str, channel_id: &str) -> Option<bool> {
-        let included = self.peek_viewer(|viewer| {
-            viewer
-                .subscription_groups
-                .iter()
-                .find(|group| group.id == group_id)
-                .map(|group| group.channel_ids.iter().any(|id| id == channel_id))
-        })?;
-        let member = !included;
+    /// Put a channel in a group or take it out, whatever it was before.
+    pub fn set_channel_in_group(self, group_id: &str, channel_id: &str, member: bool) {
         self.edit_viewer(|viewer| {
             if let Some(group) = viewer
                 .subscription_groups
@@ -997,7 +1053,6 @@ impl AppState {
             DataChange::Groups,
             api::set_in_group(group_id.to_string(), channel_id.to_string(), member),
         );
-        Some(member)
     }
 
     // -----------------------------------------------------------------------
@@ -1543,6 +1598,8 @@ pub fn AppStateProvider(children: Element) -> Element {
         video_actions_video: Signal::new(None),
         video_actions_playlist: Signal::new(None),
         video_actions_open: Signal::new(false),
+        group_picker_channel: Signal::new(None),
+        group_picker_open: Signal::new(false),
         share_video: Signal::new(None),
         share_open: Signal::new(false),
         share_with_timestamp: Signal::new(false),

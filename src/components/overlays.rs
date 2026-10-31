@@ -1,6 +1,6 @@
-use crate::state::{AppState, PlaylistSave};
+use crate::state::{AppState, GroupPickerChannel, PlaylistSave};
 use dioxus::prelude::*;
-use dioxus_icons::lucide::{Check, Copy, ListPlus, Play, Plus, Rows3, Share2, Trash2};
+use dioxus_icons::lucide::{Check, Copy, ListPlus, Play, Plus, Rows3, Share2, Tags, Trash2};
 use g3_ui::{
     BottomSheet, Button, ButtonExpand, ButtonFill, Color, Img, Input, Item, List, ListLines,
     ListVariant, Modal, Space, Stack, StackAlign, Text, TextTone, TextVariant, Toggle,
@@ -31,6 +31,9 @@ pub fn AppOverlays() -> Element {
     let mut create_playlist_open = use_signal(|| false);
     let mut new_playlist_name = use_signal(String::new);
     let mut new_playlist_video = use_signal(|| None::<crate::models::Video>);
+    let mut create_group_open = use_signal(|| false);
+    let mut new_group_name = use_signal(String::new);
+    let mut new_group_channel = use_signal(|| None::<GroupPickerChannel>);
     #[cfg(any(
         target_arch = "wasm32",
         target_os = "android",
@@ -40,6 +43,12 @@ pub fn AppOverlays() -> Element {
     let mut plugins = use_context::<g3_native_plugins::NativePlugins>();
     let target = app_state.playlist_picker_video();
     let action_target = (app_state.video_actions_video)();
+    let group_target = (app_state.group_picker_channel)();
+    let picker_groups = if (app_state.group_picker_open)() {
+        app_state.with_viewer(|viewer| viewer.subscription_groups.clone())
+    } else {
+        Vec::new()
+    };
     let share_target = (app_state.share_video)();
     let share_url = share_target
         .as_ref()
@@ -56,7 +65,10 @@ pub fn AppOverlays() -> Element {
     let copy_action_url = share_url.clone();
 
     rsx! {
+        // As tall as its rows: the default cap left the last one or two
+        // behind a scroll on a phone.
         BottomSheet { open: app_state.video_actions_open, aria_label: "Video actions",
+            max_height: "calc(100dvh - 6rem)",
             if let Some(video) = &action_target {
                 {
                     let play_next_id = video.id.clone();
@@ -65,6 +77,12 @@ pub fn AppOverlays() -> Element {
                     let watched_video = video.clone();
                     let share_video = video.clone();
                     let remove_video = video.clone();
+                    let group_channel_id = video.channel_id.clone();
+                    let group_channel_name = video.channel_name.clone();
+                    // Groups only sort the feed, which only holds followed
+                    // channels, so the row is offered for those alone.
+                    let follows_channel = app_state.follows(&video.channel_id);
+                    let channel_groups = app_state.group_names_for(&video.channel_id);
                     // Only offered when the sheet was opened from a playlist
                     // the video is still in.
                     let remove_from = (app_state.video_actions_playlist)().and_then(|playlist_id| {
@@ -91,7 +109,6 @@ pub fn AppOverlays() -> Element {
                                 Item {
                                     start: rsx! { Play { size: 18 } },
                                     label: "Play next",
-                                    description: "Move to the front of the queue",
                                     onclick: move |_| {
                                         let message = app_state.add_to_queue(&play_next_id, true);
                                         app_state.video_actions_open.set(false);
@@ -101,7 +118,6 @@ pub fn AppOverlays() -> Element {
                                 Item {
                                     start: rsx! { Rows3 { size: 18 } },
                                     label: if is_queued { "Remove from queue" } else { "Add to queue" },
-                                    description: "Keep your playback order offline",
                                     onclick: move |_| {
                                         let message = if is_queued {
                                             app_state.remove_from_queue(&queue_id);
@@ -116,7 +132,6 @@ pub fn AppOverlays() -> Element {
                                 Item {
                                     start: rsx! { ListPlus { size: 18 } },
                                     label: "Save to playlist",
-                                    description: "Choose a local or synced list",
                                     onclick: move |_| {
                                         app_state.video_actions_open.set(false);
                                         app_state.playlist_picker_video.set(Some(save_video.clone()));
@@ -143,13 +158,28 @@ pub fn AppOverlays() -> Element {
                                         app_state.open_share(share_video.clone());
                                     },
                                 }
+                                if follows_channel {
+                                    Item {
+                                        start: rsx! { Tags { size: 18 } },
+                                        label: "Channel groups",
+                                        description: if channel_groups.is_empty() {
+                                            "Not in a group".to_string()
+                                        } else {
+                                            channel_groups.join(", ")
+                                        },
+                                        onclick: move |_| {
+                                            app_state.video_actions_open.set(false);
+                                            app_state.open_group_picker(&group_channel_id, &group_channel_name);
+                                        },
+                                    }
+                                }
                                 if let Some((playlist_id, playlist_name)) = remove_from {
                                     Item {
                                         start: rsx! {
                                             span { class: "flex text-[var(--g3-color-danger)]", Trash2 { size: 18 } }
                                         },
                                         label: "Remove from playlist",
-                                        description: "{playlist_name}",
+                                        aria_label: "Remove from {playlist_name}",
                                         onclick: move |_| {
                                             app_state.video_actions_open.set(false);
                                             app_state.remove_from_playlist(&remove_video, &playlist_id);
@@ -223,6 +253,90 @@ pub fn AppOverlays() -> Element {
                     "New playlist"
                 }
             }
+        }
+        BottomSheet { open: app_state.group_picker_open, title: "Channel groups",
+            Stack { gap: Space::Md,
+                if let Some(channel) = &group_target {
+                    Text { tone: TextTone::Secondary, class: "line-clamp-2", "{channel.name}" }
+                }
+                if picker_groups.is_empty() {
+                    Text { tone: TextTone::Secondary, "No groups yet. A group filters your feed to just its channels." }
+                } else {
+                    List { variant: ListVariant::Raised, lines: ListLines::Inset,
+                        for group in picker_groups {
+                            {
+                                let channel_id = group_target.as_ref().map(|channel| channel.id.clone()).unwrap_or_default();
+                                let member = group.channel_ids.iter().any(|id| id == &channel_id);
+                                let group_id = group.id.clone();
+                                rsx! {
+                                    Item {
+                                        key: "{group.id}",
+                                        checked: member,
+                                        label: group.name,
+                                        description: super::subscriptions::channel_count(group.channel_ids.len()),
+                                        // Stays open: a channel can sit in several groups.
+                                        onclick: move |_| app_state.set_channel_in_group(&group_id, &channel_id, !member),
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Stack { horizontal: true, gap: Space::Sm,
+                    Button {
+                        fill: ButtonFill::Outline,
+                        color: Color::Neutral,
+                        class: "flex-1",
+                        start: rsx! { Plus { size: 18 } },
+                        onclick: move |_| {
+                            new_group_name.set(String::new());
+                            // Steps aside for the dialog, as the playlist
+                            // picker does, keeping its own copy of the channel.
+                            new_group_channel.set((app_state.group_picker_channel)());
+                            app_state.group_picker_open.set(false);
+                            create_group_open.set(true);
+                        },
+                        "New group"
+                    }
+                    Button {
+                        class: "flex-1",
+                        onclick: move |_| app_state.group_picker_open.set(false),
+                        "Done"
+                    }
+                }
+            }
+        }
+        Modal {
+            open: create_group_open,
+            title: "New group",
+            actions: rsx! {
+                Button {
+                    fill: ButtonFill::Clear,
+                    color: Color::Neutral,
+                    onclick: move |_| {
+                        create_group_open.set(false);
+                        app_state.group_picker_open.set(true);
+                    },
+                    "Cancel"
+                }
+                Button {
+                    disabled: new_group_name().trim().is_empty(),
+                    onclick: move |_| {
+                        let name = new_group_name().trim().to_string();
+                        if name.is_empty() { return; }
+                        create_group_open.set(false);
+                        let channel = new_group_channel.peek().clone();
+                        let channel_ids = channel.iter().map(|channel| channel.id.clone()).collect();
+                        app_state.create_subscription_group(name.clone(), channel_ids);
+                        match channel {
+                            Some(channel) => app_state.show_toast(format!("Added {} to {name}", channel.name), Color::Success),
+                            None => app_state.show_toast(format!("Created {name}"), Color::Success),
+                        }
+                    },
+                    "Create"
+                }
+            },
+            Input { label: "Group name", value: new_group_name, placeholder: "Documentaries", autofocus: true }
         }
         Modal {
             open: create_playlist_open,

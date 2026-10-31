@@ -985,6 +985,29 @@ impl AppServerState {
         Ok(true)
     }
 
+    /// Set a group's name. Only the name: a rename sent from a device that
+    /// has not yet seen another's membership change must not undo it.
+    pub async fn rename_group(&self, owner: &str, group_id: &str, name: &str) -> Result<()> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(anyhow!("a group needs a name"));
+        }
+        let _guard = self.sync_lock.lock().await;
+        let renamed: Vec<DbSubscriptionGroup> = self
+            .db
+            .query("UPDATE subscription_group SET name = $name, updated_at = time::now() WHERE owner = type::record($owner) AND group_id = $group_id RETURN group_id, name, channel_ids")
+            .bind(("owner", owner.to_string()))
+            .bind(("group_id", group_id.to_string()))
+            .bind(("name", name.to_string()))
+            .await?
+            .check()?
+            .take(0)?;
+        if renamed.is_empty() {
+            return Err(anyhow!("that group no longer exists"));
+        }
+        Ok(())
+    }
+
     pub async fn delete_group(&self, owner: &str, group_id: &str) -> Result<()> {
         self.db
             .query(
@@ -1635,6 +1658,31 @@ mod tests {
             ids(&state.feed_page(&owner, &grouped, 0).await.unwrap().videos),
             ["b1"]
         );
+    }
+
+    #[tokio::test]
+    async fn renaming_a_group_keeps_its_channels() {
+        let (state, owner) = state_and_owner().await;
+        state
+            .save_groups(
+                &owner,
+                &[SubscriptionGroup {
+                    id: "g".into(),
+                    name: "Old".into(),
+                    channel_ids: vec!["UCa".into()],
+                }],
+            )
+            .await
+            .unwrap();
+
+        state.rename_group(&owner, "g", "New").await.unwrap();
+
+        let groups = state.viewer(&owner).await.unwrap().subscription_groups;
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].name, "New");
+        assert_eq!(groups[0].channel_ids, ["UCa"]);
+        assert!(state.rename_group(&owner, "gone", "X").await.is_err());
+        assert!(state.rename_group(&owner, "g", "  ").await.is_err());
     }
 
     #[tokio::test]

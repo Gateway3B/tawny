@@ -1,11 +1,11 @@
 use crate::{app::Route, models::Channel, state::AppState};
 use dioxus::prelude::*;
-use dioxus_icons::lucide::{Check, Plus, Trash2, Users};
+use dioxus_icons::lucide::{Check, Pencil, Plus, Tags, Trash2, Users};
 use g3_route_transitions::animated_navigate;
 use g3_ui::{
-    Avatar, AvatarSize, Button, ButtonFill, ButtonSize, Card, Color, Content, EmptyState, Grid,
-    GridColumns, InfiniteScroll, Input, Item, List, ListLines, ListVariant, Modal, Searchbar,
-    Skeleton, SkeletonShape, Space, Stack, Text, TextTone,
+    Avatar, AvatarSize, Button, ButtonFill, ButtonSize, Card, Checkbox, Color, Content, EmptyState,
+    Grid, GridColumns, InfiniteScroll, Input, Item, ItemDetail, List, ListLines, ListVariant,
+    Modal, ModalSize, Searchbar, Skeleton, SkeletonShape, Space, Stack, Text, TextTone,
 };
 
 use super::{PageHeader, use_after_first_paint};
@@ -21,8 +21,15 @@ pub fn ChannelCard(channel: Channel) -> Element {
     let app_state = use_context::<AppState>();
     let toggle_channel = channel.clone();
     let open_channel_id = channel.id.clone();
+    let groups_channel = channel.clone();
     let is_subscribed = app_state.follows(&channel.id);
     let subscribers = channel.subscriber_count.trim().to_string();
+    let groups = app_state.group_names_for(&channel.id);
+    let groups_label = if groups.is_empty() {
+        "No group".to_string()
+    } else {
+        groups.join(", ")
+    };
 
     rsx! {
         Card {
@@ -50,12 +57,81 @@ pub fn ChannelCard(channel: Channel) -> Element {
                     if is_subscribed { "Subscribed" } else { "Subscribe" }
                 }
             },
+            // Under the name rather than beside it, where a phone had no room
+            // left for the name. Naming the groups lets an unsorted channel
+            // stand out while scrolling the whole list.
+            if is_subscribed {
+                Button {
+                    size: ButtonSize::Sm,
+                    fill: ButtonFill::Clear,
+                    color: Color::Neutral,
+                    class: "max-w-full [&_.g3-btn-label]:truncate",
+                    start: rsx! { Tags { size: 15 } },
+                    aria_label: "Groups for {channel.name}: {groups_label}",
+                    onclick: move |_| app_state.open_group_picker(&groups_channel.id, &groups_channel.name),
+                    "{groups_label}"
+                }
+            }
+        }
+    }
+}
+
+/// One channel in a group's membership editor: a checkbox for this group,
+/// and the channel's other groups a tap away, so a channel noticed while
+/// filling one group can be sent to another without leaving the list.
+#[component]
+fn GroupMemberRow(
+    channel: Channel,
+    group_id: String,
+    group_name: String,
+    member: ReadSignal<bool>,
+    other_groups: Vec<String>,
+) -> Element {
+    let app_state = use_context::<AppState>();
+    let mut checked = use_signal(|| *member.peek());
+    // The membership also changes from the row's text and from the picker.
+    use_effect(move || {
+        let member = member();
+        if *checked.peek() != member {
+            checked.set(member);
+        }
+    });
+    let toggle_group = group_id.clone();
+    let toggle_channel = channel.id.clone();
+    let check_channel = channel.id.clone();
+    let picker_channel = channel.clone();
+
+    rsx! {
+        Item {
+            label: channel.name.clone(),
+            description: (!other_groups.is_empty()).then(|| format!("Also in {}", other_groups.join(", "))),
+            start: rsx! {
+                Avatar { name: channel.name.clone(), src: channel.avatar_url.clone(), size: AvatarSize::Sm }
+            },
+            onclick: move |_| app_state.set_channel_in_group(&toggle_group, &toggle_channel, !member()),
+            // The row toggles membership; a chevron would promise a page.
+            detail: ItemDetail::Hide,
+            end: rsx! {
+                Button {
+                    size: ButtonSize::Sm,
+                    fill: ButtonFill::Clear,
+                    color: Color::Neutral,
+                    aria_label: "Groups for {channel.name}",
+                    onclick: move |_| app_state.open_group_picker(&picker_channel.id, &picker_channel.name),
+                    Tags { size: 16 }
+                }
+                Checkbox {
+                    checked,
+                    aria_label: "{channel.name} in {group_name}",
+                    onchange: move |value| app_state.set_channel_in_group(&group_id, &check_channel, value),
+                }
+            },
         }
     }
 }
 
 /// "1 channel", "3 channels".
-fn channel_count(count: usize) -> String {
+pub(super) fn channel_count(count: usize) -> String {
     if count == 1 {
         "1 channel".to_string()
     } else {
@@ -66,7 +142,10 @@ fn channel_count(count: usize) -> String {
 #[component]
 pub fn Subscriptions() -> Element {
     let app_state = use_context::<AppState>();
-    let mut create_open = use_signal(|| false);
+    // The name dialog both creates and renames: `renaming` holds the group
+    // being renamed, and is empty for a new one.
+    let mut name_dialog_open = use_signal(|| false);
+    let mut renaming = use_signal(|| None::<String>);
     let mut group_name = use_signal(String::new);
     // Which group's membership editor is open.
     let mut editing_group = use_signal(|| None::<String>);
@@ -112,6 +191,17 @@ pub fn Subscriptions() -> Element {
     } else {
         Vec::new()
     };
+    // Every other group each channel is in, named on its editor row.
+    let other_groups_of = |channel_id: &str| {
+        groups
+            .iter()
+            .filter(|group| Some(&group.id) != editing.as_ref())
+            .filter(|group| group.channel_ids.iter().any(|id| id == channel_id))
+            .map(|group| group.name.clone())
+            .collect::<Vec<_>>()
+    };
+    let is_renaming = renaming().is_some();
+    let rename_current = editing_group_name.clone();
 
     rsx! {
         PageHeader {}
@@ -125,7 +215,11 @@ pub fn Subscriptions() -> Element {
                             size: ButtonSize::Sm,
                             fill: ButtonFill::Clear,
                             start: rsx! { Plus { size: 16 } },
-                            onclick: move |_| create_open.set(true),
+                            onclick: move |_| {
+                                renaming.set(None);
+                                group_name.set(String::new());
+                                name_dialog_open.set(true);
+                            },
                             "New group"
                         }
                     },
@@ -134,6 +228,8 @@ pub fn Subscriptions() -> Element {
                             for group in groups.clone() {
                                 {
                                     let group_id = group.id.clone();
+                                    let rename_id = group.id.clone();
+                                    let rename_name = group.name.clone();
                                     let delete_id = group.id.clone();
                                     let members = group
                                         .channel_ids
@@ -163,6 +259,18 @@ pub fn Subscriptions() -> Element {
                                                             size: AvatarSize::Sm,
                                                         }
                                                     }
+                                                }
+                                                Button {
+                                                    fill: ButtonFill::Clear,
+                                                    color: Color::Neutral,
+                                                    size: ButtonSize::Sm,
+                                                    aria_label: "Rename {group.name}",
+                                                    onclick: move |_| {
+                                                        renaming.set(Some(rename_id.clone()));
+                                                        group_name.set(rename_name.clone());
+                                                        name_dialog_open.set(true);
+                                                    },
+                                                    Pencil { size: 16 }
                                                 }
                                                 Button {
                                                     fill: ButtonFill::Clear,
@@ -226,11 +334,24 @@ pub fn Subscriptions() -> Element {
             // Membership editing lives in one place, so adding a channel to a
             // specific group does not mean hunting for that channel's tile. A
             // modal rather than a sheet: this is a focused editing task with a
-            // search field and a long list.
+            // search field and a long list, and it is wide on a wide screen so
+            // channel names are not cut short.
             Modal {
                 open: editor_open,
                 title: editing_group_name.clone(),
+                size: ModalSize::Wide,
                 actions: rsx! {
+                    Button {
+                        fill: ButtonFill::Clear,
+                        color: Color::Neutral,
+                        start: rsx! { Pencil { size: 16 } },
+                        onclick: move |_| {
+                            renaming.set(editing_group.peek().clone());
+                            group_name.set(rename_current.clone());
+                            name_dialog_open.set(true);
+                        },
+                        "Rename"
+                    }
                     Button { onclick: move |_| editor_open.set(false), "Done" }
                 },
                 Stack {
@@ -243,22 +364,13 @@ pub fn Subscriptions() -> Element {
                     } else {
                         List { lines: ListLines::Inset,
                             for channel in subscribed_for_editor {
-                                {
-                                    let channel_id = channel.id.clone();
-                                    let group_id = editing.clone().unwrap_or_default();
-                                    rsx! {
-                                        Item {
-                                            key: "{channel.id}",
-                                            label: channel.name.clone(),
-                                            checked: editing_members.contains(&channel.id),
-                                            start: rsx! {
-                                                Avatar { name: channel.name.clone(), src: channel.avatar_url.clone(), size: AvatarSize::Sm }
-                                            },
-                                            onclick: move |_| {
-                                                app_state.toggle_channel_in_group(&group_id, &channel_id);
-                                            },
-                                        }
-                                    }
+                                GroupMemberRow {
+                                    key: "{channel.id}",
+                                    member: editing_members.contains(&channel.id),
+                                    other_groups: other_groups_of(&channel.id),
+                                    group_id: editing.clone().unwrap_or_default(),
+                                    group_name: editing_group_name.clone(),
+                                    channel,
                                 }
                             }
                         }
@@ -267,21 +379,30 @@ pub fn Subscriptions() -> Element {
             }
 
             Modal {
-                open: create_open,
-                title: "New group",
+                open: name_dialog_open,
+                title: if is_renaming { "Rename group" } else { "New group" },
                 actions: rsx! {
-                    Button { fill: ButtonFill::Clear, onclick: move |_| create_open.set(false), "Cancel" }
+                    Button { fill: ButtonFill::Clear, onclick: move |_| name_dialog_open.set(false), "Cancel" }
                     Button {
                         disabled: group_name().trim().is_empty(),
                         onclick: move |_| {
                             let name = group_name().trim().to_string();
                             if name.is_empty() { return; }
-                            app_state.create_subscription_group(name.clone());
+                            match renaming.peek().clone() {
+                                Some(group_id) => {
+                                    if app_state.rename_subscription_group(&group_id, &name) {
+                                        app_state.show_toast(format!("Renamed to {name}"), Color::Success);
+                                    }
+                                }
+                                None => {
+                                    app_state.create_subscription_group(name.clone(), Vec::new());
+                                    app_state.show_toast(format!("Created {name}"), Color::Success);
+                                }
+                            }
                             group_name.set(String::new());
-                            create_open.set(false);
-                            app_state.show_toast(format!("Created {name}"), Color::Success);
+                            name_dialog_open.set(false);
                         },
-                        "Create"
+                        if is_renaming { "Save" } else { "Create" }
                     }
                 },
                 Input {
