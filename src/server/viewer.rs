@@ -958,6 +958,19 @@ impl AppServerState {
         channel_id: &str,
         member: bool,
     ) -> Result<bool> {
+        self.set_many_in_group(owner, group_id, &[channel_id.to_string()], member)
+            .await
+    }
+
+    /// Put several channels in a group or take them out, as one write.
+    /// Returns whether that changed anything.
+    pub async fn set_many_in_group(
+        &self,
+        owner: &str,
+        group_id: &str,
+        channel_ids: &[String],
+        member: bool,
+    ) -> Result<bool> {
         let _guard = self.sync_lock.lock().await;
         let rows: Vec<DbSubscriptionGroup> = self
             .db
@@ -972,14 +985,17 @@ impl AppServerState {
                 .next()
                 .ok_or_else(|| anyhow!("that group no longer exists"))?,
         );
-        let present = group.channel_ids.iter().any(|id| id == channel_id);
-        if present == member {
-            return Ok(false);
+        let before = group.channel_ids.clone();
+        for channel_id in channel_ids {
+            let present = group.channel_ids.iter().any(|id| id == channel_id);
+            if member && !present {
+                group.channel_ids.push(channel_id.clone());
+            } else if !member && present {
+                group.channel_ids.retain(|id| id != channel_id);
+            }
         }
-        if member {
-            group.channel_ids.push(channel_id.to_string());
-        } else {
-            group.channel_ids.retain(|id| id != channel_id);
+        if group.channel_ids == before {
+            return Ok(false);
         }
         self.upsert_subscription_group(owner, &group).await?;
         Ok(true)

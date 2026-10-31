@@ -1055,6 +1055,30 @@ impl AppState {
         );
     }
 
+    /// Put several channels in a group at once, as one server write.
+    pub fn add_channels_to_group(self, group_id: &str, channel_ids: Vec<String>) {
+        if channel_ids.is_empty() {
+            return;
+        }
+        self.edit_viewer(|viewer| {
+            if let Some(group) = viewer
+                .subscription_groups
+                .iter_mut()
+                .find(|group| group.id == group_id)
+            {
+                for channel_id in &channel_ids {
+                    if !group.channel_ids.contains(channel_id) {
+                        group.channel_ids.push(channel_id.clone());
+                    }
+                }
+            }
+        });
+        self.send(
+            DataChange::Groups,
+            api::set_many_in_group(group_id.to_string(), channel_ids, true),
+        );
+    }
+
     // -----------------------------------------------------------------------
     // Swipes and sharing
     // -----------------------------------------------------------------------

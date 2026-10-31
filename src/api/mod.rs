@@ -1,8 +1,8 @@
 use crate::models::{
     Account, ChannelDetails, ChannelMediaPage, CommentsPage, Credentials, FeedPage, FeedQuery,
-    FeedRefreshResult, LibraryChanges, PlaybackFailure, PlaybackFailureOrigin, PlaybackSession,
-    Playlist, PlaylistContents, PlaylistPreview, SearchResults, SponsorSegment, SubscriptionChange,
-    SubscriptionGroup, Video, VideoDetails, VideoProgress, Viewer,
+    FeedRefreshResult, GroupSuggestion, LibraryChanges, PlaybackFailure, PlaybackFailureOrigin,
+    PlaybackSession, Playlist, PlaylistContents, PlaylistPreview, SearchResults, SponsorSegment,
+    SubscriptionChange, SubscriptionGroup, Video, VideoDetails, VideoProgress, Viewer,
 };
 use dioxus::prelude::*;
 

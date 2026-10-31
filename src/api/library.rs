@@ -244,6 +244,41 @@ pub async fn set_in_group(group_id: String, channel_id: String, member: bool) ->
     Ok(done)
 }
 
+/// Several channels at once, as the group suggestions add them.
+#[post(
+    "/api/v1/groups/membership/many",
+    state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
+    owner: crate::auth::Owner
+)]
+pub async fn set_many_in_group(
+    group_id: String,
+    channel_ids: Vec<String>,
+    member: bool,
+) -> Result<bool> {
+    let done = state
+        .set_many_in_group(&owner.0, &group_id, &channel_ids, member)
+        .await
+        .map_err(server_error)?;
+    state.note_change(&owner.0, LibraryChange::Groups);
+    Ok(done)
+}
+
+/// Followed channels that look like they belong in a group, best first.
+///
+/// The first call on a server fetches a 90 MB model and reads every followed
+/// channel, which can take a minute; later calls only read what changed.
+#[post(
+    "/api/v1/groups/suggest",
+    state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
+    owner: crate::auth::Owner
+)]
+pub async fn suggest_group_channels(group_id: String) -> Result<Vec<GroupSuggestion>> {
+    Ok(state
+        .suggest_group_channels(&owner.0, &group_id)
+        .await
+        .map_err(server_error)?)
+}
+
 #[post(
     "/api/v1/groups/rename",
     state: dioxus::fullstack::extract::State<crate::server::AppServerState>,

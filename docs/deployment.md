@@ -118,10 +118,13 @@ docker compose -f compose.prod.yml up -d
 Two named volumes hold everything worth keeping:
 
 - `surrealdb-data` - the catalog, and every account's library
-- `tawny-data` - extractor caches and the generated WebSub secret
+- `tawny-data` - extractor caches, the generated WebSub secret, and the
+  group suggestion model (90 MB, fetched from Hugging Face the first time
+  someone asks for suggestions)
 
-Back up `surrealdb-data`. Losing `tawny-data` costs a re-warmed cache and a new
-WebSub secret, which resubscribes on the next renewal.
+Back up `surrealdb-data`. Losing `tawny-data` costs a re-warmed cache, a new
+WebSub secret, which resubscribes on the next renewal, and a fresh model
+download.
 
 `TAWNY_SURREALDB_VOLUME` and `TAWNY_APP_VOLUME` place each one. A bare name is
 a Docker named volume, which Docker keeps under `/var/lib/docker/volumes`; an

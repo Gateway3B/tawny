@@ -1,9 +1,10 @@
 use crate::models::{
     CaptionTrack, Channel, ChannelDetails, ChannelMediaPage, ChannelMediaTab, CommentsPage,
-    FeedRefreshResult, HistoryEntry, PlaybackByteRange, PlaybackFailure, PlaybackFailureOrigin,
-    PlaybackProtocol, PlaybackSession, PlaybackSource, PlaybackTrack, PlaybackTrackKind, Playlist,
-    SearchResults, SponsorCategory, SponsorSegment, SubscriptionContent, SubscriptionGroup, Video,
-    VideoChapter, VideoComment, VideoDetails, VideoPreviewFrames, VideoProgress,
+    FeedRefreshResult, GroupSuggestion, HistoryEntry, PlaybackByteRange, PlaybackFailure,
+    PlaybackFailureOrigin, PlaybackProtocol, PlaybackSession, PlaybackSource, PlaybackTrack,
+    PlaybackTrackKind, Playlist, SearchResults, SponsorCategory, SponsorSegment,
+    SubscriptionContent, SubscriptionGroup, Video, VideoChapter, VideoComment, VideoDetails,
+    VideoPreviewFrames, VideoProgress,
 };
 use anyhow::{Context, Result, anyhow};
 use axum::{
@@ -51,6 +52,7 @@ mod proxy;
 mod resolve;
 mod segments;
 mod store;
+mod topics;
 mod viewer;
 mod websub;
 mod youtube;

@@ -14,6 +14,16 @@ pub struct SubscriptionGroup {
     pub channel_ids: Vec<String>,
 }
 
+/// A followed channel that looks like it belongs in a group, from
+/// `suggest_group_channels`. The client already has the channel itself in
+/// the viewer, so only the id travels.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupSuggestion {
+    pub channel_id: String,
+    /// A clear match, offered already ticked. The rest are worth a look.
+    pub likely: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SearchResults {
     pub query: String,

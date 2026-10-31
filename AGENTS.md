@@ -75,7 +75,8 @@ src/auth/               Accounts and sessions (g3-auth), and the client's sessio
 src/db/                 Connection and schema sync
 src/api/                Server functions by area: catalog, playback, feed, account, library
 src/server/             AppServerState, the server's engine: ytdlp, youtube (normalizing),
-                        resolve, proxy, segments, store, browse, feed, websub, viewer
+                        resolve, proxy, segments, store, browse, feed, websub, viewer,
+                        topics (group suggestions from a small embedding model)
 src/models/             Types shared by client and server
 src/components/         Screens and the shell; player.rs is the persistent player
 src/cache.rs            use_persistent_signal (per-device settings)

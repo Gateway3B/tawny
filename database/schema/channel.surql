@@ -17,3 +17,11 @@ DEFINE FIELD IF NOT EXISTS websub_status ON channel TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS websub_requested_at ON channel TYPE option<datetime>;
 
 DEFINE INDEX IF NOT EXISTS channel_external_id_idx ON channel FIELDS channel_id UNIQUE;
+
+-- What the channel is about, as a sentence-embedding vector, for group
+-- suggestions (src/server/topics.rs). Kept out of CHANNEL_COLUMNS so the
+-- viewer never carries it. `topic_model` names the model and revision that
+-- made it, so a model change re-embeds everything.
+DEFINE FIELD IF NOT EXISTS topic_vector ON channel TYPE option<array<float>>;
+DEFINE FIELD IF NOT EXISTS topic_model ON channel TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS topic_at ON channel TYPE option<datetime>;

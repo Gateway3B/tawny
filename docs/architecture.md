@@ -71,6 +71,28 @@ Server caches are `g3-cache` `ServerCache` statics, bounded and expiring: search
 
 Tawny's server connects to the SurrealDB endpoint in `SURREALDB_HOST`. The checked-in Compose stack supplies a persistent SurrealDB container for development and production, while server tests use an in-memory database. `TAWNY_DATA_DIR` controls Tawny's extractor cache and other app-owned server data. See [database/README.md](../database/README.md) for scoped local SurrealKit operator commands.
 
+### Group suggestions
+
+"Suggest channels" in a group's editor ranks the account's other follows
+against the group (`src/server/topics.rs`). A small sentence-embedding model,
+all-MiniLM-L6-v2 run by candle on the CPU, turns each channel's name,
+description (links stripped) and 15 most recent titles into a vector, stored
+on the shared `channel` row (`topic_vector`, `topic_model`, `topic_at`) and
+made again after 30 days or when the model changes. The group's vector is its
+name's, blended half and half with the average of the channels already in it.
+
+Matches are judged against the account's other follows, not a fixed score:
+three standard deviations above their average is "likely" and offered ticked,
+two is "maybe", and the best ten at one or more are always offered as "maybe"
+so a smaller account still sees its few near matches. A fixed bar did not
+work across topics, since a broad name with many matching follows scores
+everything higher.
+
+The model is downloaded on first use into `$TAWNY_DATA_DIR/models`, pinned to
+a revision and checked against SHA-256 hashes; `TAWNY_TOPIC_MODEL_DIR` points
+at a copy for servers without outside access. The first request on a server
+embeds every followed channel, which takes up to a minute.
+
 ## Authentication
 
 See [authentication.md](authentication.md).
