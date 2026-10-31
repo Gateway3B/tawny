@@ -4,7 +4,7 @@ pre-commit:
   parallel: true
   commands:
     rust-style:
-      run: python scripts/rust_style.py --staged
+      run: node scripts/rust-style.mjs --staged
     format:
       run: just format-check
     spelling:

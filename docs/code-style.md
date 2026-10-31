@@ -1,7 +1,7 @@
 # Rust and Dioxus readability
 
 Use the stable settings in `rustfmt.toml`. Keep this guide and
-`scripts/rust_style.py` aligned with the common copies in g3-stack.
+`scripts/rust-style.mjs` aligned with the common copies in g3-stack.
 
 ## Component layout
 
@@ -35,11 +35,11 @@ Use the stable settings in `rustfmt.toml`. Keep this guide and
 
 ## Checks
 
-`python scripts/rust_style.py --staged` checks the actual staged Rust contents,
+`node scripts/rust-style.mjs --staged` checks the actual staged Rust contents,
 including code inside RSX, without reading unrelated working-tree changes.
-CI checks all tracked Rust files. `python scripts/rust_style.py --base HEAD^`
+CI checks all tracked Rust files. `node scripts/rust-style.mjs --base HEAD^`
 can inspect only the latest committed change.
-`python scripts/rust_style.py --report` inventories existing readability debt.
+`node scripts/rust-style.mjs --report` inventories existing readability debt.
 The checker masks comments and Rust string/character literals, including raw
 strings, so embedded JavaScript, SQL and documentation are ignored.
 

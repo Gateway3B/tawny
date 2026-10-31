@@ -109,10 +109,10 @@ ci: quality security
 
 # Readability rules inside RSX, checked without rewriting source.
 style-check:
-    python scripts/rust_style.py
+    node scripts/rust-style.mjs
 
 style-report:
-    python scripts/rust_style.py --report
+    node scripts/rust-style.mjs --report
 
 style-test:
-    python scripts/test_rust_style.py
+    node --test scripts/rust-style.test.mjs
