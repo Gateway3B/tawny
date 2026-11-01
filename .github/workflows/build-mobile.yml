@@ -99,19 +99,20 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_FILE"
           # JSON string escapes are valid TOML basic strings, so any password
           # characters survive.
-          python3 - <<'PY'
-          import json, os
-          keys = {
-              "jks_file": os.environ["ANDROID_KEYSTORE_FILE"],
-              "jks_password": os.environ["ANDROID_KEYSTORE_PASSWORD"],
-              "key_alias": os.environ["ANDROID_KEY_ALIAS"],
-              "key_password": os.environ["ANDROID_KEY_PASSWORD"],
+          node --input-type=module <<'JS'
+          import { appendFileSync } from "node:fs";
+          const keys = {
+            jks_file: process.env.ANDROID_KEYSTORE_FILE,
+            jks_password: process.env.ANDROID_KEYSTORE_PASSWORD,
+            key_alias: process.env.ANDROID_KEY_ALIAS,
+            key_password: process.env.ANDROID_KEY_PASSWORD,
+          };
+          let config = "\n[android.signing]\n";
+          for (const [key, value] of Object.entries(keys)) {
+            config += `${key} = ${JSON.stringify(value)}\n`;
           }
-          with open("Dioxus.toml", "a", encoding="utf-8") as config:
-              config.write("\n[android.signing]\n")
-              for key, value in keys.items():
-                  config.write(f"{key} = {json.dumps(value)}\n")
-          PY
+          appendFileSync("Dioxus.toml", config, "utf8");
+          JS
 
       # The build number must rise with every store upload; the run number does.
       # Only `artifacts/` is uploaded: the generated Gradle project under
