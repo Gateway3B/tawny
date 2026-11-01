@@ -64,9 +64,22 @@ player.rs ─ resolve_session (playback_resolver.rs)
   `androidx.javascriptengine` is Apache, so this path adds nothing GPL to the
   app (unlike NewPipeExtractor, which LibreTube uses).
 
+## Why these two files are Python
+
+The rest of the repository is Rust, JavaScript and Node, but `tawny_local.py`
+and `tawny_jsc.py` have to be Python. They are not programs run beside yt-dlp:
+Chaquopy loads them into the same embedded Python interpreter as yt-dlp, on the
+phone, and they work on yt-dlp's own objects. `tawny_local.py` wraps
+`YoutubeIE._extract_formats_and_subtitles` to keep the player responses yt-dlp
+parsed, and `tawny_jsc.py` subclasses yt-dlp's challenge provider classes and
+registers itself with them. yt-dlp offers neither through its command line, so
+there is no other language they could be written in. The Chaquopy setup in
+`android/localstreams` stays as it is.
+
 ## Testing the Python without a phone
 
-The extractor container has the same yt-dlp and a Node runtime. Node in a bare
+The extractor container has the same yt-dlp and a Node runtime. The snippet
+below runs Python because it imports the two plugins above. Node in a bare
 `vm` context stands in for the V8 sandbox, which has no `console` either:
 
 ```sh

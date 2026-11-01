@@ -220,6 +220,14 @@ The full guide, with examples from this code, is
 - Prefer a Rust unit test over a browser test; server tests run against
   `mem://`. One test talks to YouTube and is `#[ignore]`d.
 - Commits follow Conventional Commits; lefthook checks them.
+- Scripts, services and their tests are Node ES modules (`.mjs`, standard
+  library, `node:test`), never Python. The only Python in the repository is
+  `tawny_jsc.py` and `tawny_local.py` in `android/localstreams/src/main/python/`:
+  they are yt-dlp plugins that run inside Chaquopy's embedded Python on the
+  phone and call yt-dlp's internals, so they cannot be written in anything
+  else (see [docs/on-device-playback.md](docs/on-device-playback.md)). yt-dlp
+  itself is a Python program, which is why the extractor image still installs
+  it with pip.
 
 ---
 
