@@ -6,9 +6,9 @@
   "scripts": {
     "test": "npm run test:unit",
     "test:all": "npm run test:unit && npm run test:rust && npm run test:ui",
-    "test:unit": "npm run test:unit:js && npm run test:unit:python",
+    "test:unit": "npm run test:unit:js && npm run test:unit:extractor",
     "test:unit:js": "node --check assets/tawny_player_controls.js && node --test tests/tawny_transport.test.cjs tests/tawny_player_timeline.test.cjs",
-    "test:unit:python": "node scripts/run-python-tests.cjs",
+    "test:unit:extractor": "node --test docker/extractor/server.test.mjs",
     "test:rust": "npm run test:rust:web && npm run test:rust:server",
     "test:rust:web": "cargo test",
     "test:rust:server": "cargo test --no-default-features --features server",

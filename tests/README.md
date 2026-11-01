@@ -1,12 +1,12 @@
 # Tawny test suite
 
-The suite is split by feedback speed and runtime dependency. Rust unit tests stay beside the code they cover, browser-runtime tests stay in `tests/*.cjs`, the yt-dlp service keeps its Python tests beside that service, and end-to-end UI tests live in `tests/ui`.
+The suite is split by feedback speed and runtime dependency. Rust unit tests stay beside the code they cover, browser-runtime tests stay in `tests/*.cjs`, the yt-dlp service keeps its `node:test` tests beside that service (`docker/extractor/server.test.mjs`), and end-to-end UI tests live in `tests/ui`.
 
 ## Commands
 
 | Command | Coverage |
 | --- | --- |
-| `npm test` | JavaScript runtime tests and Python yt-dlp service tests |
+| `npm test` | JavaScript runtime tests and yt-dlp service tests |
 | `npm run test:rust` | Web-safe Rust tests plus server-feature Rust tests |
 | `npm run test:ui` | Playwright UI suite on phone and desktop Chromium |
 | `npm run test:ui:mobile` | Phone-sized UI suite only |
@@ -18,7 +18,7 @@ Playwright reuses a Dioxus server already listening on port 8080. When no server
 Browser cases run one at a time so local cache and sync-state mutations remain deterministic.
 
 Install the browser once with `npx playwright install chromium`.
-The yt-dlp service tests require Python 3; set `PYTHON` when it is not discoverable as `py`, `python`, or `python3`.
+The yt-dlp service tests run on Node alone; they replace yt-dlp and the PO-token provider with stand-ins, so neither needs to be installed.
 
 ## UI case inventory
 

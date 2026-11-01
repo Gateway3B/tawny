@@ -649,7 +649,7 @@ pub(crate) fn extraction_timed_out() -> PlaybackFailure {
 }
 
 /// The extractor sidecar's non-success answers. Each status is one it sends
-/// deliberately (see `docker/extractor/server.py`), and only 502 means yt-dlp
+/// deliberately (see `docker/extractor/server.mjs`), and only 502 means yt-dlp
 /// itself failed - with yt-dlp's own error in the body.
 pub(crate) fn extractor_status_failure(
     status: reqwest::StatusCode,
