@@ -319,7 +319,9 @@ export function createService({
     }
 
     const videoPrefix = "/v1/videos/";
-    const shortsPrefix = "/v1/channels/";
+    // Whole-path shapes, so `/uploads/shorts` is never read as the Shorts route.
+    const shortsRoute = /^\/v1\/channels\/([^/]*)\/shorts$/.exec(path);
+    const uploadsRoute = /^\/v1\/channels\/([^/]*)\/uploads\/([^/]*)$/.exec(path);
     let command;
     if (path.startsWith(videoPrefix)) {
       const resourceId = path.slice(videoPrefix.length);
@@ -332,21 +334,16 @@ export function createService({
         return;
       }
       command = buildVideoCommand(resourceId);
-    } else if (path.startsWith(shortsPrefix) && path.endsWith("/shorts")) {
-      const resourceId = path.slice(shortsPrefix.length, -"/shorts".length);
+    } else if (shortsRoute) {
+      const resourceId = shortsRoute[1];
       if (!CHANNEL_ID.test(resourceId)) {
         sendJson(response, 400, { error: "invalid channel id" });
         return;
       }
       command = buildChannelShortsCommand(resourceId);
-    } else if (path.startsWith(shortsPrefix) && path.includes("/uploads/")) {
-      const rest = path.slice(shortsPrefix.length);
-      const split = rest.indexOf("/uploads/");
+    } else if (uploadsRoute) {
       try {
-        command = buildChannelUploadsCommand(
-          rest.slice(0, split),
-          rest.slice(split + "/uploads/".length),
-        );
+        command = buildChannelUploadsCommand(uploadsRoute[1], uploadsRoute[2]);
       } catch {
         sendJson(response, 400, { error: "invalid channel listing" });
         return;

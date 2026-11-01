@@ -252,6 +252,10 @@ describe("routes", () => {
         assert.equal(listing.body, "{}");
         const bad = await get(port, "/v1/channels/UCsXVk37bltHxD1rDPwtNM8Q/uploads/members");
         assert.deepEqual(JSON.parse(bad.body), { error: "invalid channel listing" });
+        // Extra path segments match neither channel route.
+        const nested = await get(port, "/v1/channels/UCsXVk37bltHxD1rDPwtNM8Q/extra/shorts");
+        assert.equal(nested.status, 404);
+        assert.equal((await get(port, "/v1/channels/UC/x/uploads/videos")).status, 404);
         const health = await get(port, "/health");
         assert.equal(health.status, 503);
         assert.deepEqual(JSON.parse(health.body), {
@@ -259,6 +263,26 @@ describe("routes", () => {
           provider: false,
           plugin_version: "2.0.0",
         });
+      },
+    );
+  });
+
+  test("the uploads listing of the Shorts tab is not taken for the Shorts route", async () => {
+    const commands = [];
+    await withService(
+      {
+        run: async (command) => {
+          commands.push(command);
+          return { timedOut: false, returncode: 0, stdout: Buffer.from("{}") };
+        },
+      },
+      async (port) => {
+        const listing = await get(port, "/v1/channels/UCsXVk37bltHxD1rDPwtNM8Q/uploads/shorts");
+        assert.equal(listing.status, 200);
+        assert.deepEqual(
+          commands[0],
+          buildChannelUploadsCommand("UCsXVk37bltHxD1rDPwtNM8Q", "shorts"),
+        );
       },
     );
   });
