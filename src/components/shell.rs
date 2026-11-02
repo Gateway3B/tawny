@@ -22,7 +22,7 @@ use super::PersistentPlayer;
 fn section_label(route: &Route) -> &'static str {
     match route {
         Route::Subscriptions {} => "Subscriptions",
-        Route::Playlists {} | Route::PlaylistDetail { .. } => "Playlists",
+        Route::Playlists {} | Route::PlaylistDetail { .. } | Route::Downloads {} => "Playlists",
         Route::Explore {} => "Search",
         _ => "Feed",
     }
@@ -519,7 +519,7 @@ fn ShellContent() -> Element {
                 }
                 NavItem {
                     label: "Playlists",
-                    selected: matches!(route, Route::Playlists {} | Route::PlaylistDetail { .. }),
+                    selected: matches!(route, Route::Playlists {} | Route::PlaylistDetail { .. } | Route::Downloads {}),
                     icon: rsx! { ListIcon { size: 22 } },
                     onclick: move |_| { spawn(animated_navigate(Route::Playlists {})); },
                 }

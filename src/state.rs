@@ -158,6 +158,9 @@ pub struct AppState {
     pub feed_group: Signal<crate::models::FeedGroup>,
     pub feed_duration: Signal<Option<crate::models::DurationFilter>>,
     pub feed_pages: Signal<usize>,
+    /// What this device keeps for offline viewing, as the page last reported
+    /// it. Kept up to date by `downloads::DownloadsSync`.
+    pub downloads: Signal<Vec<crate::downloads::DownloadEntry>>,
 }
 
 impl AppState {
@@ -1652,10 +1655,12 @@ pub fn AppStateProvider(children: Element) -> Element {
         feed_group: Signal::new(crate::models::FeedGroup::All),
         feed_duration: Signal::new(None),
         feed_pages: Signal::new(1),
+        downloads: Signal::new(Vec::new()),
     });
 
     rsx! {
         crate::library_sync::LibrarySync {}
+        crate::downloads::DownloadsSync {}
         {children}
     }
 }

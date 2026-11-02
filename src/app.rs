@@ -1,7 +1,7 @@
 use crate::{
     components::{
-        AppOverlays, AppShell, ChannelDetail, Explore, Feed, HistoryPage, PlaylistDetail,
-        Playlists, QueuePage, SettingsPage, Subscriptions, VideoDetail,
+        AppOverlays, AppShell, ChannelDetail, Downloads, Explore, Feed, HistoryPage,
+        PlaylistDetail, Playlists, QueuePage, SettingsPage, Subscriptions, VideoDetail,
     },
     models::{Appearance, PlatformStyle},
     state::{AppState, AppStateProvider},
@@ -28,6 +28,8 @@ const SHAKA_PLAYER_JS: Asset = asset!("/node_modules/shaka-player/dist/shaka-pla
 const TAWNY_TRANSPORT_JS: Asset = asset!("/assets/tawny_transport.js");
 
 const TAWNY_PLAYER_CONTROLS_JS: Asset = asset!("/assets/tawny_player_controls.js");
+
+const TAWNY_DOWNLOADS_JS: Asset = asset!("/assets/tawny_downloads.js");
 
 const FAVICON_SVG: Asset = asset!("/assets/favicon.svg");
 
@@ -104,6 +106,10 @@ pub enum Route {
         #[public]
         #[route("/playlists/:id")]
         PlaylistDetail { id: String },
+        #[transition(layer = stack_page)]
+        #[public]
+        #[route("/downloads")]
+        Downloads {},
         #[transition(layer = sheet)]
         #[public]
         #[route("/settings")]
@@ -186,6 +192,7 @@ pub fn App() -> Element {
         document::Script { src: SHAKA_PLAYER_JS }
         document::Script { src: TAWNY_TRANSPORT_JS }
         document::Script { src: TAWNY_PLAYER_CONTROLS_JS }
+        document::Script { src: TAWNY_DOWNLOADS_JS }
         NativePluginsProvider {
             AppStateProvider {
                 ThemedApp {}

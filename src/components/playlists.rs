@@ -7,8 +7,8 @@ use crate::{
 };
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{
-    ArrowDown, ArrowUp, ArrowUpDown, Check, CheckCheck, ChevronsDown, ChevronsUp, EllipsisVertical,
-    ListPlus, Pencil, Play, Plus, Shuffle, Trash2,
+    ArrowDown, ArrowUp, ArrowUpDown, Check, CheckCheck, ChevronsDown, ChevronsUp, Download,
+    EllipsisVertical, ListPlus, Pencil, Play, Plus, Shuffle, Trash2,
 };
 use g3_cache::use_cached;
 use g3_route_transitions::animated_navigate;
@@ -259,6 +259,13 @@ pub fn Playlists() -> Element {
                             ArrowUpDown { size: 22 }
                         }
                     }
+                }
+
+                Button {
+                    fill: ButtonFill::Clear,
+                    aria_label: "Downloads",
+                    onclick: move |_| { spawn(animated_navigate(Route::Downloads {})); },
+                    Download { size: 22 }
                 }
 
                 Button {

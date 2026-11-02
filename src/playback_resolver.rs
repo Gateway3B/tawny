@@ -6,10 +6,28 @@ use crate::{
     models::{PlaybackFailure, PlaybackSession},
 };
 
-/// A playback session for `video_id`. With `from_device`, an Android phone
+/// A playback session for `video_id`: the copy kept on this device when
+/// there is one (see `downloads`), otherwise streamed.
+///
+/// `fresh` skips the kept copy as well: it is asked for when a session
+/// stopped working, and a download that will not play should fall back to
+/// streaming rather than fail the same way again.
+pub async fn resolve_session(
+    video_id: String,
+    prefer_sabr: bool,
+    fresh: bool,
+    from_device: bool,
+) -> Result<PlaybackSession, PlaybackFailure> {
+    if !fresh && let Some(session) = crate::downloads::offline_session(&video_id).await {
+        return Ok(session);
+    }
+    resolve_streaming_session(video_id, prefer_sabr, fresh, from_device).await
+}
+
+/// A session streamed from YouTube. With `from_device`, an Android phone
 /// resolves it itself first (`local_streams`), so video comes straight from
 /// YouTube; any failure there asks the server as before.
-pub async fn resolve_session(
+pub async fn resolve_streaming_session(
     video_id: String,
     prefer_sabr: bool,
     fresh: bool,

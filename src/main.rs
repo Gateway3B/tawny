@@ -10,6 +10,8 @@ mod components;
 
 mod data_change;
 
+mod downloads;
+
 #[cfg(feature = "server")]
 mod db;
 

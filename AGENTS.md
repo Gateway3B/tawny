@@ -81,11 +81,13 @@ src/models/             Types shared by client and server
 src/components/         Screens and the shell; player.rs is the persistent player
 src/cache.rs            use_persistent_signal (per-device settings)
 src/library_sync.rs     Refetching what another device changed; catching up a paused player
-src/playback_resolver.rs Where the player gets a session: the phone (Android) or the server
+src/playback_resolver.rs Where the player gets a session: a download, the phone (Android) or the server
+src/downloads.rs        Offline downloads: starting, listing, and playing them (see docs/playback.md)
 src/local_streams.rs    Android: resolving playback on the phone (yt-dlp in the app), see docs/on-device-playback.md
 src/local_relay.rs      Android: 127.0.0.1 relay that hands phone-resolved streams to the player
 src/subscriptions_io.rs Importing and exporting subscription lists
-assets/                 tawny_transport.js and tawny_player_controls.js (the player's JS side)
+assets/                 tawny_transport.js and tawny_player_controls.js (the player's JS side),
+                        tawny_downloads.js (Shaka offline storage for downloads)
 database/schema/        One .surql file per table (desired state, not migrations)
 docker/extractor/       The yt-dlp sidecar image
 android/localstreams/   The Android module behind local_streams: Chaquopy Python, yt-dlp, V8 sandbox

@@ -38,6 +38,52 @@ The media element lives in the shared app shell: it is full-width on a video rou
 
 Tawny is not affiliated with or endorsed by YouTube. YouTube trademarks belong to their respective owners.
 
+## Downloads
+
+A video can be kept on the device and watched without a connection. The
+watch page's Download button offers a quality (Best, 1080p, 720p, 480p,
+360p, or audio only; each height means that or the closest below it), and
+the Downloads page, reached from the Playlists header, lists what is kept,
+what is under way and what failed.
+
+Nothing is built on the server. A download is the player's own adaptive
+stream narrowed to one video track and one audio track, stored by Shaka's
+offline storage (`shaka.offline.Storage`) in the page's IndexedDB. The
+session comes from the same resolver the player uses (`resolve_streaming_session`,
+so an Android phone that streams from the device downloads from it too), the
+segments come through the same proxy, and `assets/tawny_downloads.js`
+builds the manifest with the transport's `buildDashManifest`. The tracks are
+picked the way the player would play them on that device: its preferred
+codec family first, as Shaka narrows what it streams (so a phone keeps AVC,
+which stops at 1080p, rather than a 4K VP9 file it would never stream),
+then the highest quality at or under the one asked for, with the original
+audio rather than a dub. A video yt-dlp only offers as HLS is stored from the HLS
+master instead; a live stream cannot be downloaded.
+
+Playing goes through Shaka too. `resolve_session` asks the page for a kept
+copy before anything else and, when there is one, returns a session whose
+only source is the `offline:` URI with Shaka's offline manifest type, so
+the transport, controls and media session work unchanged and nothing asks
+the server. A `fresh` resolve skips the kept copy, so a download that stops
+playing falls back to streaming instead of failing the same way twice.
+
+The page owns the downloads because a native build's Rust handlers block
+the WebView and only the page can reach Shaka's storage. `src/downloads.rs`
+starts and removes them and mirrors `TawnyDownloads.list()` into
+`AppState::downloads`; `DownloadsSync` refreshes it on every change and
+says when one finishes or fails. Downloads are per device and per browser
+origin, and are not synced. A record left incomplete by the app closing
+mid-download shows as interrupted, to remove or download again. The browser
+is asked for persistent storage when the first download starts, so it does
+not clear them when space runs low.
+
+What is not offline: the watch page shows a video's details from the
+client cache, so a video opened before going offline shows them and one
+never opened does not. Comments, SponsorBlock segments and watch progress
+need the server. The web build itself loads from the server, so a browser
+with no connection to it cannot open Tawny at all; the Android, iOS and
+desktop apps can.
+
 ## Live streams
 
 A live stream has only yt-dlp's HLS master playlist, which the proxy rewrites

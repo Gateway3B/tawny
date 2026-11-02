@@ -29,7 +29,7 @@ use g3_ui::{
 
 mod controls;
 
-use super::{VideoGrid, linkify::Linkified};
+use super::{DownloadButton, VideoGrid, linkify::Linkified};
 use controls::PlayerControls;
 
 /// The player's transport fetches from the webview, not through the server
@@ -2024,6 +2024,8 @@ fn VideoDetailInner(id: String) -> Element {
                         onclick: move |_| app_state.open_share(share_video.clone()),
                         "Share"
                     }
+
+                    DownloadButton { video: video.clone() }
 
                     Button {
                         fill: ButtonFill::Outline,
