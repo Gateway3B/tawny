@@ -1,5 +1,5 @@
 [application]
-name = "tawny"
+name = "Tawny"
 asset_dir = "assets"
 default_platform = "web"
 out_dir = "dist"
@@ -28,17 +28,25 @@ script = []
 [bundle]
 identifier = "net.gateway3.tawny"
 publisher = "Gateway3"
+# The full-bleed master; dx renders the Android launcher icons from it. iOS
+# uses `[ios] icon`, and assets/icon/icon-512.png is the Play listing icon.
+icon = ["assets/icon/icon.svg"]
 category = "Entertainment"
 short_description = "A calm, local-first YouTube client."
 long_description = "Tawny is a self-hosted YouTube client for personal home labs, on mobile, web, and desktop."
 
 [ios]
+# Opaque, with no alpha channel: App Store Connect rejects one that has it.
+# g3-stack's scripts/app-icon.mjs renders it from the master.
+icon = ["assets/icon/icon-1024.png"]
 deployment_target = "15.0"
 # The media plugin's `.playback` audio session only survives leaving the app
 # when the Info.plist declares background audio.
 background_modes = ["audio"]
 
 [android]
-min_sdk = 35
-target_sdk = 35
-compile_sdk = 35
+# Android 8.0. Older versions stopped getting WebView updates before
+# Chromium 123, which g3-ui's light-dark() theme colors need.
+min_sdk = 26
+target_sdk = 36
+compile_sdk = 36

@@ -72,8 +72,8 @@ Before a first store submission:
 - **Icons.** `Dioxus.toml` has no `[bundle] icon`. iOS needs an opaque
   1024x1024 PNG (the App Store rejects transparency), and Android generates
   its launcher icons from the same setting.
-- **SDK levels.** `target_sdk` is 35; check Google Play's current minimum
-  before uploading.
+- **SDK levels.** `target_sdk` is 36, which Play has required since
+  31 August 2026; check Play's current rule before uploading.
 - **On a device:** rotate and toggle dark mode (Android recreates the
   activity), leave the app in the background for several minutes and resume,
   and select text in a release build.
