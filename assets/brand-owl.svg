@@ -2,8 +2,17 @@
   <!-- The header's brand mark: the app icon's owl (assets/icon/icon.svg), in
        its coordinates and colours, so it is the same black owl with white eyes
        on either theme. A file rather than markup because the colours are fixed.
-       The beak and highlights are left out; at header size they were a pixel. -->
-  <path d="M366 708 L366 252 L420 330 L470 300 L500 368 L716 512 Z" fill="#231509" stroke="#231509" stroke-width="64" stroke-linejoin="round"/>
+       The eye highlights are left out; at header size they were a pixel. The
+       beak is the icon's, drawn about 1.8 times as large so it still reads at
+       20px, and cut out of the head rather than painted: the tile behind
+       shows through, as on the icon, whichever theme's accent it is. -->
+  <defs>
+    <mask id="beak" maskUnits="userSpaceOnUse" x="277" y="216" width="528" height="528">
+      <rect x="277" y="216" width="528" height="528" fill="#fff"/>
+      <path d="M468 580 L522 580 L495 638 Z" fill="#000" stroke="#000" stroke-width="12" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <path d="M366 708 L366 252 L420 330 L470 300 L500 368 L716 512 Z" fill="#231509" stroke="#231509" stroke-width="64" stroke-linejoin="round" mask="url(#beak)"/>
   <circle cx="430" cy="506" r="66" fill="#fff1d6"/>
   <circle cx="558" cy="506" r="66" fill="#fff1d6"/>
   <circle cx="446" cy="510" r="34" fill="#231509"/>
