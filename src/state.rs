@@ -112,6 +112,10 @@ pub struct AppState {
     pub group_picker_open: Signal<bool>,
     pub share_video: Signal<Option<Video>>,
     pub share_open: Signal<bool>,
+    /// The video the download sheet is for. One sheet serves the watch page,
+    /// a card's menu and a swipe.
+    pub download_video: Signal<Option<Video>>,
+    pub download_open: Signal<bool>,
     pub share_with_timestamp: Signal<bool>,
     pub share_timestamp_seconds: Signal<u64>,
     pub active_video: Signal<Option<Video>>,
@@ -373,6 +377,8 @@ impl AppState {
         self.group_picker_channel.set(None);
         self.share_open.set(false);
         self.share_video.set(None);
+        self.download_open.set(false);
+        self.download_video.set(None);
     }
 
     /// Remember where playback has reached.
@@ -1125,7 +1131,31 @@ impl AppState {
                 self.show_toast("Marked watched", Color::Neutral);
             }
             SwipeActionKind::Share => self.open_share(video.clone()),
+            SwipeActionKind::Download => self.open_download(video.clone()),
+            SwipeActionKind::ChannelGroups => {
+                // Groups only sort the feed, which only holds followed
+                // channels, as in the video actions sheet.
+                if self.follows(&video.channel_id) {
+                    self.open_group_picker(&video.channel_id, &video.channel_name);
+                } else {
+                    self.show_toast(
+                        format!("Follow {} to add it to a group", video.channel_name),
+                        Color::Warning,
+                    );
+                }
+            }
         }
+    }
+
+    /// Open the download sheet for `video`: qualities to pick from, or what
+    /// is kept and a way to remove it.
+    pub fn open_download(mut self, video: Video) {
+        if video.is_live {
+            self.show_toast("A live stream cannot be downloaded", Color::Warning);
+            return;
+        }
+        self.download_video.set(Some(video));
+        self.download_open.set(true);
     }
 
     pub fn open_share(mut self, video: Video) {
@@ -1232,7 +1262,9 @@ impl AppState {
             }
             _ => Vec::new(),
         };
-        view.arrange(&mut videos, &settings);
+        self.peek_viewer(|viewer| {
+            view.arrange(&mut videos, &settings, &viewer.subscription_groups)
+        });
         videos
     }
 
@@ -1630,6 +1662,8 @@ pub fn AppStateProvider(children: Element) -> Element {
         group_picker_open: Signal::new(false),
         share_video: Signal::new(None),
         share_open: Signal::new(false),
+        download_video: Signal::new(None),
+        download_open: Signal::new(false),
         share_with_timestamp: Signal::new(false),
         share_timestamp_seconds: Signal::new(0),
         active_video: Signal::new(None),

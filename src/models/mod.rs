@@ -164,6 +164,32 @@ mod tests {
     }
 
     #[test]
+    fn a_group_filter_keeps_only_its_channels_until_the_group_is_gone() {
+        let mut videos = sample();
+        videos[1].channel_id = "grouped".into();
+        let groups = [SubscriptionGroup {
+            id: "g".into(),
+            name: "Grouped".into(),
+            channel_ids: vec!["grouped".into()],
+        }];
+        let view = PlaylistView {
+            group: Some("g".into()),
+            ..PlaylistView::default()
+        };
+        assert!(view.is_filtered());
+        assert_eq!(view.filter_labels(&groups), ["In Grouped"]);
+
+        let mut kept = videos.clone();
+        view.arrange(&mut kept, &AppSettings::default(), &groups);
+        assert_eq!(ids(&kept), ["a"]);
+
+        // A deleted group must not hide the whole playlist.
+        let mut all = videos;
+        view.arrange(&mut all, &AppSettings::default(), &[]);
+        assert_eq!(ids(&all), ["b", "a", "c"]);
+    }
+
+    #[test]
     fn added_keeps_the_playlists_own_order() {
         let mut videos = sample();
         PlaylistSort::Added.apply(&mut videos, false);
@@ -292,7 +318,7 @@ mod tests {
 
     fn run_order(view: &PlaylistView, videos: Vec<Video>) -> Vec<Video> {
         let mut videos = videos;
-        view.arrange(&mut videos, &AppSettings::default());
+        view.arrange(&mut videos, &AppSettings::default(), &[]);
         videos
     }
 

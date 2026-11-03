@@ -30,7 +30,7 @@ mod video_card;
 
 pub use account::{AccountGate, AccountSettings, BackendSettings};
 pub use deferred::{use_after_first_paint, use_after_route_transition};
-pub use downloads::{DownloadButton, Downloads};
+pub use downloads::{DownloadButton, DownloadSheet, Downloads};
 pub use durations::{duration_candidates, use_duration_hydration};
 pub use explore::Explore;
 pub use feed::{Feed, FeedFilterSegments};

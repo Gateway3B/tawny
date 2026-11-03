@@ -133,15 +133,21 @@ pub enum SwipeActionKind {
     PlayNext,
     Share,
     MarkWatched,
+    /// Opens the download sheet, to pick a quality.
+    Download,
+    /// Opens the group picker for the video's channel.
+    ChannelGroups,
 }
 
 impl SwipeActionKind {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 7] = [
         Self::AddToPlaylist,
         Self::AddToQueue,
         Self::PlayNext,
         Self::Share,
         Self::MarkWatched,
+        Self::Download,
+        Self::ChannelGroups,
     ];
 
     pub fn label(self) -> &'static str {
@@ -151,6 +157,8 @@ impl SwipeActionKind {
             Self::PlayNext => "Play next",
             Self::Share => "Share",
             Self::MarkWatched => "Mark watched",
+            Self::Download => "Download",
+            Self::ChannelGroups => "Add channel to group",
         }
     }
 
@@ -163,6 +171,8 @@ impl SwipeActionKind {
             Self::PlayNext => "Play next",
             Self::Share => "Share",
             Self::MarkWatched => "Watched",
+            Self::Download => "Download",
+            Self::ChannelGroups => "Group",
         }
     }
 }

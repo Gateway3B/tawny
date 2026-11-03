@@ -206,8 +206,14 @@
   .inset-x-0 {
     inset-inline: calc(var(--spacing) * 0);
   }
+  .top-0 {
+    top: calc(var(--spacing) * 0);
+  }
   .top-2 {
     top: calc(var(--spacing) * 2);
+  }
+  .right-0 {
+    right: calc(var(--spacing) * 0);
   }
   .right-2 {
     right: calc(var(--spacing) * 2);
@@ -398,6 +404,9 @@
   .self-center {
     align-self: center;
   }
+  .justify-self-start {
+    justify-self: flex-start;
+  }
   .truncate {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -430,6 +439,9 @@
   }
   .object-cover {
     object-fit: cover;
+  }
+  .p-2 {
+    padding: calc(var(--spacing) * 2);
   }
   .px-2 {
     padding-inline: calc(var(--spacing) * 2);
@@ -787,7 +799,7 @@ body {
   bottom: calc(4rem + var(--g3-safe-area-bottom, env(safe-area-inset-bottom)));
   left: 0;
   display: grid;
-  grid-template-columns: 7.4rem minmax(0, 1fr) 2.6rem;
+  grid-template-columns: 7.4rem minmax(0, 1fr) 4.25rem;
   min-height: 4.15rem;
   overflow: hidden;
   border-top: 1px solid var(--g3-color-border);
@@ -815,7 +827,7 @@ body {
 }
 @container g3-app-shell (width <= 390px) {
   .persistent-player.mini {
-    grid-template-columns: 6.8rem minmax(0, 1fr) 2.5rem;
+    grid-template-columns: 6.8rem minmax(0, 1fr) 4rem;
   }
 }
 @container g3-app-shell (width >= 48rem) {
@@ -1698,7 +1710,7 @@ html[data-android-pip="true"] .persistent-player-stage video, html[data-android-
   }
   .persistent-player.mini {
     bottom: calc( 3.625rem + 1px + max(0.375rem, var(--g3-safe-area-bottom, env(safe-area-inset-bottom))) );
-    grid-template-columns: 6.45rem minmax(0, 1fr) 2.5rem;
+    grid-template-columns: 6.45rem minmax(0, 1fr) 4rem;
     min-height: 3.65rem;
   }
   .persistent-player.mini .persistent-player-stage {

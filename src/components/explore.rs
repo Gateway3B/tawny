@@ -296,7 +296,7 @@ fn DiscoverLists() -> Element {
     let page_count = pages();
 
     rsx! {
-        Shelf { aria_label: "Suggestions", gap: Space::Sm,
+        Shelf { aria_label: "Suggestions", gap: Space::Sm, snap: false,
             for option in DiscoverList::ALL {
                 Chip {
                     key: "{option.label()}",

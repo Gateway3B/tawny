@@ -104,7 +104,7 @@ pub fn QueuePage() -> Element {
                             let total = run.total;
                             let remaining = run.remaining;
                             let order_label = run.view.sort.label(run.view.descending);
-                            let filters = run.view.filter_labels();
+                            let filters = app_state.with_viewer(|viewer| run.view.filter_labels(&viewer.subscription_groups));
                             let filter_text = if filters.is_empty() {
                                 "no filters".to_string()
                             } else {
@@ -790,7 +790,7 @@ pub fn ChannelDetail(id: String) -> Element {
         Content { on_refresh: refresh, refreshing: details.pending(),
             Stack { gap: Space::Lg,
                 ChannelHero { channel }
-                Shelf { aria_label: "Sort by", gap: Space::Sm,
+                Shelf { aria_label: "Sort by", gap: Space::Sm, snap: false,
                     for option in ChannelSort::ALL {
                         Chip {
                             key: "{option.label()}",

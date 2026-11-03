@@ -1328,13 +1328,16 @@ pub fn PersistentPlayer(expanded: ReadSignal<bool>) -> Element {
                     Text { variant: TextVariant::Caption, class: "truncate", "{video.channel_name}" }
                 }
 
+                // Large and off the screen edge: a small X in the corner was
+                // missed for the title beside it, which opens the player.
                 Button {
-                    class: "mini-player-close self-center",
+                    class: "mini-player-close self-center justify-self-start",
                     fill: ButtonFill::Clear,
                     color: Color::Neutral,
+                    size: ButtonSize::Lg,
                     aria_label: "Close player",
                     onclick: move |_| app_state.stop_playback(),
-                    X { size: 20 }
+                    X { size: 26 }
                 }
             }
         }
@@ -1951,7 +1954,7 @@ fn VideoDetailInner(id: String) -> Element {
                 // reach for. One row that scrolls, like the actions below,
                 // rather than wrapping into a second line on a phone.
                 if details.like_count > 0 || details.dislike_count > 0 || !caption_tracks.is_empty() || !chapters.is_empty() || audio_tracks().len() > 1 {
-                    Shelf { aria_label: "Video details", gap: Space::Sm,
+                    Shelf { aria_label: "Video details", gap: Space::Sm, snap: false,
                         if details.like_count > 0 {
                             Chip { start: rsx! { ThumbsUp { size: 15 } },
                                 "{compact_number(details.like_count)}"
@@ -1988,7 +1991,7 @@ fn VideoDetailInner(id: String) -> Element {
                     }
                 }
 
-                Shelf { aria_label: "Video actions", gap: Space::Sm,
+                Shelf { aria_label: "Video actions", gap: Space::Sm, snap: false,
                     Button {
                         fill: ButtonFill::Outline,
                         color: Color::Neutral,

@@ -126,7 +126,9 @@ pub fn Feed() -> Element {
             Stack { gap: Space::Md,
                 // Length and group filters share one strip rather than stacking
                 // two thin bands above the grid.
-                Shelf { aria_label: "Filters", gap: Space::Sm,
+                // It scrolls freely: a snapping strip stopped a fling at the
+                // next chip, so it never kept its momentum.
+                Shelf { aria_label: "Filters", gap: Space::Sm, snap: false,
                     for duration in DurationFilter::ALL {
                         Chip {
                             key: "{duration.label()}",
@@ -239,7 +241,11 @@ pub(super) fn FeedPageView(
                         " no length yet, so a duration filter cannot speak for them. Visible cards are being filled in now."
                     }
                 }
-                if page == 0 || !found.videos.is_empty() {
+                // "Nothing here yet" speaks for the whole feed, so only a first
+                // page with no others under it says it. On a cold start the
+                // first page can show its cached answer from before any follows
+                // while the second has already loaded videos.
+                if !found.videos.is_empty() || (page == 0 && last()) {
                     VideoGrid { videos, empty_message: empty_message.clone() }
                 }
             }

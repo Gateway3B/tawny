@@ -2,6 +2,7 @@ use crate::{
     api::{get_playlist, get_playlist_previews},
     app::Route,
     data_change::{DataChange, invalidate},
+    downloads::{DownloadState, size_label},
     models::{DurationFilter, PlaylistKind, PlaylistSort},
     state::AppState,
 };
@@ -16,8 +17,8 @@ use g3_ui::{
     BottomSheet, Button, ButtonFill, ButtonSize, Card, Chip, Color, ConfirmModal, Content, Divider,
     DividerOrientation, EmptyState, Grid, GridColumns, Img, InfiniteScroll, Input, Item, List,
     ListLines, ListVariant, Modal, ReorderEvent, ReorderHandle, ReorderItem, ReorderLayout,
-    ReorderList, SegmentButton, SegmentGroup, Shelf, Space, Spinner, Stack, StackAlign, Text,
-    TextTone,
+    ReorderList, SegmentButton, SegmentGroup, Shelf, Space, Spinner, Stack, StackAlign, SwipeItem,
+    Text, TextTone,
 };
 
 use super::{
@@ -145,13 +146,21 @@ fn video_count(count: usize) -> String {
 /// Up to three thumbnails from a playlist: the first large, the next two
 /// stacked beside it.
 #[component]
-fn PlaylistCollage(thumbnails: Vec<String>) -> Element {
+fn PlaylistCollage(
+    thumbnails: Vec<String>,
+    /// Drawn when there are no thumbnails. A playlist's add icon by default.
+    empty_icon: Option<Element>,
+) -> Element {
     rsx! {
         if thumbnails.is_empty() {
             div {
                 class: "grid aspect-video place-items-center",
                 style: "background: var(--g3-color-control); color: var(--g3-color-text-tertiary);",
-                ListPlus { size: 30 }
+                if let Some(icon) = empty_icon {
+                    {icon}
+                } else {
+                    ListPlus { size: 30 }
+                }
             }
         } else {
             div { class: "grid aspect-video grid-cols-3 grid-rows-2 gap-0.5",
@@ -164,6 +173,55 @@ fn PlaylistCollage(thumbnails: Vec<String>) -> Element {
                     }
                 }
             }
+        }
+    }
+}
+
+/// What this device keeps, as a card among the playlists. The Downloads page
+/// used to be a header button, and the bar had no room left for Settings.
+#[component]
+fn DownloadsCard() -> Element {
+    let app_state = use_context::<AppState>();
+    let (subtitle, thumbnails) = {
+        let downloads = app_state.downloads.read();
+        let kept = downloads
+            .iter()
+            .filter(|entry| entry.state == DownloadState::Done);
+        let kept_count = kept.clone().count();
+        let kept_bytes = kept.map(|entry| entry.bytes).sum::<u64>();
+        let under_way = downloads
+            .iter()
+            .filter(|entry| entry.state == DownloadState::Downloading)
+            .count();
+        let subtitle = match (kept_count, under_way) {
+            (0, 0) => "Videos kept on this device".to_string(),
+            (count, 0) => format!("{} · {}", video_count(count), size_label(kept_bytes)),
+            (0, downloading) => format!("{downloading} downloading"),
+            (count, downloading) => format!("{} · {downloading} downloading", video_count(count)),
+        };
+        let thumbnails = downloads
+            .iter()
+            .filter_map(|entry| {
+                entry.thumbnail.clone().or_else(|| {
+                    entry
+                        .video
+                        .as_ref()
+                        .map(|video| video.thumbnail_url.clone())
+                })
+            })
+            .take(3)
+            .collect::<Vec<_>>();
+        (subtitle, thumbnails)
+    };
+
+    rsx! {
+        Card {
+            title: "Downloads",
+            subtitle,
+            media: rsx! {
+                PlaylistCollage { thumbnails, empty_icon: rsx! { Download { size: 30 } } }
+            },
+            onclick: move |_| { spawn(animated_navigate(Route::Downloads {})); },
         }
     }
 }
@@ -263,13 +321,6 @@ pub fn Playlists() -> Element {
 
                 Button {
                     fill: ButtonFill::Clear,
-                    aria_label: "Downloads",
-                    onclick: move |_| { spawn(animated_navigate(Route::Downloads {})); },
-                    Download { size: 22 }
-                }
-
-                Button {
-                    fill: ButtonFill::Clear,
                     aria_label: "New playlist",
                     onclick: move |_| create_open.set(true),
                     Plus { size: 22 }
@@ -293,13 +344,18 @@ pub fn Playlists() -> Element {
                 disabled: !arranging,
                 on_reorder: reorder,
                 Grid { columns: GridColumns::Fit(16.0),
+                    // First and fixed: not a playlist, so it is not arranged
+                    // with them. It took a header button the bar had no room for.
+                    DownloadsCard {}
                     for (index, row) in rows.into_iter().enumerate() {
                         {
                             let playlist_id = row.id.clone();
-                            let remove_id = row.id.clone();
-                            let remove_name = row.name.clone();
                             let menu_id = row.id.clone();
                             let menu_label = row.name.clone();
+                            let hold_id = row.id.clone();
+                            let hold_label = row.name.clone();
+                            let remove_id = row.id.clone();
+                            let remove_name = row.name.clone();
                             // The count that answers "is there anything left in
                             // here", which is the reason to open one.
                             let subtitle = if row.unwatched > 0 && row.unwatched < row.count {
@@ -309,48 +365,57 @@ pub fn Playlists() -> Element {
                             };
                             rsx! {
                                 ReorderItem { key: "{row.id}", index,
-                                    Card {
-                                        title: row.name.clone(),
-                                        subtitle,
-                                        media: rsx! {
-                                            // Delete sits where a video card's remove
-                                            // does, so the two read as the same control.
-                                            div { class: "relative",
-                                                PlaylistCollage { thumbnails: row.thumbnails }
-                                                if arranging {
-                                                    div { class: "absolute top-2 left-2",
-                                                        ReorderHandle { label: "Move {row.name}", class: "playlist-grip" }
+                                    // Holding a cover opens its menu, as the ⋮ does.
+                                    SwipeItem {
+                                        class: "h-full rounded-[inherit]",
+                                        disabled: arranging,
+                                        on_long_press: move |_| {
+                                            menu_target.set(Some((hold_id.clone(), hold_label.clone())));
+                                            menu_open.set(true);
+                                        },
+                                        Card {
+                                            title: row.name.clone(),
+                                            subtitle,
+                                            media: rsx! {
+                                                // Delete sits where a video card's remove
+                                                // does, so the two read as the same control.
+                                                div { class: "relative",
+                                                    PlaylistCollage { thumbnails: row.thumbnails }
+                                                    if arranging {
+                                                        div { class: "absolute top-2 left-2",
+                                                            ReorderHandle { label: "Move {row.name}", class: "playlist-grip" }
+                                                        }
                                                     }
-                                                }
-                                                div { class: "absolute top-2 right-2",
-                                                    Button {
-                                                        size: ButtonSize::Sm,
-                                                        color: Color::Neutral,
-                                                        aria_label: "Delete {row.name}",
+                                                    // The padding around the button deletes too, so
+                                                    // a near miss does not open the playlist.
+                                                    div {
+                                                        class: "absolute top-0 right-0 p-2",
                                                         onclick: move |event: MouseEvent| {
                                                             event.stop_propagation();
                                                             delete_target.set(Some((remove_id.clone(), remove_name.clone())));
                                                             delete_open.set(true);
                                                         },
-                                                        Trash2 { size: 15 }
+                                                        Button { color: Color::Neutral, aria_label: "Delete {row.name}",
+                                                            Trash2 { size: 20 }
+                                                        }
                                                     }
                                                 }
-                                            }
-                                        },
-                                        onclick: move |_| { spawn(animated_navigate(Route::PlaylistDetail { id: playlist_id.clone() })); },
-                                        end: rsx! {
-                                            Button {
-                                                fill: ButtonFill::Clear,
-                                                size: ButtonSize::Sm,
-                                                aria_label: "Actions for {row.name}",
-                                                onclick: move |event: MouseEvent| {
-                                                    event.stop_propagation();
-                                                    menu_target.set(Some((menu_id.clone(), menu_label.clone())));
-                                                    menu_open.set(true);
-                                                },
-                                                EllipsisVertical { size: 20 }
-                                            }
-                                        },
+                                            },
+                                            onclick: move |_| { spawn(animated_navigate(Route::PlaylistDetail { id: playlist_id.clone() })); },
+                                            end: rsx! {
+                                                Button {
+                                                    fill: ButtonFill::Clear,
+                                                    size: ButtonSize::Sm,
+                                                    aria_label: "Actions for {row.name}",
+                                                    onclick: move |event: MouseEvent| {
+                                                        event.stop_propagation();
+                                                        menu_target.set(Some((menu_id.clone(), menu_label.clone())));
+                                                        menu_open.set(true);
+                                                    },
+                                                    EllipsisVertical { size: 20 }
+                                                }
+                                            },
+                                        }
                                     }
                                 }
                             }
@@ -528,7 +593,13 @@ pub fn PlaylistDetail(id: String) -> Element {
         };
         let view = app_state.playlist_view(&shown_id);
         let mut videos = found.videos.clone();
-        view.arrange(&mut videos, &app_state.settings.read());
+        app_state.with_viewer(|viewer| {
+            view.arrange(
+                &mut videos,
+                &app_state.settings.read(),
+                &viewer.subscription_groups,
+            )
+        });
         videos.retain(|video| view.shows(video));
         let limit = if settled() {
             visible_count()
@@ -581,7 +652,8 @@ pub fn PlaylistDetail(id: String) -> Element {
     };
     // Exactly what a run walks, arranged the same way, so what is on screen and
     // what plays next cannot disagree.
-    view.arrange(&mut videos, &app_state.settings.read());
+    let groups = app_state.with_viewer(|viewer| viewer.subscription_groups.clone());
+    view.arrange(&mut videos, &app_state.settings.read(), &groups);
     videos.retain(|video| view.shows(video));
 
     let run: Vec<String> = videos.iter().map(|video| video.id.clone()).collect();
@@ -601,6 +673,8 @@ pub fn PlaylistDetail(id: String) -> Element {
     let kind_id = playlist.id.clone();
     let unwatched_id = playlist.id.clone();
     let chip_id = playlist.id.clone();
+    let group_view = view.clone();
+    let group_id = playlist.id.clone();
     let sort_id = playlist.id.clone();
 
     rsx! {
@@ -628,7 +702,7 @@ pub fn PlaylistDetail(id: String) -> Element {
         Content { on_refresh: refresh, refreshing,
             Stack { gap: Space::Md,
                 if saved_count > 1 {
-                    Shelf { aria_label: "Playlist filters and order", gap: Space::Sm,
+                    Shelf { aria_label: "Playlist filters and order", gap: Space::Sm, snap: false,
                         Chip {
                             selected: unwatched_view.only_unwatched,
                             onclick: move |_| {
@@ -653,6 +727,31 @@ pub fn PlaylistDetail(id: String) -> Element {
                                             app_state.set_playlist_view(&chip_id, updated);
                                         },
                                         "{duration.label()}"
+                                    }
+                                }
+                            }
+                        }
+                        // The feed's channel groups, to narrow a long playlist
+                        // the same way. Tapping the chosen one again clears it.
+                        if !groups.is_empty() {
+                            Divider { orientation: DividerOrientation::Vertical }
+                            for group in groups.iter() {
+                                {
+                                    let active = group_view.group.as_ref() == Some(&group.id);
+                                    let picked = group.id.clone();
+                                    let group_view = group_view.clone();
+                                    let group_id = group_id.clone();
+                                    rsx! {
+                                        Chip {
+                                            key: "{group.id}",
+                                            selected: active,
+                                            onclick: move |_| {
+                                                let mut updated = group_view.clone();
+                                                updated.group = if active { None } else { Some(picked.clone()) };
+                                                app_state.set_playlist_view(&group_id, updated);
+                                            },
+                                            "{group.name}"
+                                        }
                                     }
                                 }
                             }

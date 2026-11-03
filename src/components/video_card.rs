@@ -5,7 +5,8 @@ use crate::{
 };
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{
-    Check, EllipsisVertical, ListPlus, Play, Rows3, Share2, Trash2, Video as VideoIcon,
+    Check, Download, EllipsisVertical, ListPlus, Play, Rows3, Share2, Tags, Trash2,
+    Video as VideoIcon,
 };
 use g3_route_transitions::animated_navigate;
 use g3_ui::{
@@ -14,9 +15,9 @@ use g3_ui::{
     SwipeBehavior, SwipeItem, SwipeSide, SwipeState,
 };
 
-/// The icon for a swipe action. A swipe can be set to any of five things, so
+/// The icon for a swipe action. A swipe can be set to any of seven things, so
 /// drawing the playlist icon for all of them told the reader the wrong one
-/// four times out of five. These are the same icons the video actions sheet
+/// most of the time. These are the same icons the video actions sheet
 /// uses for the same actions.
 fn swipe_icon(kind: SwipeActionKind, size: u32) -> Element {
     match kind {
@@ -25,6 +26,8 @@ fn swipe_icon(kind: SwipeActionKind, size: u32) -> Element {
         SwipeActionKind::PlayNext => rsx! { Play { size } },
         SwipeActionKind::Share => rsx! { Share2 { size } },
         SwipeActionKind::MarkWatched => rsx! { Check { size } },
+        SwipeActionKind::Download => rsx! { Download { size } },
+        SwipeActionKind::ChannelGroups => rsx! { Tags { size } },
     }
 }
 
@@ -156,15 +159,18 @@ pub fn VideoCard(
     let open_menu = {
         let video = video.clone();
         let playlist_id = playlist_id.clone();
-        move |_| {
+        move |_: ()| {
             app_state.video_actions_video.set(Some(video.clone()));
             app_state.video_actions_playlist.set(playlist_id.clone());
             app_state.video_actions_open.set(true);
         }
     };
+    // Holding the card opens the same menu as its ⋮.
+    let mut hold_menu = open_menu.clone();
+    let mut tap_menu = open_menu;
     let remove = playlist_id.clone().map(|playlist_id| {
         let video = video.clone();
-        move |_| {
+        move |_: ()| {
             app_state.remove_from_playlist(&video, &playlist_id);
         }
     });
@@ -214,6 +220,7 @@ pub fn VideoCard(
                 on_activate: move |swipe: SwipeState| {
                     app_state.run_swipe_action(&swipe_video, swipe.side == SwipeSide::Start);
                 },
+                on_long_press: move |_| hold_menu(()),
                 Card {
                     variant: CardVariant::Flat,
                     class: "h-full [&_.g3-card-title]:text-[0.95rem]",
@@ -247,14 +254,17 @@ pub fn VideoCard(
                             }
                         }
                             // Rides along with the card as it is swiped.
+                            // The padding around the button removes too, so a
+                            // near miss does not open the video.
                             if let Some(remove) = remove {
-                                div { class: "video-card-remove video-card-remove-touch absolute top-2 right-2",
-                                    Button {
-                                        size: ButtonSize::Sm,
-                                        color: Color::Neutral,
-                                        aria_label: "Remove from playlist",
-                                        onclick: remove,
-                                        Trash2 { size: 15 }
+                                div {
+                                    class: "video-card-remove video-card-remove-touch absolute top-0 right-0 p-2",
+                                    onclick: move |event: MouseEvent| {
+                                        event.stop_propagation();
+                                        remove(());
+                                    },
+                                    Button { color: Color::Neutral, aria_label: "Remove from playlist",
+                                        Trash2 { size: 20 }
                                     }
                                 }
                             }
@@ -278,7 +288,7 @@ pub fn VideoCard(
                             fill: ButtonFill::Clear,
                             size: ButtonSize::Sm,
                             aria_label: "Video actions",
-                            onclick: open_menu,
+                            onclick: move |_| tap_menu(()),
                             EllipsisVertical { size: 20 }
                         }
                     },
@@ -313,7 +323,7 @@ pub fn VideoCard(
                         size: ButtonSize::Sm,
                         color: Color::Neutral,
                         aria_label: "Remove from playlist",
-                        onclick: remove,
+                        onclick: move |_| remove(()),
                         Trash2 { size: 15 }
                     }
                 }

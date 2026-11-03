@@ -120,6 +120,10 @@ pub struct PlaylistView {
     pub sort: PlaylistSort,
     #[serde(default)]
     pub descending: bool,
+    /// Only videos from the channels in this subscription group. A group that
+    /// has since been deleted filters nothing.
+    #[serde(default)]
+    pub group: Option<String>,
 }
 
 impl PlaylistView {
@@ -131,10 +135,18 @@ impl PlaylistView {
     /// what marks it watched: dropping it here would lose the position and send
     /// the run back to the top of the playlist. Apply [`Self::shows`] on top of
     /// this order instead.
-    pub fn arrange(&self, videos: &mut Vec<Video>, settings: &AppSettings) {
+    pub fn arrange(
+        &self,
+        videos: &mut Vec<Video>,
+        settings: &AppSettings,
+        groups: &[SubscriptionGroup],
+    ) {
         videos.retain(|video| self.kind.matches(video));
         if let Some(duration) = self.duration {
             videos.retain(|video| duration.matches(video, settings));
+        }
+        if let Some(group) = self.group_in(groups) {
+            videos.retain(|video| group.channel_ids.contains(&video.channel_id));
         }
         self.sort.apply(videos, self.descending);
     }
@@ -180,12 +192,21 @@ impl PlaylistView {
     /// Whether anything is being hidden, which is what an empty page has to
     /// explain: "nothing matches" and "nothing saved" are different problems.
     pub fn is_filtered(&self) -> bool {
-        self.only_unwatched || self.duration.is_some() || self.kind != PlaylistKind::All
+        self.only_unwatched
+            || self.duration.is_some()
+            || self.group.is_some()
+            || self.kind != PlaylistKind::All
+    }
+
+    /// The group this view filters to, if it still exists.
+    fn group_in<'a>(&self, groups: &'a [SubscriptionGroup]) -> Option<&'a SubscriptionGroup> {
+        let id = self.group.as_ref()?;
+        groups.iter().find(|group| &group.id == id)
     }
 
     /// The filters in force, in words, for somewhere other than the playlist's
     /// own page to say what a run is walking. Empty when nothing is hidden.
-    pub fn filter_labels(&self) -> Vec<String> {
+    pub fn filter_labels(&self, groups: &[SubscriptionGroup]) -> Vec<String> {
         let mut labels = Vec::new();
         match self.kind {
             PlaylistKind::All => {}
@@ -194,6 +215,9 @@ impl PlaylistView {
         }
         if let Some(duration) = self.duration {
             labels.push(format!("{} length", duration.label()));
+        }
+        if let Some(group) = self.group_in(groups) {
+            labels.push(format!("In {}", group.name));
         }
         if self.only_unwatched {
             labels.push("Unwatched only".to_string());

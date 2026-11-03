@@ -1,6 +1,8 @@
 use crate::state::{AppState, GroupPickerChannel, PlaylistSave};
 use dioxus::prelude::*;
-use dioxus_icons::lucide::{Check, Copy, ListPlus, Play, Plus, Rows3, Share2, Tags, Trash2};
+use dioxus_icons::lucide::{
+    Check, Copy, Download, ListPlus, Play, Plus, Rows3, Share2, Tags, Trash2,
+};
 use g3_ui::{
     BottomSheet, Button, ButtonExpand, ButtonFill, Color, Img, Input, Item, List, ListLines,
     ListVariant, Modal, Space, Stack, StackAlign, Text, TextTone, TextVariant, Toggle,
@@ -66,6 +68,8 @@ pub fn AppOverlays() -> Element {
     let copy_action_url = share_url.clone();
 
     rsx! {
+        super::DownloadSheet {}
+
         // As tall as its rows: the default cap left the last one or two
         // behind a scroll on a phone.
         BottomSheet { open: app_state.video_actions_open, aria_label: "Video actions",
@@ -77,7 +81,14 @@ pub fn AppOverlays() -> Element {
                     let save_video = video.clone();
                     let watched_video = video.clone();
                     let share_video = video.clone();
+                    let download_video = video.clone();
                     let remove_video = video.clone();
+                    // What this device already holds of it, said beside the row.
+                    let download_note = app_state.downloads.read().iter().find(|entry| entry.video_id == video.id).map(|entry| match entry.state {
+                        crate::downloads::DownloadState::Done => format!("Downloaded · {}", entry.summary()),
+                        _ => entry.summary(),
+                    });
+                    let can_download = !video.is_live;
                     let group_channel_id = video.channel_id.clone();
                     let group_channel_name = video.channel_name.clone();
                     // Groups only sort the feed, which only holds followed
@@ -158,6 +169,17 @@ pub fn AppOverlays() -> Element {
                                         app_state.video_actions_open.set(false);
                                         app_state.open_share(share_video.clone());
                                     },
+                                }
+                                if can_download {
+                                    Item {
+                                        start: rsx! { Download { size: 18 } },
+                                        label: "Download",
+                                        description: download_note,
+                                        onclick: move |_| {
+                                            app_state.video_actions_open.set(false);
+                                            app_state.open_download(download_video.clone());
+                                        },
+                                    }
                                 }
                                 if follows_channel {
                                     Item {

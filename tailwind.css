@@ -380,7 +380,7 @@ body {
   bottom: calc(4rem + var(--g3-safe-area-bottom, env(safe-area-inset-bottom)));
   left: 0;
   display: grid;
-  grid-template-columns: 7.4rem minmax(0, 1fr) 2.6rem;
+  grid-template-columns: 7.4rem minmax(0, 1fr) 4.25rem;
   min-height: 4.15rem;
   overflow: hidden;
   border-top: 1px solid var(--g3-color-border);
@@ -412,7 +412,7 @@ body {
 
 @container g3-app-shell (width <= 390px) {
   .persistent-player.mini {
-    grid-template-columns: 6.8rem minmax(0, 1fr) 2.5rem;
+    grid-template-columns: 6.8rem minmax(0, 1fr) 4rem;
   }
 }
 
@@ -1746,7 +1746,7 @@ html[data-android-pip="true"] .persistent-player-stage iframe {
       1px +
       max(0.375rem, var(--g3-safe-area-bottom, env(safe-area-inset-bottom)))
     );
-    grid-template-columns: 6.45rem minmax(0, 1fr) 2.5rem;
+    grid-template-columns: 6.45rem minmax(0, 1fr) 4rem;
     min-height: 3.65rem;
   }
 
