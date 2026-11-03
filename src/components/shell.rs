@@ -321,9 +321,11 @@ fn BrandOwl() -> Element {
                 stroke_width: "64",
                 stroke_linejoin: "round",
             }
-            // Eyes cut out in the badge's own colour.
-            circle { cx: "430", cy: "506", r: "66", fill: "var(--g3-color-accent)" }
-            circle { cx: "558", cy: "506", r: "66", fill: "var(--g3-color-accent)" }
+            // White eyes on the dark theme's dark owl, as on the app icon; the
+            // light theme's white owl gets dark ones, its negative. The badge's
+            // own colour read as yellow eyes.
+            circle { cx: "430", cy: "506", r: "66", fill: "var(--g3-color-text)" }
+            circle { cx: "558", cy: "506", r: "66", fill: "var(--g3-color-text)" }
             circle { cx: "446", cy: "510", r: "34", fill: "currentColor" }
             circle { cx: "574", cy: "510", r: "34", fill: "currentColor" }
         }
