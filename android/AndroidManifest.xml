@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Merged by Gradle into the manifest dx generates (`[android] manifest` in
+Dioxus.toml).
+
+Phones stay in portrait. g3-ui picks its layout by width, so a phone turned
+sideways got the tablet layout with little height left for content. dx's
+MainActivity drops this lock on screens 600dp and wider, as Android 16 does,
+so tablets and unfolded foldables still rotate.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity android:name="dev.dioxus.main.MainActivity" android:screenOrientation="portrait" />
+    </application>
+</manifest>

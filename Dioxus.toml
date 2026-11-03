@@ -43,6 +43,8 @@ deployment_target = "15.0"
 # The media plugin's `.playback` audio session only survives leaving the app
 # when the Info.plist declares background audio.
 background_modes = ["audio"]
+# iPhones keep landscape, unlike the other apps: the player's full screen
+# turns the phone sideways, which a portrait-only Info.plist would refuse.
 
 [android]
 # Android 8.0. Older versions stopped getting WebView updates before
@@ -50,3 +52,5 @@ background_modes = ["audio"]
 min_sdk = 26
 target_sdk = 36
 compile_sdk = 36
+# Phones stay in portrait; tablets rotate. See the file.
+manifest = "android/AndroidManifest.xml"
