@@ -242,6 +242,16 @@ fn offline_playback_session(video_id: &str, offline_uri: String) -> PlaybackSess
     }
 }
 
+/// Whether this browser can keep videos at all, once the player library has
+/// loaded: Shaka's offline storage needs IndexedDB. A browser that never
+/// loads it in time counts as unable.
+const DOWNLOADS_SUPPORTED_JS: &str = r#"
+for (let attempt = 0; attempt < 800 && !(window.TawnyDownloads && window.shaka); attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+}
+dioxus.send(Boolean(window.TawnyDownloads?.supported?.()));
+"#;
+
 /// Reports the page's downloads whenever they change.
 const WATCH_DOWNLOADS_JS: &str = r#"
 for (let attempt = 0; attempt < 400 && !window.TawnyDownloads; attempt++) {
@@ -274,9 +284,20 @@ pub fn DownloadsSync() -> Element {
     // An effect, so only the client runs it, reading no signal, so once.
     use_effect(move || {
         spawn(watch(app_state));
+        spawn(check_support(app_state));
     });
 
     rsx! {}
+}
+
+/// Hides every way to download where it cannot work, rather than letting
+/// each one fail when tapped.
+async fn check_support(mut app_state: AppState) {
+    if let Ok(supported) = document::eval(DOWNLOADS_SUPPORTED_JS).recv::<bool>().await
+        && !supported
+    {
+        app_state.downloads_supported.set(false);
+    }
 }
 
 async fn watch(mut app_state: AppState) {

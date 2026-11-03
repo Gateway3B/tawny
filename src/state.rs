@@ -165,6 +165,9 @@ pub struct AppState {
     /// What this device keeps for offline viewing, as the page last reported
     /// it. Kept up to date by `downloads::DownloadsSync`.
     pub downloads: Signal<Vec<crate::downloads::DownloadEntry>>,
+    /// Whether this device can keep videos. Assumed until the page says
+    /// otherwise, so the controls do not flash in where it can.
+    pub downloads_supported: Signal<bool>,
 }
 
 impl AppState {
@@ -1150,6 +1153,10 @@ impl AppState {
     /// Open the download sheet for `video`: qualities to pick from, or what
     /// is kept and a way to remove it.
     pub fn open_download(mut self, video: Video) {
+        if !*self.downloads_supported.peek() {
+            self.show_toast("This browser cannot keep videos offline", Color::Warning);
+            return;
+        }
         if video.is_live {
             self.show_toast("A live stream cannot be downloaded", Color::Warning);
             return;
@@ -1690,6 +1697,7 @@ pub fn AppStateProvider(children: Element) -> Element {
         feed_duration: Signal::new(None),
         feed_pages: Signal::new(1),
         downloads: Signal::new(Vec::new()),
+        downloads_supported: Signal::new(true),
     });
 
     rsx! {

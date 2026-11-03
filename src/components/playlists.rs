@@ -182,6 +182,9 @@ fn PlaylistCollage(
 #[component]
 fn DownloadsCard() -> Element {
     let app_state = use_context::<AppState>();
+    if !(app_state.downloads_supported)() {
+        return rsx! {};
+    }
     let (subtitle, thumbnails) = {
         let downloads = app_state.downloads.read();
         let kept = downloads

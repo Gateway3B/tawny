@@ -88,7 +88,7 @@ pub fn AppOverlays() -> Element {
                         crate::downloads::DownloadState::Done => format!("Downloaded · {}", entry.summary()),
                         _ => entry.summary(),
                     });
-                    let can_download = !video.is_live;
+                    let can_download = !video.is_live && (app_state.downloads_supported)();
                     let group_channel_id = video.channel_id.clone();
                     let group_channel_name = video.channel_name.clone();
                     // Groups only sort the feed, which only holds followed

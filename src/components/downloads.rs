@@ -36,7 +36,13 @@ pub fn Downloads() -> Element {
     rsx! {
         PageHeader { title: "Downloads", back_to: Route::Playlists {} }
         Content { width: ContentWidth::Readable,
-            if entries.is_empty() {
+            if !(app_state.downloads_supported)() {
+                EmptyState {
+                    title: "Downloads are not available here",
+                    icon: rsx! { Download { size: 40 } },
+                    "This browser cannot keep videos offline. The Tawny app can."
+                }
+            } else if entries.is_empty() {
                 EmptyState {
                     title: "Nothing downloaded",
                     icon: rsx! { Download { size: 40 } },
@@ -149,8 +155,8 @@ pub fn DownloadButton(video: ReadSignal<Video>) -> Element {
     let app_state = use_context::<AppState>();
     let entry = use_download_entry(use_memo(move || Some(video.read().id.clone())));
 
-    // A live stream has no end to keep.
-    if video.read().is_live {
+    // A live stream has no end to keep, and some browsers cannot keep anything.
+    if video.read().is_live || !(app_state.downloads_supported)() {
         return rsx! {};
     }
     let current = entry();
