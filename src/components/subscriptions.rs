@@ -320,16 +320,11 @@ pub fn Subscriptions() -> Element {
                                     let rename_id = group.id.clone();
                                     let rename_name = group.name.clone();
                                     let delete_id = group.id.clone();
-                                    let members = group
-                                        .channel_ids
-                                        .iter()
-                                        .filter_map(|id| subscribed.iter().find(|channel| &channel.id == id))
-                                        .take(5)
-                                        .cloned()
-                                        .collect::<Vec<_>>();
                                     rsx! {
                                         Item {
                                             key: "{group.id}",
+                                            // A long name wraps rather than ending in "…".
+                                            wrap: true,
                                             label: group.name.clone(),
                                             description: channel_count(group.channel_ids.len()),
                                             onclick: move |_| {
@@ -337,18 +332,9 @@ pub fn Subscriptions() -> Element {
                                                 group_search.set(String::new());
                                                 editor_open.set(true);
                                             },
+                                            // No channel faces here: on a phone they
+                                            // covered the group's name.
                                             end: rsx! {
-                                                // Faces make a group's contents readable at a glance.
-                                                div { class: "flex -space-x-2", aria_hidden: "true",
-                                                    for member in members.iter().take(5) {
-                                                        Avatar {
-                                                            key: "{member.id}",
-                                                            name: member.name.clone(),
-                                                            src: member.avatar_url.clone(),
-                                                            size: AvatarSize::Sm,
-                                                        }
-                                                    }
-                                                }
                                                 Button {
                                                     fill: ButtonFill::Clear,
                                                     color: Color::Neutral,
