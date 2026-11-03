@@ -7,9 +7,10 @@ use dioxus::prelude::*;
 use dioxus_icons::lucide::{Check, Pencil, Plus, Sparkles, Tags, Trash2, Users};
 use g3_route_transitions::animated_navigate;
 use g3_ui::{
-    Avatar, AvatarSize, Button, ButtonFill, ButtonSize, Card, Checkbox, Color, Content, EmptyState,
-    Grid, GridColumns, InfiniteScroll, Input, Item, ItemDetail, List, ListLines, ListVariant,
-    Modal, ModalSize, Searchbar, Skeleton, SkeletonShape, Space, Stack, Text, TextTone,
+    Avatar, AvatarSize, BottomSheet, Button, ButtonExpand, ButtonFill, ButtonSize, Card, Checkbox,
+    Color, Content, EmptyState, Grid, GridColumns, InfiniteScroll, Input, Item, ItemDetail, List,
+    ListLines, ListVariant, Modal, Searchbar, Skeleton, SkeletonShape, Space, Stack, StackAlign,
+    Text, TextTone, TextVariant,
 };
 use std::collections::HashSet;
 
@@ -19,6 +20,9 @@ use super::{PageHeader, use_after_first_paint};
 /// Each is a card with an avatar image, and a long subscription list built
 /// them all in one render.
 const CHANNEL_PAGE_SIZE: usize = 48;
+
+/// How many non-member channels the group editor lays out at a time.
+const EDITOR_PAGE_SIZE: usize = 40;
 
 /// One channel tile, used by both the subscribed grid and the suggestions.
 #[component]
@@ -82,8 +86,7 @@ pub fn ChannelCard(channel: Channel) -> Element {
 }
 
 /// One channel in a group's membership editor: a checkbox for this group,
-/// and the channel's other groups a tap away, so a channel noticed while
-/// filling one group can be sent to another without leaving the list.
+/// with the channel's other groups named under it.
 #[component]
 fn GroupMemberRow(
     channel: Channel,
@@ -105,7 +108,6 @@ fn GroupMemberRow(
     let toggle_group = group_id.clone();
     let toggle_channel = channel.id.clone();
     let check_channel = channel.id.clone();
-    let picker_channel = channel.clone();
 
     rsx! {
         Item {
@@ -117,15 +119,9 @@ fn GroupMemberRow(
             onclick: move |_| app_state.set_channel_in_group(&toggle_group, &toggle_channel, !member()),
             // The row toggles membership; a chevron would promise a page.
             detail: ItemDetail::Hide,
+            // One control per row. A second button for the channel's other
+            // groups sat beside the checkbox and read as a second checkbox.
             end: rsx! {
-                Button {
-                    size: ButtonSize::Sm,
-                    fill: ButtonFill::Clear,
-                    color: Color::Neutral,
-                    aria_label: "Groups for {channel.name}",
-                    onclick: move |_| app_state.open_group_picker(&picker_channel.id, &picker_channel.name),
-                    Tags { size: 16 }
-                }
                 Checkbox {
                     checked,
                     aria_label: "{channel.name} in {group_name}",
@@ -199,6 +195,11 @@ pub fn Subscriptions() -> Element {
     let mut editing_group = use_signal(|| None::<String>);
     let mut editor_open = use_signal(|| false);
     let mut group_search = use_signal(String::new);
+    // The members when the editor opened. They lead the list and keep their
+    // place while boxes are ticked, so a row does not jump from under a finger.
+    let mut opened_members = use_signal(HashSet::<String>::new);
+    // How many of the other subscriptions are laid out: there can be hundreds.
+    let mut others_shown = use_signal(|| EDITOR_PAGE_SIZE);
     // Suggested channels for the group being edited; `None` while they load.
     let mut suggest_open = use_signal(|| false);
     let mut suggestions = use_signal(|| None::<Result<Vec<GroupSuggestion>, String>>);
@@ -206,6 +207,15 @@ pub fn Subscriptions() -> Element {
     // Which request the sheet is waiting for, so a slow answer for a group
     // the viewer has since left is dropped.
     let mut suggest_request = use_signal(|| 0_u64);
+    // The editor steps aside for a dialog opened from it, which a sheet would
+    // cover, and comes back once that dialog closes however it was closed.
+    let mut return_to_editor = use_signal(|| false);
+    use_effect(move || {
+        if !name_dialog_open() && !suggest_open() && *return_to_editor.peek() {
+            return_to_editor.set(false);
+            editor_open.set(true);
+        }
+    });
 
     let mut visible_count = use_signal(|| CHANNEL_PAGE_SIZE);
     // Sorting out the channel catalogue is the slow part of this page, so the
@@ -232,9 +242,11 @@ pub fn Subscriptions() -> Element {
         .map(|group| group.channel_ids.clone())
         .unwrap_or_default();
     let group_query = group_search().trim().to_lowercase();
-    // Only while the editor is up: it lists every subscription at once.
-    let subscribed_for_editor = if editor_open() {
-        subscribed
+    // Only while the editor is up. Members first, then the rest a page at
+    // a time.
+    let (editor_members, editor_others, more_others) = if editor_open() {
+        let opened = opened_members.read();
+        let (members, others): (Vec<_>, Vec<_>) = subscribed
             .iter()
             .filter(|channel| {
                 group_query.is_empty()
@@ -242,10 +254,14 @@ pub fn Subscriptions() -> Element {
                     || channel.handle.to_lowercase().contains(&group_query)
             })
             .cloned()
-            .collect::<Vec<_>>()
+            .partition(|channel| opened.contains(&channel.id));
+        let more = others.len().saturating_sub(others_shown());
+        let others = others.into_iter().take(others_shown()).collect::<Vec<_>>();
+        (members, others, more)
     } else {
-        Vec::new()
+        (Vec::new(), Vec::new(), 0)
     };
+    let member_count = editing_members.len();
     // Every other group each channel is in, named on its editor row.
     let other_groups_of = |channel_id: &str| {
         groups
@@ -317,6 +333,7 @@ pub fn Subscriptions() -> Element {
                             for group in groups.clone() {
                                 {
                                     let group_id = group.id.clone();
+                                    let members_at_open = group.channel_ids.iter().cloned().collect::<HashSet<_>>();
                                     let rename_id = group.id.clone();
                                     let rename_name = group.name.clone();
                                     let delete_id = group.id.clone();
@@ -329,6 +346,8 @@ pub fn Subscriptions() -> Element {
                                             description: channel_count(group.channel_ids.len()),
                                             onclick: move |_| {
                                                 editing_group.set(Some(group_id.clone()));
+                                                opened_members.set(members_at_open.clone());
+                                                others_shown.set(EDITOR_PAGE_SIZE);
                                                 group_search.set(String::new());
                                                 editor_open.set(true);
                                             },
@@ -408,31 +427,15 @@ pub fn Subscriptions() -> Element {
 
             // Membership editing lives in one place, so adding a channel to a
             // specific group does not mean hunting for that channel's tile. A
-            // modal rather than a sheet: this is a focused editing task with a
-            // search field and a long list, and it is wide on a wide screen so
-            // channel names are not cut short.
-            Modal {
+            // tall sheet: it clears the status bar and the tab bar, keeps its
+            // buttons at the top of a long list, and swipes away like the
+            // app's other pickers. A modal grew past the screen on a phone.
+            BottomSheet {
                 open: editor_open,
                 title: editing_group_name.clone(),
-                size: ModalSize::Wide,
-                actions: rsx! {
-                    Button {
-                        fill: ButtonFill::Clear,
-                        color: Color::Neutral,
-                        start: rsx! { Pencil { size: 16 } },
-                        onclick: move |_| {
-                            renaming.set(editing_group.peek().clone());
-                            group_name.set(rename_current.clone());
-                            name_dialog_open.set(true);
-                        },
-                        "Rename"
-                    }
-
-                    Button { onclick: move |_| editor_open.set(false), "Done" }
-                },
+                max_height: "calc(100dvh - 7rem)",
                 Stack {
-                    Text { tone: TextTone::Secondary, "Choose which channels belong to this group." }
-                    div {
+                    Stack { horizontal: true, gap: Space::Sm, align: StackAlign::Center,
                         Button {
                             size: ButtonSize::Sm,
                             fill: ButtonFill::Outline,
@@ -444,6 +447,8 @@ pub fn Subscriptions() -> Element {
                                 suggest_request.set(request);
                                 suggestions.set(None);
                                 picked.set(HashSet::new());
+                                return_to_editor.set(true);
+                                editor_open.set(false);
                                 suggest_open.set(true);
                                 spawn(async move {
                                     let result = crate::api::suggest_group_channels(group_id)
@@ -463,69 +468,119 @@ pub fn Subscriptions() -> Element {
                                     suggestions.set(Some(result));
                                 });
                             },
-                            "Suggest channels"
+                            "Suggest"
                         }
+                        div { class: "flex-1" }
+                        Button {
+                            size: ButtonSize::Sm,
+                            fill: ButtonFill::Clear,
+                            color: Color::Neutral,
+                            // An icon: with words, three buttons did not fit a
+                            // 360px phone and every label broke mid-word.
+                            aria_label: "Rename {editing_group_name}",
+                            onclick: move |_| {
+                                renaming.set(editing_group.peek().clone());
+                                group_name.set(rename_current.clone());
+                                return_to_editor.set(true);
+                                editor_open.set(false);
+                                name_dialog_open.set(true);
+                            },
+                            Pencil { size: 18 }
+                        }
+                        Button { size: ButtonSize::Sm, onclick: move |_| editor_open.set(false), "Done" }
                     }
                     Searchbar { value: group_search, placeholder: "Search subscribed channels", debounce_ms: 0 }
                     if subscribed.is_empty() {
                         Text { tone: TextTone::Secondary, "Subscribe to a channel first." }
-                    } else if subscribed_for_editor.is_empty() {
+                    } else if editor_members.is_empty() && editor_others.is_empty() {
                         Text { tone: TextTone::Secondary, "No subscribed channels match your search." }
                     } else {
-                        List { lines: ListLines::Inset,
-                            for channel in subscribed_for_editor {
-                                GroupMemberRow {
-                                    key: "{channel.id}",
-                                    member: editing_members.contains(&channel.id),
-                                    other_groups: other_groups_of(&channel.id),
-                                    group_id: editing.clone().unwrap_or_default(),
-                                    group_name: editing_group_name.clone(),
-                                    channel,
+                        if !editor_members.is_empty() {
+                            Text { variant: TextVariant::Overline, "In this group · {member_count}" }
+                            List { lines: ListLines::Inset,
+                                for channel in editor_members {
+                                    GroupMemberRow {
+                                        key: "{channel.id}",
+                                        member: editing_members.contains(&channel.id),
+                                        other_groups: other_groups_of(&channel.id),
+                                        group_id: editing.clone().unwrap_or_default(),
+                                        group_name: editing_group_name.clone(),
+                                        channel,
+                                    }
                                 }
+                            }
+                        }
+                        if !editor_others.is_empty() {
+                            Text { variant: TextVariant::Overline, "Add from your subscriptions" }
+                            List { lines: ListLines::Inset,
+                                for channel in editor_others {
+                                    GroupMemberRow {
+                                        key: "{channel.id}",
+                                        member: editing_members.contains(&channel.id),
+                                        other_groups: other_groups_of(&channel.id),
+                                        group_id: editing.clone().unwrap_or_default(),
+                                        group_name: editing_group_name.clone(),
+                                        channel,
+                                    }
+                                }
+                            }
+                        }
+                        if more_others > 0 {
+                            Button {
+                                fill: ButtonFill::Clear,
+                                expand: ButtonExpand::Block,
+                                onclick: move |_| others_shown += EDITOR_PAGE_SIZE,
+                                "Show more ({more_others})"
                             }
                         }
                     }
                 }
             }
 
-            // Over the editor, so ticked suggestions show up checked in it
-            // once added. Clear matches start ticked; the rest are offered.
-            Modal {
+            // In place of the editor, which steps aside for it and returns
+            // after. Clear matches start ticked; the rest are offered.
+            BottomSheet {
                 open: suggest_open,
                 title: format!("Suggestions for {editing_group_name}"),
-                size: ModalSize::Wide,
-                actions: rsx! {
-                    Button {
-                        fill: ButtonFill::Clear,
-                        onclick: move |_| {
-                            suggest_request += 1;
-                            suggest_open.set(false);
-                        },
-                        "Cancel"
-                    }
-
-                    Button {
-                        disabled: picked_count == 0,
-                        onclick: move |_| {
-                            let Some(group_id) = editing_group.peek().clone() else { return };
-                            let chosen = picked.peek().clone();
-                            let channel_ids = add_order
-                                .iter()
-                                .filter(|id| chosen.contains(*id))
-                                .cloned()
-                                .collect::<Vec<_>>();
-                            let count = channel_ids.len();
-                            app_state.add_channels_to_group(&group_id, channel_ids);
-                            app_state.show_toast(
-                                format!("Added {} to {add_group_name}", channel_count(count)),
-                                Color::Success,
-                            );
-                            suggest_open.set(false);
-                        },
-                        if picked_count == 0 { "Add" } else { "Add {picked_count}" }
-                    }
-                },
+                max_height: "calc(100dvh - 7rem)",
+                on_dismiss: move |_| suggest_request += 1,
                 Stack {
+                    Stack { horizontal: true, gap: Space::Sm, align: StackAlign::Center,
+                        Button {
+                            size: ButtonSize::Sm,
+                            fill: ButtonFill::Clear,
+                            color: Color::Neutral,
+                            onclick: move |_| {
+                                suggest_request += 1;
+                                suggest_open.set(false);
+                            },
+                            "Cancel"
+                        }
+                        div { class: "flex-1" }
+                        Button {
+                            size: ButtonSize::Sm,
+                            disabled: picked_count == 0,
+                            onclick: move |_| {
+                                let Some(group_id) = editing_group.peek().clone() else { return };
+                                let chosen = picked.peek().clone();
+                                let channel_ids = add_order
+                                    .iter()
+                                    .filter(|id| chosen.contains(*id))
+                                    .cloned()
+                                    .collect::<Vec<_>>();
+                                let count = channel_ids.len();
+                                // The added channels join the members at the top.
+                                opened_members.write().extend(channel_ids.iter().cloned());
+                                app_state.add_channels_to_group(&group_id, channel_ids);
+                                app_state.show_toast(
+                                    format!("Added {} to {add_group_name}", channel_count(count)),
+                                    Color::Success,
+                                );
+                                suggest_open.set(false);
+                            },
+                            if picked_count == 0 { "Add" } else { "Add {picked_count}" }
+                        }
+                    }
                     if suggestions_loading {
                         Text { tone: TextTone::Secondary,
                             "Reading your channels. The first time on a server this takes a minute or so."
