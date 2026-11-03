@@ -785,21 +785,6 @@ pub fn PersistentPlayer(expanded: ReadSignal<bool>) -> Element {
     });
 
     let active_video = app_state.active_video();
-    let video_id = active_video
-        .as_ref()
-        .map(|video| video.id.clone())
-        .unwrap_or_default();
-    use_effect(move || {
-        if observed_video_id() != video_id {
-            observed_video_id.set(video_id.clone());
-            playback_attempt.set(0);
-            stale_session_for.set(None);
-            auto_retries.set(0);
-            use_embed.set(false);
-            playback_failed.set(false);
-            failure_detail.set(String::new());
-        }
-    });
     // Persist where playback has reached. Polled rather than driven by
     // `timeupdate`, which fires several times a second and would drag a
     // re-render along with it.
@@ -820,6 +805,22 @@ pub fn PersistentPlayer(expanded: ReadSignal<bool>) -> Element {
             .read()
             .as_ref()
             .map(|video| video.id.clone())
+    });
+    // A new video starts clean: a fresh resolve, and the app's own player even
+    // if the last one fell back to the embed. Keyed on the id memo; reading an
+    // id copied out at render, the effect only ever saw the first video's, so
+    // the embed stuck to every video after it until the app was reloaded.
+    use_effect(move || {
+        let video_id = playing_id().unwrap_or_default();
+        if *observed_video_id.peek() != video_id {
+            observed_video_id.set(video_id);
+            playback_attempt.set(0);
+            stale_session_for.set(None);
+            auto_retries.set(0);
+            use_embed.set(false);
+            playback_failed.set(false);
+            failure_detail.set(String::new());
+        }
     });
     // A failure that is likely to pass - a busy extractor, a rate limit, a
     // stream cut off after the app sat idle - is asked again by the player
