@@ -1,8 +1,6 @@
 use crate::{app::Route, state::AppState};
 use dioxus::prelude::*;
-use dioxus_icons::lucide::{
-    History, House, List as ListIcon, ListVideo, Play, Search, Settings, Users,
-};
+use dioxus_icons::lucide::{History, House, List as ListIcon, ListVideo, Search, Settings, Users};
 
 #[cfg(target_os = "android")]
 use g3_native_plugins::NativePlugins;
@@ -304,6 +302,34 @@ const restore = !path.startsWith('/watch/') && (returning || roots.includes(path
 window[key].arrive(path, restore);
 "#;
 
+/// The app icon's owl, drawn small for the header: its head is the play
+/// triangle. The ear tufts and eyes are kept and the beak and highlights left
+/// out, which at this size were a pixel each. Coordinates are the icon
+/// master's (`assets/icon/icon.svg`), so the two stay one shape.
+#[component]
+fn BrandOwl() -> Element {
+    rsx! {
+        svg {
+            width: "20",
+            height: "20",
+            view_box: "277 216 528 528",
+            "aria-hidden": "true",
+            path {
+                d: "M366 708 L366 252 L420 330 L470 300 L500 368 L716 512 Z",
+                fill: "currentColor",
+                stroke: "currentColor",
+                stroke_width: "64",
+                stroke_linejoin: "round",
+            }
+            // Eyes cut out in the badge's own colour.
+            circle { cx: "430", cy: "506", r: "66", fill: "var(--g3-color-accent)" }
+            circle { cx: "558", cy: "506", r: "66", fill: "var(--g3-color-accent)" }
+            circle { cx: "446", cy: "510", r: "34", fill: "currentColor" }
+            circle { cx: "574", cy: "510", r: "34", fill: "currentColor" }
+        }
+    }
+}
+
 /// The bar every page renders for itself, so it travels with the page it
 /// describes rather than staying put while the page slides out from under it.
 #[component]
@@ -345,7 +371,7 @@ pub fn PageHeader(
                 span {
                     class: "grid size-7 place-items-center rounded-lg",
                     style: "background: var(--g3-color-accent); color: var(--g3-color-on-accent);",
-                    Play { size: 15, fill: "currentColor" }
+                    BrandOwl {}
                 }
                 // A tab's root page has no title in the bar, so the section
                 // name beside the brand mark is the page's heading.
