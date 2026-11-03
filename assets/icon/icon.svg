@@ -3,15 +3,21 @@
   <!-- App icon master: full bleed, since every platform applies its own
        mask. The mark stays inside the centre 62%, which keeps it within
        Android's adaptive-icon safe zone. Render the PNG files with g3-stack's
-       scripts/app-icon.mjs. -->
-  <defs>
-    <linearGradient id="tawny-mark" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ffc45d"></stop>
-      <stop offset="1" stop-color="#d97816"></stop>
-    </linearGradient>
-  </defs>
+       scripts/app-icon.mjs.
+
+       A tawny owl as a play button: the triangle is its head, with two ear
+       tufts, and its eyes look the way it plays. -->
   <rect width="1024" height="1024" fill="#f0a03a"/>
-  <g transform="translate(534 512) scale(19.2534) translate(-36.105 -30.700)">
-    <path d="M26 20.5a2 2 0 0 1 3.03-1.72l16.2 10.2a2 2 0 0 1 0 3.44l-16.2 10.2A2 2 0 0 1 26 40.9z" fill="#231509"></path>
-  </g>
+  <!-- Head, ear tufts included, rounded by the stroke -->
+  <path fill="#231509" stroke="#231509" stroke-width="64" stroke-linejoin="round"
+        d="M366 708 L366 252 L420 330 L470 300 L500 368 L716 512 Z"/>
+  <!-- Eyes -->
+  <circle cx="430" cy="506" r="62" fill="#fff1d6"/>
+  <circle cx="558" cy="506" r="62" fill="#fff1d6"/>
+  <circle cx="446" cy="510" r="31" fill="#231509"/>
+  <circle cx="574" cy="510" r="31" fill="#231509"/>
+  <circle cx="456" cy="498" r="9" fill="#fff1d6"/>
+  <circle cx="584" cy="498" r="9" fill="#fff1d6"/>
+  <!-- Beak -->
+  <path fill="#f0a03a" stroke="#f0a03a" stroke-width="10" stroke-linejoin="round" d="M480 580 L510 580 L495 614 Z"/>
 </svg>
