@@ -1275,8 +1275,15 @@ pub fn PersistentPlayer(expanded: ReadSignal<bool>) -> Element {
                             if let Some(remedy) = failure.remedy.clone() {
                                 p { class: "player-stage-remedy", "{remedy}" }
                             }
+                            // Folded away: on a phone the stage is about 200px
+                            // tall, and the detail alone could fill it. A plain
+                            // `details`, since g3-ui's accordion is drawn for
+                            // the page's surfaces, not over a black video.
                             if let Some(detail) = failure.detail.clone() {
-                                code { class: "player-stage-detail", "{detail}" }
+                                details { class: "player-stage-details",
+                                    summary { "Details" }
+                                    code { class: "player-stage-detail", "{detail}" }
+                                }
                             }
                         }
                     }
