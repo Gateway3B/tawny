@@ -302,33 +302,14 @@ const restore = !path.startsWith('/watch/') && (returning || roots.includes(path
 window[key].arrive(path, restore);
 "#;
 
-/// The app icon's owl, drawn small for the header: its head is the play
-/// triangle. The ear tufts and eyes are kept and the beak and highlights left
-/// out, which at this size were a pixel each. Coordinates are the icon
-/// master's (`assets/icon/icon.svg`), so the two stay one shape.
+/// The app icon's black owl, white eyes and all, on either theme. Drawn
+/// from a file because its colours are fixed rather than the theme's.
+const BRAND_OWL: Asset = asset!("/assets/brand-owl.svg");
+
 #[component]
 fn BrandOwl() -> Element {
     rsx! {
-        svg {
-            width: "20",
-            height: "20",
-            view_box: "277 216 528 528",
-            "aria-hidden": "true",
-            path {
-                d: "M366 708 L366 252 L420 330 L470 300 L500 368 L716 512 Z",
-                fill: "currentColor",
-                stroke: "currentColor",
-                stroke_width: "64",
-                stroke_linejoin: "round",
-            }
-            // White eyes on the dark theme's dark owl, as on the app icon; the
-            // light theme's white owl gets dark ones, its negative. The badge's
-            // own colour read as yellow eyes.
-            circle { cx: "430", cy: "506", r: "66", fill: "var(--g3-color-text)" }
-            circle { cx: "558", cy: "506", r: "66", fill: "var(--g3-color-text)" }
-            circle { cx: "446", cy: "510", r: "34", fill: "currentColor" }
-            circle { cx: "574", cy: "510", r: "34", fill: "currentColor" }
-        }
+        img { src: BRAND_OWL, width: "20", height: "20", alt: "" }
     }
 }
 

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="277 216 528 528" aria-hidden="true">
+  <!-- The header's brand mark: the app icon's owl (assets/icon/icon.svg), in
+       its coordinates and colours, so it is the same black owl with white eyes
+       on either theme. A file rather than markup because the colours are fixed.
+       The beak and highlights are left out; at header size they were a pixel. -->
+  <path d="M366 708 L366 252 L420 330 L470 300 L500 368 L716 512 Z" fill="#231509" stroke="#231509" stroke-width="64" stroke-linejoin="round"/>
+  <circle cx="430" cy="506" r="66" fill="#fff1d6"/>
+  <circle cx="558" cy="506" r="66" fill="#fff1d6"/>
+  <circle cx="446" cy="510" r="34" fill="#231509"/>
+  <circle cx="574" cy="510" r="34" fill="#231509"/>
+</svg>
