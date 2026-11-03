@@ -1449,17 +1449,26 @@ html[data-route-transition-platform="material"][data-route-transition="present-s
   animation-timing-function: var(--route-transition-material-decelerate) !important;
 }
 
-/* Not the accelerate curve the sheet uses. Accelerate holds near zero for the
-   first third of its time and then rushes, which suits something leaving the
-   screen but not a player that travels most of the screen to the mini bar: it
-   sat full size while the page above it was already fading, then dropped into
-   place in the last frames - measured on Android Chrome, 2026-10-07. A
-   standard ease keeps it moving for as long as the page is. */
+/* Minimizing is one motion: the sheet and the player in it travel down
+   together, so both take one curve. Not the accelerate curve g3-route-
+   transitions gives a dismissed Material sheet: it holds near zero for the
+   first third of its time and then rushes, which suits a sheet leaving on its
+   own but not a player that travels most of the screen to the mini bar - it
+   sat full size, then dropped into place in the last frames (Android Chrome,
+   2026-10-07). With the player on a standard ease and the sheet still on
+   accelerate, the player ran ahead of the sheet instead (2026-11-03). So the
+   watch sheet takes the player's standard ease too. */
 html[data-route-transition-platform="material"][data-route-transition="dismiss-sheet"]::view-transition-group(
   player
 ) {
   animation-duration: var(--route-transition-material-sheet-dismiss-duration) !important;
   animation-timing-function: var(--route-transition-material-spatial-ease) !important;
+}
+
+html[data-route-transition-platform="material"][data-route-transition="dismiss-sheet"][data-route-transition-from^="/watch/"]::view-transition-old(
+  overlay
+) {
+  animation-timing-function: var(--route-transition-material-spatial-ease);
 }
 
 /* The stage's own child carries a 220ms transform transition for the swipe

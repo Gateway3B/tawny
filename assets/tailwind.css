@@ -1539,6 +1539,9 @@ html[data-route-transition-platform="material"][data-route-transition="dismiss-s
   animation-duration: var(--route-transition-material-sheet-dismiss-duration) !important;
   animation-timing-function: var(--route-transition-material-spatial-ease) !important;
 }
+html[data-route-transition-platform="material"][data-route-transition="dismiss-sheet"][data-route-transition-from^="/watch/"]::view-transition-old( overlay ) {
+  animation-timing-function: var(--route-transition-material-spatial-ease);
+}
 html[data-route-transition="present-sheet"] .persistent-player-stage video, html[data-route-transition="dismiss-sheet"] .persistent-player-stage video, html[data-route-transition="present-sheet"] .persistent-player-stage iframe, html[data-route-transition="dismiss-sheet"] .persistent-player-stage iframe {
   transition: none !important;
 }
