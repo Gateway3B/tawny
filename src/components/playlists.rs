@@ -731,31 +731,6 @@ pub fn PlaylistDetail(id: String) -> Element {
                                 }
                             }
                         }
-                        // The feed's channel groups, to narrow a long playlist
-                        // the same way. Tapping the chosen one again clears it.
-                        if !groups.is_empty() {
-                            Divider { orientation: DividerOrientation::Vertical }
-                            for group in groups.iter() {
-                                {
-                                    let active = group_view.group.as_ref() == Some(&group.id);
-                                    let picked = group.id.clone();
-                                    let group_view = group_view.clone();
-                                    let group_id = group_id.clone();
-                                    rsx! {
-                                        Chip {
-                                            key: "{group.id}",
-                                            selected: active,
-                                            onclick: move |_| {
-                                                let mut updated = group_view.clone();
-                                                updated.group = if active { None } else { Some(picked.clone()) };
-                                                app_state.set_playlist_view(&group_id, updated);
-                                            },
-                                            "{group.name}"
-                                        }
-                                    }
-                                }
-                            }
-                        }
                         Divider { orientation: DividerOrientation::Vertical }
                         for option in PlaylistSort::ALL {
                             {
@@ -779,6 +754,31 @@ pub fn PlaylistDetail(id: String) -> Element {
                                             app_state.set_playlist_view(&sort_id, updated);
                                         },
                                         "{option.label(direction)}"
+                                    }
+                                }
+                            }
+                        }
+                        // Last: the feed's channel groups, to narrow a long playlist
+                        // the same way. Tapping the chosen one again clears it.
+                        if !groups.is_empty() {
+                            Divider { orientation: DividerOrientation::Vertical }
+                            for group in groups.iter() {
+                                {
+                                    let active = group_view.group.as_ref() == Some(&group.id);
+                                    let picked = group.id.clone();
+                                    let group_view = group_view.clone();
+                                    let group_id = group_id.clone();
+                                    rsx! {
+                                        Chip {
+                                            key: "{group.id}",
+                                            selected: active,
+                                            onclick: move |_| {
+                                                let mut updated = group_view.clone();
+                                                updated.group = if active { None } else { Some(picked.clone()) };
+                                                app_state.set_playlist_view(&group_id, updated);
+                                            },
+                                            "{group.name}"
+                                        }
                                     }
                                 }
                             }
