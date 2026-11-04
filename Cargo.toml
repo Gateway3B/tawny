@@ -153,10 +153,9 @@ inherits = "dev"
 debug = 0
 strip = "debuginfo"
 
-# dx builds release clients with these names (and the server with
-# `server-release`, left on Cargo's defaults so it keeps unwinding). Without
-# them the wasm gets Cargo's release defaults: measured on media-mancer, these
-# settings cut the brotli download by about a quarter.
+# dx builds release clients with these names. Without them the wasm gets
+# Cargo's release defaults: measured on media-mancer, these settings cut the
+# brotli download by about a quarter.
 [profile.wasm-release]
 inherits = "release"
 opt-level = "z"
@@ -164,6 +163,12 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 debug = false
+
+# The server, on Cargo's release defaults so it keeps unwinding. dx would
+# define it on the fly, but the Dockerfile's `cargo chef cook` runs before dx
+# and needs it declared.
+[profile.server-release]
+inherits = "release"
 
 [profile.android-release]
 inherits = "release"
