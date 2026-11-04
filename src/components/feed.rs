@@ -175,7 +175,7 @@ pub fn Feed() -> Element {
                         page,
                         last: page + 1 == page_count,
                         has_more,
-                        empty_message: "Try another filter, or follow some channels from Explore.".to_string(),
+                        empty_message: "Try another filter, or find channels to follow in Search.".to_string(),
                     }
                 }
 
