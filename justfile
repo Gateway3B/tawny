@@ -79,6 +79,11 @@ lint-strict:
     cargo clippy --all-targets --no-default-features --features desktop --no-deps -- -D warnings
     npm run lint:web
 
+# The iOS target, which no other recipe compiles (macOS with Xcode only;
+# CI runs it on macos-26).
+lint-ios:
+    cargo clippy --target aarch64-apple-ios --no-default-features --features mobile --no-deps -- -D warnings
+
 test-node:
     npm run test:unit
 
