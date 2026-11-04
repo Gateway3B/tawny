@@ -2,7 +2,7 @@ use crate::{app::Route, state::AppState};
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{History, House, List as ListIcon, ListVideo, Search, Settings, Users};
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use g3_native_plugins::NativePlugins;
 use g3_route_transitions::{
     ROUTE_TRANSITION_PERSISTENT_REGION_CLASS, RouteTransitionPageRegion, animated_back_or_navigate,
