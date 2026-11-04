@@ -137,7 +137,7 @@ jobs:
   ios:
     name: iOS IPA
     if: inputs.platform == 'both' || inputs.platform == 'ios'
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 90
 
     steps:
@@ -145,6 +145,22 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # App Store Connect refuses uploads built against an SDK older than
+      # iOS 26, so pick the newest Xcode 26 on the runner rather than trusting
+      # the image default, and fail here instead of at upload.
+      - name: Select Xcode 26
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcode="$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)"
+          sudo xcode-select --switch "$xcode/Contents/Developer"
+          xcodebuild -version
+          sdk="$(xcrun --sdk iphoneos --show-sdk-version)"
+          (( ${sdk%%.*} >= 26 )) || {
+            echo "iOS SDK $sdk is older than the iOS 26 SDK App Store Connect requires" >&2
+            exit 1
+          }
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
