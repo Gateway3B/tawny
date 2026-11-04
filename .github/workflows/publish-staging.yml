@@ -89,6 +89,9 @@ jobs:
           load: true
           tags: tawny-local-candidate:test
           labels: ${{ steps.meta.outputs.labels }}
+          # One layer cache per image, so the two builds do not evict each other.
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
       - name: Publish image
         env:
