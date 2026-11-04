@@ -59,6 +59,14 @@ background_modes = ["audio"]
 # The only encryption is HTTPS to the viewer's own server, which is exempt.
 # Declaring it here skips the export-compliance question on every upload.
 ITSAppUsesNonExemptEncryption = false
+# A home-lab server on plain http:// is the main deployment, and the address
+# validator accepts it, but App Transport Security refuses cleartext by
+# default, so the app could not reach it. Allow cleartext only to local
+# resources (unqualified host names, `.local` names and local addresses); a
+# public server still needs HTTPS. Tawny is sideloaded, never in the App Store,
+# so the review question this raises does not apply. dx writes `[ios.plist]`
+# keys out verbatim, so this becomes an `NSAppTransportSecurity` dict.
+NSAppTransportSecurity = { NSAllowsLocalNetworking = true }
 
 [android]
 # Android 8.0. Older versions stopped getting WebView updates before

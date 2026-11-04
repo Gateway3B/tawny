@@ -50,6 +50,15 @@ traffic. Set `SERVER_URL` and `TAWNY_PUBLIC_URL` explicitly when the client and
 server use a different reachable HTTPS address, such as a physical device
 connecting to a home-lab server.
 
+## iOS and plain http
+
+App Transport Security refuses cleartext HTTP unless the Info.plist allows
+it. `[ios.plist]` in `Dioxus.toml` sets `NSAppTransportSecurity` →
+`NSAllowsLocalNetworking`, so a server on the local network
+(`http://192.168.1.10:8080`, `http://tawny.local:8080`, `http://nas:8080`)
+works. A server reached over the internet must use HTTPS. Tawny is
+sideloaded, so this exception never goes through App Review.
+
 ## Sessions
 
 Native builds initialize the cookie runtime before launch
