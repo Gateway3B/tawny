@@ -582,7 +582,14 @@ impl AppServerState {
                     .filter(|secret| !secret.is_empty())
                     .unwrap_or_else(|| {
                         let secret = hex::encode(rand::random::<[u8; 32]>());
-                        let _ = std::fs::write(&websub_secret_path, &secret);
+                        // Not fatal, but not silent either: an unsaved secret is
+                        // replaced on the next start, and every lease signed
+                        // with this one then fails its check until it renews.
+                        if std::fs::write(&websub_secret_path, &secret).is_err() {
+                            crate::telemetry::diagnostic(
+                                crate::telemetry::Diagnostic::WebsubSecretUnsaved,
+                            );
+                        }
                         secret
                     })
             });
