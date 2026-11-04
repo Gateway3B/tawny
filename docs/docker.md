@@ -70,6 +70,20 @@ portable lockfile resolves the Dioxus fork and the g3 crates from their public
 Git repositories (`[patch.crates-io]` in `Cargo.toml`). A standalone clone
 needs no organization credentials or private repositories.
 
+The server runs as an unprivileged user, uid and gid `10001`, and writes
+only to `/data` and the system temp directory. A new named volume takes its
+ownership from the image. A volume or bind mount created when the image still
+ran as root is owned by root, and the server then fails to create its data
+directory. Both compose files run a one-shot `tawny-init` container that
+chowns the app volume before Tawny starts. Without compose, do it once by
+hand:
+
+```sh
+docker run --rm -v tawny_tawny-data:/data busybox:1.37 chown -R 10001:10001 /data
+# or, for a bind mount
+sudo chown -R 10001:10001 /srv/tawny/data
+```
+
 Place a TLS reverse proxy in front of port 8080. `TAWNY_PUBLIC_URL` must be the
 public HTTPS origin for proxy URLs and WebSub lease callbacks. If the explicit
 callback variable is omitted, Tawny derives it from a non-loopback public URL.

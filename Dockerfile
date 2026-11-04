@@ -75,9 +75,20 @@ COPY --from=builder /app/target/dx/tawny/release/web/ /app/
 # Bake it in so non-root/read-only startup never tries to create it.
 COPY database/setup.surql /app/database/setup.surql
 
+# Not root: the server writes only under /data (caches, the WebSub secret,
+# the suggestion model) and the system temp directory. A fixed id so a host
+# can chown a bind mount or an existing volume to it; a new named volume
+# copies /data's ownership from the image. See docs/docker.md.
+RUN groupadd --system --gid 10001 tawny \
+    && useradd --system --uid 10001 --gid tawny --home-dir /data --no-create-home \
+        --shell /usr/sbin/nologin tawny \
+    && mkdir -p /data \
+    && chown tawny:tawny /data
+
 ENV IP=0.0.0.0 \
     PORT=8080 \
     TAWNY_DATA_DIR=/data
 
+USER 10001:10001
 EXPOSE 8080
 ENTRYPOINT ["/app/server"]

@@ -110,6 +110,16 @@ services:
     logging: *default-logging
     restart: unless-stopped
 
+  tawny-init:
+    image: busybox:1.37
+    user: "0:0"
+    # Volumes made before the image stopped running as root are owned by root.
+    # The server runs as 10001 now; hand the volume over before it starts.
+    command: ["chown", "-R", "10001:10001", "/data"]
+    volumes:
+      - ${TAWNY_APP_VOLUME:-tawny-data}:/data
+    restart: "no"
+
   tawny:
     image: ghcr.io/gateway3b/tawny:${TAWNY_IMAGE_TAG:-latest}
     container_name: tawny
@@ -143,6 +153,8 @@ services:
       - ${TAWNY_APP_VOLUME:-tawny-data}:/data
     networks: [default, proxy]
     depends_on:
+      tawny-init:
+        condition: service_completed_successfully
       surrealdb:
         condition: service_healthy
       extractor:
