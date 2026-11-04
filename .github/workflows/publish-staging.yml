@@ -80,6 +80,23 @@ jobs:
             type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' }}
             type=sha
 
+      # The server Dockerfile copies `dx` from the CLI image for the fork commit
+      # the lockfile pins, published by the Dioxus fork's "g3 CLI image"
+      # workflow. The extractor ignores it.
+      - name: Resolve the Dioxus CLI image
+        id: dioxus
+        run: |
+          rev=$(grep -m1 -oE 'github\.com/Gateway3B/dioxus\?branch=main#[0-9a-f]{40}' Cargo.lock | cut -d'#' -f2)
+          if [ -z "$rev" ]; then
+            echo "::error::Cargo.lock pins no Gateway3B/dioxus commit."
+            exit 1
+          fi
+          if ! docker manifest inspect "ghcr.io/gateway3b/dioxus-cli:$rev" > /dev/null; then
+            echo "::error::No CLI image for $rev. Run the Dioxus fork's \"g3 CLI image\" workflow with rev=$rev."
+            exit 1
+          fi
+          echo "rev=$rev" >> "$GITHUB_OUTPUT"
+
       - name: Build candidate image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -87,6 +104,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: false
           load: true
+          build-args: DIOXUS_REV=${{ steps.dioxus.outputs.rev }}
           tags: tawny-local-candidate:test
           labels: ${{ steps.meta.outputs.labels }}
           # One layer cache per image, so the two builds do not evict each other.

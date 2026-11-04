@@ -1,4 +1,10 @@
 # syntax=docker/dockerfile:1.7
+# `dx` comes from the CLI image for the Dioxus fork commit Cargo.lock pins,
+# built once by the fork's "g3 CLI image" workflow; the image build passes that
+# commit as DIOXUS_REV. A CLI from another commit fails to hydrate.
+ARG DIOXUS_REV
+FROM ghcr.io/gateway3b/dioxus-cli:${DIOXUS_REV} AS dioxus-cli
+
 FROM node:22-bookworm-slim AS web-dependencies
 
 WORKDIR /app
@@ -25,8 +31,8 @@ WORKDIR /app
 # the same Dioxus fork as the libraries, or the client fails to hydrate.
 COPY rust-toolchain.toml ./
 RUN rustup target add wasm32-unknown-unknown \
-    && cargo install cargo-chef --version 0.1.78 --locked \
-    && cargo install --git https://github.com/Gateway3B/dioxus --branch main dioxus-cli --locked
+    && cargo install cargo-chef --version 0.1.78 --locked
+COPY --from=dioxus-cli /dx /usr/local/cargo/bin/dx
 
 # Keep local sibling overrides outside the image and fetch the portable lockfile.
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true \
