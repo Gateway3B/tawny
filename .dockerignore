@@ -17,3 +17,6 @@ rustypipe_cache.json
 rustypipe_reports
 target
 docker/extractor/__pycache__
+.env.prod
+.env.surrealkit.*
+!.env.surrealkit.template
