@@ -103,7 +103,8 @@ impl AppServerState {
             .check()?;
 
         use futures_util::{StreamExt, stream};
-        let _ = stream::iter(hints.into_iter().map(|video| async move {
+        // Best effort: the channel's next RSS poll stores anything missed.
+        let results = stream::iter(hints.into_iter().map(|video| async move {
             let enriched = self.enrich_video_player(video).await;
             self.upsert_feed_video(&enriched, video_sort_key(&enriched))
                 .await
@@ -111,6 +112,10 @@ impl AppServerState {
         .buffer_unordered(4)
         .collect::<Vec<_>>()
         .await;
+        crate::telemetry::best_effort_failures(
+            crate::telemetry::Diagnostic::WebsubHintFailed,
+            results.iter().filter(|result| result.is_err()).count(),
+        );
         Ok(entries.len())
     }
 
@@ -173,12 +178,18 @@ pub async fn youtube_websub_verify(
     } else {
         "inactive".into()
     };
-    let _ = state
+    // The hub needs only the challenge back; the status is bookkeeping for
+    // renewals, so failing to write it must not fail the verification.
+    let saved = state
         .db
         .query("UPDATE channel SET websub_status = $status WHERE channel_id = $channel_id")
         .bind(("channel_id", channel_id))
         .bind(("status", status))
-        .await;
+        .await
+        .and_then(|response| response.check());
+    if saved.is_err() {
+        crate::telemetry::diagnostic(crate::telemetry::Diagnostic::WebsubStatusUnsaved);
+    }
     let mut response = Response::new(Body::from(verification.challenge));
     response.headers_mut().insert(
         header::CONTENT_TYPE,

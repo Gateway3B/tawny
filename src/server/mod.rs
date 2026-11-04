@@ -400,7 +400,7 @@ struct DbVideo {
     published_at: String,
     #[allow(
         dead_code,
-        reason = "Shared definitions are used by selected platform, server or test builds."
+        reason = "Selected so SurrealDB can order by it; never read."
     )]
     published_sort: String,
     duration_seconds: i64,
@@ -925,13 +925,19 @@ impl AppServerState {
         let feed_job =
             async {
                 if newly_subscribed.len() <= 3 {
-                    let _ =
+                    // A failed first fetch is not an error here: the poller
+                    // fetches every followed channel again.
+                    let results =
                         stream::iter(newly_subscribed.iter().cloned().map(|channel| async move {
                             self.refresh_channel_local(channel).await
                         }))
                         .buffer_unordered(3)
                         .collect::<Vec<_>>()
                         .await;
+                    crate::telemetry::best_effort_failures(
+                        crate::telemetry::Diagnostic::FirstFetchFailed,
+                        results.iter().filter(|result| result.is_err()).count(),
+                    );
                 } else {
                     let ids = newly_subscribed
                         .iter()
@@ -941,16 +947,25 @@ impl AppServerState {
                         newly_subscribed.len(),
                         self.websub_callback_url.is_some(),
                     );
-                    let _ = self
+                    let (_, _, failed) = self
                         .reconcile_channels_rss(newly_subscribed.into_iter().take(limit).collect())
                         .await;
+                    crate::telemetry::best_effort_failures(
+                        crate::telemetry::Diagnostic::FirstFetchFailed,
+                        failed.len(),
+                    );
                     // RSS carries no avatar or subscriber count, and a bulk
                     // import is the one path that never reads a channel page.
                     self.backfill_channel_metadata(Some(&ids), CHANNEL_METADATA_BATCH)
                         .await;
                 }
             };
-        let _ = tokio::join!(websub_job, feed_job);
+        let (websub, ()) = tokio::join!(websub_job, feed_job);
+        // The lease renewal asks the hub again for any channel left without one.
+        crate::telemetry::best_effort_failures(
+            crate::telemetry::Diagnostic::WebsubRenewalFailed,
+            websub.iter().filter(|result| result.is_err()).count(),
+        );
     }
 }
 

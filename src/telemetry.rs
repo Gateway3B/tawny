@@ -86,6 +86,12 @@ pub(crate) enum Diagnostic {
     /// A server function failed with an internal error; the client was told
     /// only that something went wrong.
     ServerFunctionFailed,
+    /// Best effort, retried by the poller: a new follow's first fetch.
+    FirstFetchFailed,
+    /// Best effort: storing a video a WebSub notification announced.
+    WebsubHintFailed,
+    /// Best effort: recording a WebSub lease the hub just verified.
+    WebsubStatusUnsaved,
     RuntimePanic,
 }
 
@@ -116,6 +122,9 @@ impl Diagnostic {
             Self::ExtractorShortsFailed => "extractor_shorts_failed",
             Self::ExtractorFormatsFailed => "extractor_formats_failed",
             Self::ServerFunctionFailed => "server_function_failed",
+            Self::FirstFetchFailed => "first_fetch_failed",
+            Self::WebsubHintFailed => "websub_hint_failed",
+            Self::WebsubStatusUnsaved => "websub_status_unsaved",
             Self::RuntimePanic => "runtime_panic",
         }
     }
@@ -123,6 +132,17 @@ impl Diagnostic {
 
 pub(crate) fn diagnostic(code: Diagnostic) {
     tracing::info!(target: TARGET, code = code.code(), "service_event");
+}
+
+/// How many of a batch of best-effort jobs failed, when any did.
+///
+/// The jobs' results used to be dropped with `let _ =`, which hid a run of
+/// failures entirely. A count and a code, never the errors. At info, not
+/// debug: the subscriber above keeps only info and up from this target.
+pub(crate) fn best_effort_failures(code: Diagnostic, failed: usize) {
+    if failed > 0 {
+        tracing::info!(target: TARGET, code = code.code(), failed, "best_effort_failed");
+    }
 }
 
 pub(crate) fn playback_resolved(
@@ -176,6 +196,8 @@ mod tests {
         tracing::subscriber::with_default(subscriber(capture.clone()), || {
             diagnostic(Diagnostic::PlaybackExtractionFailed);
             diagnostic(Diagnostic::RuntimePanic);
+            best_effort_failures(Diagnostic::FirstFetchFailed, 0);
+            best_effort_failures(Diagnostic::FirstFetchFailed, 2);
             playback_resolved(
                 2,
                 Duration::from_millis(10),
@@ -194,6 +216,7 @@ mod tests {
             vec![
                 serde_json::json!({"message":"service_event", "code":"playback_extraction_failed"}),
                 serde_json::json!({"message":"service_event", "code":"runtime_panic"}),
+                serde_json::json!({"message":"best_effort_failed", "code":"first_fetch_failed", "failed":2}),
                 serde_json::json!({"message":"playback_resolved", "sources":2, "extract_ms":10, "ranges_ms":20, "verify_ms":30, "total_ms":40}),
             ]
         );

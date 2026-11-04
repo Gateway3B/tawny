@@ -688,7 +688,9 @@ impl AppServerState {
             .collect::<Vec<_>>();
         if newly_subscribed.len() <= FIRST_FETCH_WAIT_MAX {
             use futures_util::{StreamExt, stream};
-            let _ = stream::iter(
+            // Best effort: the follow is saved either way, and the poller
+            // fetches the channel again.
+            let results = stream::iter(
                 newly_subscribed
                     .into_iter()
                     .map(|channel| self.refresh_channel_rss_fast(channel)),
@@ -696,6 +698,10 @@ impl AppServerState {
             .buffer_unordered(FIRST_FETCH_WAIT_MAX)
             .collect::<Vec<_>>()
             .await;
+            crate::telemetry::best_effort_failures(
+                crate::telemetry::Diagnostic::FirstFetchFailed,
+                results.iter().filter(|result| result.is_err()).count(),
+            );
         }
 
         // Subscribing starts WebSub and a first fetch; unsubscribing the last

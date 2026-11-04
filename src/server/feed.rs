@@ -44,7 +44,7 @@ impl AppServerState {
             channel_id: String,
             #[allow(
                 dead_code,
-                reason = "Shared definitions are used by selected platform, server or test builds."
+                reason = "Selected so SurrealDB can order by it; never read."
             )]
             published_sort: String,
         }
