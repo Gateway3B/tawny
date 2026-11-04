@@ -154,9 +154,12 @@ jobs:
             exit 1
           }
 
+      # rust-toolchain.toml pins 1.95.0 and lists only wasm32, so the iOS
+      # target has to go on that toolchain, not on stable.
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
+          toolchain: "1.95.0"
           targets: aarch64-apple-ios
           components: clippy
 
