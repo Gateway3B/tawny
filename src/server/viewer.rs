@@ -770,7 +770,7 @@ impl AppServerState {
         let mut playlist = self
             .find_playlist(owner, playlist_id)
             .await?
-            .ok_or_else(|| anyhow!("that playlist no longer exists"))?;
+            .ok_or(Refusal("that playlist no longer exists"))?;
         let present = playlist.video_ids.iter().any(|id| id == video_id);
         if present == member {
             return Ok(false);
@@ -983,7 +983,7 @@ impl AppServerState {
         let mut group = SubscriptionGroup::from(
             rows.into_iter()
                 .next()
-                .ok_or_else(|| anyhow!("that group no longer exists"))?,
+                .ok_or(Refusal("that group no longer exists"))?,
         );
         let before = group.channel_ids.clone();
         for channel_id in channel_ids {
@@ -1006,7 +1006,7 @@ impl AppServerState {
     pub async fn rename_group(&self, owner: &str, group_id: &str, name: &str) -> Result<()> {
         let name = name.trim();
         if name.is_empty() {
-            return Err(anyhow!("a group needs a name"));
+            return Err(Refusal("a group needs a name").into());
         }
         let _guard = self.sync_lock.lock().await;
         let renamed: Vec<DbSubscriptionGroup> = self
@@ -1019,7 +1019,7 @@ impl AppServerState {
             .check()?
             .take(0)?;
         if renamed.is_empty() {
-            return Err(anyhow!("that group no longer exists"));
+            return Err(Refusal("that group no longer exists").into());
         }
         Ok(())
     }

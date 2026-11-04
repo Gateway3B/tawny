@@ -382,7 +382,7 @@ impl AppServerState {
             groups
                 .into_iter()
                 .next()
-                .ok_or_else(|| anyhow!("that group no longer exists"))?,
+                .ok_or(Refusal("that group no longer exists"))?,
         );
         let followed = self
             .user_subscriptions(owner)

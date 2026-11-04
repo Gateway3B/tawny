@@ -83,6 +83,9 @@ pub(crate) enum Diagnostic {
     ExtractorConfigurationInvalid,
     ExtractorShortsFailed,
     ExtractorFormatsFailed,
+    /// A server function failed with an internal error; the client was told
+    /// only that something went wrong.
+    ServerFunctionFailed,
     RuntimePanic,
 }
 
@@ -112,6 +115,7 @@ impl Diagnostic {
             Self::ExtractorConfigurationInvalid => "extractor_configuration_invalid",
             Self::ExtractorShortsFailed => "extractor_shorts_failed",
             Self::ExtractorFormatsFailed => "extractor_formats_failed",
+            Self::ServerFunctionFailed => "server_function_failed",
             Self::RuntimePanic => "runtime_panic",
         }
     }

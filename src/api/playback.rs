@@ -81,7 +81,7 @@ pub async fn get_sponsor_segments(
     Ok(state
         .sponsor_segments(&video_id, &categories)
         .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?)
+        .map_err(server_error)?)
 }
 
 // ---------------------------------------------------------------------------

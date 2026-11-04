@@ -207,11 +207,11 @@ impl<'db> Accounts<'db> {
             .check()
             .map_err(|_| AuthError::Credential(CredentialProblem::EmailTaken))?
             .take(0)?;
-        updated
-            .into_iter()
-            .next()
-            .map(Into::into)
-            .ok_or_else(|| anyhow!("The account changed. Review sign-up again."))
+        updated.into_iter().next().map(Into::into).ok_or_else(|| {
+            anyhow::Error::new(crate::server::Refusal(
+                "The account changed. Review sign-up again.",
+            ))
+        })
     }
 
     pub async fn sign_in(&self, email: &str, password: &str) -> Result<Account> {
@@ -393,9 +393,13 @@ impl Owner {
     pub(crate) fn require_reviewed(&self, expected: Option<&str>) -> Result<()> {
         let expected = expected
             .filter(|value| !value.is_empty())
-            .ok_or_else(|| anyhow!("Refresh or update Tawny before changing this account."))?;
+            .ok_or(crate::server::Refusal(
+                "Refresh or update Tawny before changing this account.",
+            ))?;
         if expected != self.0 {
-            return Err(anyhow!("The account changed. Review this action again."));
+            return Err(
+                crate::server::Refusal("The account changed. Review this action again.").into(),
+            );
         }
         Ok(())
     }

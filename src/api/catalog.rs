@@ -9,7 +9,7 @@ pub async fn search_catalog(query: String, filter: String) -> Result<SearchResul
     let mut answer = state
         .search_catalog(&owner.0, &query, &filter)
         .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?;
+        .map_err(server_error)?;
     state
         .overlay_viewer(&owner.0, &mut answer.videos)
         .await
@@ -30,7 +30,7 @@ pub async fn search_catalog_page(
     let mut answer = state
         .search_page(&owner.0, &query, &filter, &next_page)
         .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?;
+        .map_err(server_error)?;
     state
         .overlay_viewer(&owner.0, &mut answer.videos)
         .await
@@ -47,7 +47,7 @@ pub async fn get_video_details(video_id: String) -> Result<VideoDetails> {
     Ok(state
         .video_details(&owner.0, &video_id)
         .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?)
+        .map_err(server_error)?)
 }
 
 #[get(
@@ -58,7 +58,7 @@ pub async fn get_comments_page(video_id: String, next_page: String) -> Result<Co
     Ok(state
         .comments_page(&video_id, &next_page)
         .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?)
+        .map_err(server_error)?)
 }
 
 #[get(
@@ -70,7 +70,7 @@ pub async fn get_channel_details(channel_id: String, order: String) -> Result<Ch
     Ok(state
         .channel_details(&owner.0, &channel_id, &order)
         .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?)
+        .map_err(server_error)?)
 }
 
 // A POST: the continuation token is several KB, which a query string
@@ -93,7 +93,7 @@ pub async fn get_channel_media_page(
     let mut answer = state
         .channel_media_page(&owner.0, &channel_id, tab, &next_page)
         .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?;
+        .map_err(server_error)?;
     state
         .overlay_viewer(&owner.0, &mut answer.videos)
         .await

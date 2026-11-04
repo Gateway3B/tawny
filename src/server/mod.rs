@@ -74,6 +74,23 @@ pub(crate) use websub::*;
 pub(crate) use youtube::*;
 pub(crate) use ytdlp::*;
 
+/// A failure written for the viewer, such as "a group needs a name".
+///
+/// `server_error` shows only these (and account errors) to the client; any
+/// other error becomes a generic message, since its text is the server's.
+/// Word it as the client shows it: a library change's toast puts it after
+/// "Could not save that: ", so those start lower case.
+#[derive(Debug)]
+pub struct Refusal(pub &'static str);
+
+impl std::fmt::Display for Refusal {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.0)
+    }
+}
+
+impl std::error::Error for Refusal {}
+
 #[derive(Clone)]
 pub struct AppServerState {
     pub(crate) db: Arc<Surreal<Any>>,

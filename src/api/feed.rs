@@ -6,10 +6,7 @@ use super::*;
     owner: crate::auth::Owner
 )]
 pub async fn refresh_subscription_feed() -> Result<FeedRefreshResult> {
-    Ok(state
-        .refresh_feed(&owner.0)
-        .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?)
+    Ok(state.refresh_feed(&owner.0).await.map_err(server_error)?)
 }
 
 /// Resolve exact metadata for the cards currently on screen.
@@ -27,7 +24,7 @@ pub async fn hydrate_video_durations(video_ids: Vec<String>) -> Result<Vec<Video
     Ok(state
         .hydrate_video_durations(&owner.0, video_ids)
         .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?)
+        .map_err(server_error)?)
 }
 
 // ---------------------------------------------------------------------------

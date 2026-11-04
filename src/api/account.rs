@@ -15,7 +15,7 @@ pub async fn create_guest_account() -> Result<Account> {
         .accounts()
         .create_guest()
         .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?;
+        .map_err(server_error)?;
     state
         .seed_new_account(&account.id)
         .await
@@ -45,7 +45,7 @@ pub async fn register_account(
             &credentials.password,
         )
         .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?)
+        .map_err(server_error)?)
 }
 
 /// Sign in to an existing account, abandoning whatever session was held.
@@ -62,7 +62,7 @@ pub async fn sign_in_to_account(credentials: Credentials) -> Result<Account> {
         .accounts()
         .sign_in(&credentials.email, &credentials.password)
         .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?;
+        .map_err(server_error)?;
     auth_session.logout_user();
     crate::auth::sign_in_session(&auth_session, &account);
     Ok(account)
@@ -93,7 +93,7 @@ pub async fn current_account() -> Result<Account> {
         .accounts()
         .find(&owner.0)
         .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?)
+        .map_err(server_error)?)
 }
 
 /// Remove the caller's account and library, and revoke its sessions.
