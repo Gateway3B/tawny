@@ -76,7 +76,9 @@ Before a first store submission:
 - **Privacy manifest.** dx copies `ios/PrivacyInfo.xcprivacy` into the app.
   Declare any new "required reason" API there before uploading (ITMS-91053).
 - **SDK levels.** `target_sdk` is 36, which Play has required since
-  31 August 2026; check Play's current rule before uploading.
+  31 August 2026; check Play's current rule before uploading. The minimums
+  are iOS 17.5 and Android 8.0 (`min_sdk` 26): g3-ui's theme colours use CSS
+  `light-dark()`, which WKWebView has from 17.5 and Chromium from 123.
 - **On a device:** rotate and toggle dark mode (Android recreates the
   activity), leave the app in the background for several minutes and resume,
   and select text in a release build.

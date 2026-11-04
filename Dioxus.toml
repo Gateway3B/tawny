@@ -46,7 +46,9 @@ local-network = { description = "Tawny connects to the Tawny server on your loca
 # Opaque, with no alpha channel: App Store Connect rejects one that has it.
 # g3-stack's scripts/app-icon.mjs renders it from the master.
 icon = ["assets/icon/icon-1024.png"]
-deployment_target = "15.0"
+# g3-ui's theme colours use CSS light-dark(), which WKWebView has from iOS
+# 17.5; min_sdk 26 below is the same floor for Android's Chromium 123.
+deployment_target = "17.5"
 # The media plugin's `.playback` audio session only survives leaving the app
 # when the Info.plist declares background audio.
 background_modes = ["audio"]
