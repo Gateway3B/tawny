@@ -46,6 +46,11 @@ background_modes = ["audio"]
 # iPhones keep landscape, unlike the other apps: the player's full screen
 # turns the phone sideways, which a portrait-only Info.plist would refuse.
 
+[ios.plist]
+# The only encryption is HTTPS to the viewer's own server, which is exempt.
+# Declaring it here skips the export-compliance question on every upload.
+ITSAppUsesNonExemptEncryption = false
+
 [android]
 # Android 8.0. Older versions stopped getting WebView updates before
 # Chromium 123, which g3-ui's light-dark() theme colors need.
