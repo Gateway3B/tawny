@@ -22,11 +22,31 @@
 /// opens settings. The web does not use it; see [`default_backend_url`].
 const COMPILED_DEFAULT: Option<&str> = option_env!("SERVER_URL");
 
+/// The local development server, for a build with no `SERVER_URL`.
+///
+/// A release phone or desktop build offers nothing instead. Tawny is
+/// sideloaded against each viewer's own server, so a release build without
+/// `SERVER_URL` is normal, and pre-filling `localhost` on the setup screen
+/// pointed the app at the phone itself. An empty field with its placeholder
+/// asks for the real address.
 #[cfg(target_os = "android")]
-const FALLBACK_DEFAULT: &str = "http://127.0.0.1:8080";
+const DEVELOPMENT_DEFAULT: &str = "http://127.0.0.1:8080";
 
 #[cfg(not(target_os = "android"))]
-const FALLBACK_DEFAULT: &str = "http://localhost:8080";
+const DEVELOPMENT_DEFAULT: &str = "http://localhost:8080";
+
+const FALLBACK_DEFAULT: &str = fallback_default(
+    cfg!(debug_assertions),
+    cfg!(any(feature = "desktop", feature = "mobile")),
+);
+
+const fn fallback_default(debug: bool, native: bool) -> &'static str {
+    if native && !debug {
+        ""
+    } else {
+        DEVELOPMENT_DEFAULT
+    }
+}
 
 const BACKEND_URL_KEY: &str = "tawny.backend-url";
 
@@ -264,7 +284,16 @@ fn store(_key: &str, _value: &str) {}
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_backend_url;
+    use super::{DEVELOPMENT_DEFAULT, fallback_default, normalize_backend_url};
+
+    #[test]
+    fn a_native_release_build_offers_no_address_of_its_own() {
+        assert_eq!(fallback_default(false, true), "");
+        // The setup screen refuses the empty value rather than saving it.
+        assert_eq!(normalize_backend_url(fallback_default(false, true)), None);
+        assert_eq!(fallback_default(true, true), DEVELOPMENT_DEFAULT);
+        assert_eq!(fallback_default(false, false), DEVELOPMENT_DEFAULT);
+    }
 
     #[test]
     fn a_trailing_slash_is_removed_before_it_becomes_a_double_slash() {

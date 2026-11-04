@@ -14,7 +14,11 @@ just dev-desktop
 ## The backend address
 
 A native build has no page origin, so the server it talks to is compiled in
-(`SERVER_URL`) and can be changed in Settings. `src/server_url.rs` reads the
+(`SERVER_URL`) and can be changed in Settings. A release build made without
+`SERVER_URL` (the usual sideload, one build for any server) offers no
+address: the first launch's setup screen starts empty instead of suggesting
+`localhost`, which on a phone is the phone. Debug builds fall back to the
+local development server. `src/server_url.rs` reads the
 choice before `dioxus::launch`, because the first render already calls server
 functions. Saving a new one repoints the server functions at once and reloads
 the app, which still holds the previous backend's session and library; a
