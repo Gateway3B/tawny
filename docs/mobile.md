@@ -69,9 +69,12 @@ needs a higher build number than the last.
 
 Before a first store submission:
 
-- **Icons.** `Dioxus.toml` has no `[bundle] icon`. iOS needs an opaque
-  1024x1024 PNG (the App Store rejects transparency), and Android generates
-  its launcher icons from the same setting.
+- **Icons.** iOS uses `[ios] icon`, the opaque 1024x1024
+  `assets/icon/icon-1024.png` (the App Store rejects transparency); Android
+  generates its launcher icons from `[bundle] icon`, the SVG master. Render
+  both again from the master after changing it.
+- **Privacy manifest.** dx copies `ios/PrivacyInfo.xcprivacy` into the app.
+  Declare any new "required reason" API there before uploading (ITMS-91053).
 - **SDK levels.** `target_sdk` is 36, which Play has required since
   31 August 2026; check Play's current rule before uploading.
 - **On a device:** rotate and toggle dark mode (Android recreates the

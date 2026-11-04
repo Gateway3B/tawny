@@ -12,6 +12,8 @@ extend-exclude = [
 # The Python CA bundle package the on-device resolver installs.
 certifi = "certifi"
 dioxus = "dioxus"
+# App Store review codes, such as ITMS-91053 in ios/PrivacyInfo.xcprivacy.
+ITMS = "ITMS"
 partee = "partee"
 # A crate named in the upstream Dioxus notes (docs/dioxus/architecture).
 ratatui = "ratatui"
