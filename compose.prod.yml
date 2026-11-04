@@ -134,6 +134,9 @@ services:
       # volume and every existing YouTube subscription fails its signature
       # check until it renews. Set it explicitly if the data may ever move.
       TAWNY_WEBSUB_SECRET: ${TAWNY_WEBSUB_SECRET:-}
+      # Leave unset behind HTTPS. `false` only for a LAN server reached over
+      # plain http://, where a browser would drop a Secure session cookie.
+      TAWNY_SECURE_COOKIES: ${TAWNY_SECURE_COOKIES:-}
     ports:
       - "${TAWNY_PORT:-8080}:8080"
     volumes:

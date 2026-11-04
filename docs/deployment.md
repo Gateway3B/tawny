@@ -89,6 +89,7 @@ Optional:
 | `TAWNY_WEBSUB_CALLBACK_URL` | derived | Set when the public URL is not where YouTube should call back. |
 | `TAWNY_WEBSUB_SECRET` | generated | Generated and kept on the app volume if unset. Fine only while that volume survives: replace it and every existing subscription fails its signature check until it renews. |
 | `YTDLP_CONCURRENCY` | `2` | Simultaneous extractions. |
+| `TAWNY_SECURE_COOKIES` | `true` | Set `false` only for a LAN server reached over plain `http://`: browsers drop a `Secure` session cookie sent over http, so every visit would become a new guest. The cookie then crosses the network unencrypted. |
 | `TAWNY_SURREALDB_VOLUME` | `surrealdb-data` | Where the database volume lives. A bare name is a Docker named volume; an absolute path is a bind mount. |
 | `TAWNY_APP_VOLUME` | `tawny-data` | The same, for the app's own data. |
 | `TAWNY_PROXY_NETWORK` | `tawny-proxy` | An existing Docker network to put Tawny on, so a reverse proxy in it reaches Tawny as `tawny:8080`. |
@@ -143,6 +144,12 @@ Put TLS in front of Tawny. `TAWNY_PUBLIC_URL` must be the public HTTPS origin:
 WebSub stays disabled on a loopback URL, and playback proxy URLs are built from
 it. Tawny speaks plain HTTP and needs no WebSocket upgrade; the only `ws://` in
 the stack is SurrealDB, which never leaves it.
+
+A server only ever reached on the local network can skip TLS. Set
+`TAWNY_SECURE_COOKIES=false` then, or browsers drop the `Secure` session
+cookie and every visit starts a new guest. The iOS app reaches local
+addresses over plain http (`NSAllowsLocalNetworking`); anything over the
+internet needs HTTPS.
 
 There are two ways to connect a proxy, and the stack does not care which:
 

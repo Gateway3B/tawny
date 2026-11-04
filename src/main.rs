@@ -73,7 +73,7 @@ fn main() {
         let db = Arc::clone(&state.db);
         let session_config = SessionConfig::default()
             .with_cookie_path("/")
-            .with_secure(!cfg!(debug_assertions));
+            .with_secure(auth::secure_cookies());
         let session_store =
             SessionStore::new(Some(auth::session_pool(Arc::clone(&db))), session_config)
                 .await

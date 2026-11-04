@@ -294,6 +294,32 @@ pub fn session_pool<C: surrealdb::Connection>(
     g3_auth::SurrealSessionPool::new(db).track_accounts::<AppUser>()
 }
 
+/// Whether the session cookie is marked `Secure`, from `TAWNY_SECURE_COOKIES`.
+///
+/// A browser drops a `Secure` cookie that arrives over plain http, so a
+/// release server reached at `http://192.168.1.10:8080` minted a new guest on
+/// every request and never kept a session. Secure stays the release default;
+/// a LAN deployment without TLS turns it off deliberately. Debug builds serve
+/// `dx serve`'s plain localhost, so they default to off.
+pub fn secure_cookies() -> bool {
+    secure_cookies_from(
+        std::env::var("TAWNY_SECURE_COOKIES").ok().as_deref(),
+        !cfg!(debug_assertions),
+    )
+}
+
+/// Only an explicit "off" turns it off: a typo keeps the safer default.
+fn secure_cookies_from(value: Option<&str>, default: bool) -> bool {
+    match value
+        .map(|value| value.trim().to_ascii_lowercase())
+        .as_deref()
+    {
+        None | Some("") => default,
+        Some("false" | "0" | "no" | "off") => false,
+        Some(_) => true,
+    }
+}
+
 /// Account results and errors can contain private identity or session details.
 /// Revalidation alone still lets a browser retain the response body.
 pub async fn private_account_responses(
@@ -424,6 +450,19 @@ fn record_key(id: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn session_cookies_stay_secure_unless_turned_off_explicitly() {
+        assert!(secure_cookies_from(None, true));
+        assert!(secure_cookies_from(Some(""), true));
+        assert!(!secure_cookies_from(None, false));
+        assert!(!secure_cookies_from(Some("false"), true));
+        assert!(!secure_cookies_from(Some(" OFF "), true));
+        assert!(!secure_cookies_from(Some("0"), true));
+        assert!(secure_cookies_from(Some("true"), false));
+        // Anything unrecognised keeps Secure rather than guessing.
+        assert!(secure_cookies_from(Some("disabled"), true));
+    }
 
     #[tokio::test]
     async fn account_results_and_errors_are_not_stored() {
