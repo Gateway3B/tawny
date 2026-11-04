@@ -14,8 +14,8 @@
 use dioxus::prelude::*;
 use g3_ui::{
     AlertButton, AlertOptions, Button, ButtonExpand, ButtonFill, Card, Color, Content,
-    ContentWidth, HeadingLevel, Input, InputType, Space, Stack, Text, TextTone, TextVariant,
-    use_alert,
+    ContentWidth, Header, HeadingLevel, Input, InputType, Space, Stack, Text, TextTone,
+    TextVariant, use_alert,
 };
 
 use crate::{
@@ -109,6 +109,10 @@ fn BackendSetupScreen(problem: Option<String>, on_saved: EventHandler<()>) -> El
     let mut error = use_signal(|| problem.clone().unwrap_or_default());
 
     rsx! {
+        // Shown before the app shell exists, so this screen brings its own bar:
+        // g3-ui's Header is what keeps content clear of the status bar and the
+        // Dynamic Island on a phone.
+        Header { title: "Tawny" }
         Content { width: ContentWidth::Readable,
             Card {
                 title: "Connect to a Tawny server",
