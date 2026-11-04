@@ -35,6 +35,13 @@ category = "Entertainment"
 short_description = "A calm, local-first YouTube client."
 long_description = "Tawny is a self-hosted YouTube client for personal home labs, on mobile, web, and desktop."
 
+[permissions]
+# A home-lab server is usually on the viewer's own network, and iOS asks before
+# an app first reaches a private address. Without this string the prompt has
+# no explanation, and App Review expects one. iOS only: dx maps nothing for
+# Android from it.
+local-network = { description = "Tawny connects to the Tawny server on your local network, where your subscriptions and library are kept." }
+
 [ios]
 # Opaque, with no alpha channel: App Store Connect rejects one that has it.
 # g3-stack's scripts/app-icon.mjs renders it from the master.
