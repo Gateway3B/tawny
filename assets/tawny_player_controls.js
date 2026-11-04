@@ -4,7 +4,6 @@
   const controllers = new WeakMap();
   /// The last metadata given for a media element, applied again on re-attach.
   const lastMetadata = new WeakMap();
-  const speedSteps = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
   const quickSpeedSteps = [1, 1.25, 1.5, 2];
 
   function formatTime(value) {
@@ -221,7 +220,6 @@
     let resumeAfterScrub = false;
     let animationFrame = null;
     let chosenHeight = null;
-    let captions = [];
     let selectedCaption = null;
     let captionsEnabled = false;
     let chapters = [];
@@ -720,8 +718,6 @@
 
     function setMetadata(metadata) {
       const next = metadata || {};
-      const nextCaptions = next.captions || [];
-      captions = nextCaptions;
       selectedCaption = Number.isInteger(next.selectedCaption) ? next.selectedCaption : null;
       captionsEnabled = Boolean(next.captionsEnabled);
       chapters = (next.chapters || [])
