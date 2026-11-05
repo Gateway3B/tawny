@@ -3290,7 +3290,7 @@ dependencies = [
 [[package]]
 name = "g3-auth"
 version = "0.2.0"
-source = "git+https://github.com/g3techhq/g3-auth?branch=main#58fe8f86b5cbbf48c429e2177f3a84ec9d804a14"
+source = "git+https://github.com/g3techhq/g3-auth?branch=main#41b9c88daf79e757b2eaaa08dcb721c2c1232558"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3314,7 +3314,7 @@ dependencies = [
 [[package]]
 name = "g3-auth-macros"
 version = "0.1.0"
-source = "git+https://github.com/g3techhq/g3-auth?branch=main#58fe8f86b5cbbf48c429e2177f3a84ec9d804a14"
+source = "git+https://github.com/g3techhq/g3-auth?branch=main#41b9c88daf79e757b2eaaa08dcb721c2c1232558"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3323,8 +3323,8 @@ dependencies = [
 
 [[package]]
 name = "g3-cache"
-version = "0.2.1"
-source = "git+https://github.com/g3techhq/g3-cache?branch=main#7950709d1d634e9c133a53bf1f31f95f81366464"
+version = "0.3.0"
+source = "git+https://github.com/g3techhq/g3-cache?branch=main#55870ec95a3de15d7d14d37d617ec10f86eba399"
 dependencies = [
  "axum",
  "chrono",
@@ -3349,7 +3349,7 @@ dependencies = [
 [[package]]
 name = "g3-cache-macros"
 version = "0.1.0"
-source = "git+https://github.com/g3techhq/g3-cache?branch=main#7950709d1d634e9c133a53bf1f31f95f81366464"
+source = "git+https://github.com/g3techhq/g3-cache?branch=main#55870ec95a3de15d7d14d37d617ec10f86eba399"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3376,8 +3376,8 @@ dependencies = [
 
 [[package]]
 name = "g3-route-transitions"
-version = "0.5.0"
-source = "git+https://github.com/g3techhq/g3-route-transitions?branch=main#4da7ecad925f7e832a4b9c3ef59f101a443df5fc"
+version = "0.6.0"
+source = "git+https://github.com/g3techhq/g3-route-transitions?branch=main#465745ead921cdff12a7bf7f4d4b99c60b1a74c4"
 dependencies = [
  "dioxus",
  "g3-native-plugins",
@@ -3388,8 +3388,8 @@ dependencies = [
 
 [[package]]
 name = "g3-route-transitions-macros"
-version = "0.5.0"
-source = "git+https://github.com/g3techhq/g3-route-transitions?branch=main#4da7ecad925f7e832a4b9c3ef59f101a443df5fc"
+version = "0.5.1"
+source = "git+https://github.com/g3techhq/g3-route-transitions?branch=main#465745ead921cdff12a7bf7f4d4b99c60b1a74c4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3398,8 +3398,8 @@ dependencies = [
 
 [[package]]
 name = "g3-ui"
-version = "0.6.0"
-source = "git+https://github.com/g3techhq/g3-ui?branch=main#471bcaf86e88aa60001309f879b724ae464de195"
+version = "0.7.0"
+source = "git+https://github.com/g3techhq/g3-ui?branch=main#e4480d5a8e992b48dfbbda3826ecfadb41c5292b"
 dependencies = [
  "cfg-if",
  "chrono",

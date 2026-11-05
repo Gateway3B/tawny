@@ -21,11 +21,11 @@ built on the **g3 stack** (the same shape as
 | Piece | Version | Reference |
 | --- | --- | --- |
 | Dioxus (fullstack, router) | 0.8.0-alpha.3 from the Gateway3B fork, pinned `=` | [docs/dioxus/](docs/dioxus/README.md), [dioxuslabs.com/learn/0.7](https://dioxuslabs.com/learn/0.7/) |
-| g3-ui (components, theme) | 0.6 | [docs/g3-ui.md](docs/g3-ui.md) |
-| g3-route-transitions (navigation) | 0.5 | [docs/navigation.md](docs/navigation.md) |
+| g3-ui (components, theme) | 0.7 | [docs/g3-ui.md](docs/g3-ui.md) |
+| g3-route-transitions (navigation) | 0.6 | [docs/navigation.md](docs/navigation.md) |
 | g3-native-plugins (media, storage, back button) | 0.4 | [docs/mobile.md](docs/mobile.md) |
 | g3-auth (session guard, `#[public]`, record ids) | 0.2 | [docs/authentication.md](docs/authentication.md) |
-| g3-cache (client and server caches) | 0.2 | [docs/architecture.md](docs/architecture.md#data-on-the-client) |
+| g3-cache (client and server caches) | 0.3 | [docs/architecture.md](docs/architecture.md#data-on-the-client) |
 | SurrealDB + SurrealKit | 3.2.4 | [database/README.md](database/README.md) |
 | rustypipe (YouTube extraction) | 0.11 | [docs/youtube.md](docs/youtube.md) |
 | yt-dlp sidecar, bgutil PO tokens | `docker/extractor` | [docs/playback.md](docs/playback.md) |
