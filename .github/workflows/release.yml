@@ -1,0 +1,279 @@
+name: Release
+
+# Pushing a tag `vX.Y.Z` (matching Cargo.toml's version) builds the Android
+# APK and the Windows installer, signs both for the in-app updater, and
+# publishes them as a GitHub release with the `latest.json` the app checks
+# (https://github.com/Gateway3B/tawny/releases/latest/download/latest.json).
+# See docs/releases.md.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Check the version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The app offers an update only when the release is newer than the
+      # version it was built with, which is Cargo.toml's: a tag that says
+      # otherwise would publish something no install would ever take.
+      - name: Match the tag to Cargo.toml
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          [[ "v$version" == "$TAG" ]] || {
+            echo "Tag $TAG does not match Cargo.toml's version $version" >&2
+            exit 1
+          }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Fails before an hour of builds, not after, if the signing secret does
+      # not belong to the key compiled into the app.
+      - name: Match the signing key to the app
+        env:
+          TAWNY_UPDATER_KEY: ${{ secrets.TAWNY_UPDATER_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${TAWNY_UPDATER_KEY:?Add the TAWNY_UPDATER_KEY repository secret (docs/releases.md)}"
+          key="$(node scripts/release-signing.mjs public-key | sed -n 2p)"
+          grep -qF "$key" src/updater.rs || {
+            echo "TAWNY_UPDATER_KEY does not match UPDATER_PUBLIC_KEY in src/updater.rs" >&2
+            exit 1
+          }
+
+  android:
+    name: Android APK
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Install Java 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install web asset dependencies
+        run: npm ci
+
+      - name: Fetch dependencies
+        run: cargo fetch --locked
+
+      # dx must come from the same Dioxus fork as the libraries, or the app
+      # fails to hydrate; the fork publishes no binaries yet.
+      - name: Install Dioxus CLI
+        run: cargo install --git https://github.com/Gateway3B/dioxus --branch main dioxus-cli --locked
+
+      # Required, unlike the artifact workflow: Android installs an update
+      # only when it is signed with the same key as the installed app, so an
+      # unsigned APK would be a release nobody can install.
+      - name: Configure Android signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${ANDROID_KEYSTORE_BASE64:?Configure ANDROID_KEYSTORE_BASE64: a release APK must be signed}"
+          : "${ANDROID_KEYSTORE_PASSWORD:?Configure ANDROID_KEYSTORE_PASSWORD with the keystore}"
+          : "${ANDROID_KEY_ALIAS:?Configure ANDROID_KEY_ALIAS with the keystore}"
+          : "${ANDROID_KEY_PASSWORD:?Configure ANDROID_KEY_PASSWORD with the keystore}"
+          export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/release-keystore.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_FILE"
+          # JSON string escapes are valid TOML basic strings, so any password
+          # characters survive.
+          node --input-type=module <<'JS'
+          import { appendFileSync } from "node:fs";
+          const keys = {
+            jks_file: process.env.ANDROID_KEYSTORE_FILE,
+            jks_password: process.env.ANDROID_KEYSTORE_PASSWORD,
+            key_alias: process.env.ANDROID_KEY_ALIAS,
+            key_password: process.env.ANDROID_KEY_PASSWORD,
+          };
+          let config = "\n[android.signing]\n";
+          for (const [key, value] of Object.entries(keys)) {
+            config += `${key} = ${JSON.stringify(value)}\n`;
+          }
+          appendFileSync("Dioxus.toml", config, "utf8");
+          JS
+
+      # No SERVER_URL: a release is one build for any server, set up on first
+      # launch. The versionCode comes from the crate version
+      # (major * 1000000 + minor * 1000 + patch), so each release is higher
+      # than the last and Android accepts it as an update.
+      - name: Build the APK
+        run: >
+          dx bundle --android --release --locked --no-default-features
+          --fullstack false --package-types apk
+          --out-dir artifacts/android
+
+      - name: Name the APK
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          apk="$(find artifacts/android -name '*.apk' | head -n 1)"
+          [[ -n "$apk" ]] || { echo "dx wrote no APK" >&2; exit 1; }
+          cp "$apk" "release/Tawny_${VERSION}.apk"
+
+      # Only `release/` is uploaded: the generated Gradle project under
+      # `target/` holds the signing passwords.
+      - name: Upload the APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-android
+          path: release/
+          if-no-files-found: error
+          retention-days: 3
+
+  windows:
+    name: Windows installer
+    needs: prepare
+    runs-on: windows-2025
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+
+      - name: Install web asset dependencies
+        run: npm ci
+
+      - name: Fetch dependencies
+        run: cargo fetch --locked
+
+      - name: Install Dioxus CLI
+        run: cargo install --git https://github.com/Gateway3B/dioxus --branch main dioxus-cli --locked
+
+      # `updater` wraps the NSIS installer in the zip the in-app updater
+      # downloads; the bare installer is for a first install. dx also builds a
+      # server binary, whatever --fullstack says, because the client uses
+      # server functions; it is not part of the release.
+      - name: Build the installer
+        run: >
+          dx bundle --desktop --release --locked --no-default-features
+          --fullstack false --package-types nsis --package-types updater
+          --out-dir artifacts/windows
+
+      - name: Collect the installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          setup="$(find artifacts/windows -name '*-setup.exe' | head -n 1)"
+          update="$(find artifacts/windows -name '*-setup.zip' | head -n 1)"
+          [[ -n "$setup" && -n "$update" ]] || {
+            echo "dx wrote no NSIS installer and update archive" >&2
+            find artifacts/windows -type f >&2
+            exit 1
+          }
+          cp "$setup" "$update" release/
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-windows
+          path: release/
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    name: Publish the release
+    needs: [prepare, android, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download the builds
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+
+      - name: Sign for the updater
+        env:
+          TAWNY_UPDATER_KEY: ${{ secrets.TAWNY_UPDATER_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/release-signing.mjs sign release/*.apk release/*-setup.zip
+
+      # A draft first: `releases/latest` skips drafts, so no app sees the
+      # release until every file, latest.json last, is in place.
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+            --title "Tawny $VERSION" --generate-notes \
+            release/*.apk release/*-setup.exe release/*-setup.zip
+
+      - name: Write and upload latest.json, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > release/notes.md
+          apk="$(ls release/*.apk | head -n 1)"
+          update="$(ls release/*-setup.zip | head -n 1)"
+          node scripts/release-manifest.mjs --version "$VERSION" \
+            --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG" \
+            --notes-file release/notes.md --out release/latest.json \
+            "android=$apk" "windows-x86_64-nsis=$update"
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" release/latest.json
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

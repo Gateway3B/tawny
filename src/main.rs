@@ -42,6 +42,9 @@ mod subscriptions_io;
 #[cfg(feature = "server")]
 mod telemetry;
 
+#[cfg(any(feature = "desktop", feature = "mobile"))]
+mod updater;
+
 use app::App;
 // Both features re-export the same `dioxus-desktop` crate.
 #[cfg(all(feature = "desktop", not(feature = "mobile")))]
@@ -136,6 +139,10 @@ fn main() {
     // session. See `server_url` for why the URL cannot come from the usual
     // persistence helper.
     server_url::install();
+
+    // Before launch too, so Settings finds the updater ready.
+    #[cfg(any(feature = "desktop", feature = "mobile"))]
+    updater::configure();
 
     #[cfg(any(feature = "desktop", feature = "mobile"))]
     dioxus::LaunchBuilder::new()

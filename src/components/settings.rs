@@ -7,7 +7,7 @@ use crate::{
 use dioxus::prelude::*;
 use g3_route_transitions::ROUTE_TRANSITION_OVERLAY_REGION_CLASS;
 
-use super::{AccountSettings, BackendSettings, PageHeader};
+use super::{AccountSettings, AppUpdatesCard, BackendSettings, PageHeader};
 use dioxus_icons::lucide::{
     Captions, Download, Gauge, Languages, RotateCw, ShieldCheck, Smartphone, Upload,
 };
@@ -426,6 +426,8 @@ pub fn SettingsPage() -> Element {
                     }
 
                     SubscriptionTransferCard {}
+
+                    AppUpdatesCard {}
 
                 }
             }

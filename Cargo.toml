@@ -81,13 +81,16 @@ webpki-root-certs = "1"
 [features]
 default = ["web"]
 web = ["dioxus/web", "dep:web-sys", "g3-cache/web"]
-desktop = ["dioxus/desktop", "dep:dirs", "g3-auth/desktop", "g3-cache/desktop"]
+# The app updater only in the native builds: the web is updated by deploying,
+# and the server has nothing to install.
+desktop = ["dioxus/desktop", "dep:dirs", "g3-auth/desktop", "g3-cache/desktop", "g3-native-plugins/updater"]
 mobile = [
     "dioxus/mobile",
     "tokio",
     "dep:dirs",
     "g3-auth/mobile",
     "g3-cache/mobile",
+    "g3-native-plugins/updater",
     # The local relay that hands streams resolved on the phone to the player.
     "reqwest",
 ]

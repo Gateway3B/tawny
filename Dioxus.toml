@@ -35,6 +35,13 @@ category = "Entertainment"
 short_description = "A calm, local-first YouTube client."
 long_description = "Tawny is a self-hosted YouTube client for personal home labs, on mobile, web, and desktop."
 
+[bundle.windows]
+# Every Windows 10 and 11 already has WebView2. dx's default embeds Microsoft's
+# 183 MB offline installer and runs it visibly on each install, so every
+# in-app update would download it and pop a window. The 2 MB bootstrapper
+# installs WebView2 quietly, and only when it is missing.
+webview_install_mode = { EmbedBootstrapper = { silent = true } }
+
 [permissions]
 # A home-lab server is usually on the viewer's own network, and iOS asks before
 # an app first reaches a private address. Without this string the prompt has
