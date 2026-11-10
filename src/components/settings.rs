@@ -167,6 +167,8 @@ pub fn SettingsPage() -> Element {
     let stream_from_device = use_signal(|| settings.stream_from_device);
     let appearance = use_signal(|| settings.appearance);
     let platform_style = use_signal(|| settings.platform_style);
+    // A style or theme pick grows over the page in a circle from the click.
+    let mut origin = use_signal(|| None::<(f64, f64)>);
     let hide_watched = use_signal(|| settings.hide_watched);
     let auto_landscape = use_signal(|| settings.auto_landscape_fullscreen);
     let video_short_minutes = use_signal(|| (settings.video_short_max_seconds / 60).to_string());
@@ -321,28 +323,55 @@ pub fn SettingsPage() -> Element {
                     }
 
                     Card { title: "Appearance & feed",
-                        Stack { gap: Space::Md,
-                            SegmentGroup {
-                                value: platform_style,
-                                label: "Style",
-                                onchange: move |picked: PlatformStyle| app_state.settings.write().platform_style = picked,
-                                SegmentButton { value: PlatformStyle::Auto, "Auto" }
-                                SegmentButton { value: PlatformStyle::Ios, "iOS" }
-                                SegmentButton { value: PlatformStyle::Material, "Material" }
-                            }
-                            SegmentGroup {
-                                value: appearance,
-                                label: "Theme",
-                                onchange: move |picked: Appearance| app_state.settings.write().appearance = picked,
-                                SegmentButton { value: Appearance::Auto, "Auto" }
-                                SegmentButton { value: Appearance::Dark, "Dark" }
-                                SegmentButton { value: Appearance::Light, "Light" }
-                            }
-                            Toggle {
-                                checked: hide_watched,
-                                label: "Hide watched videos",
-                                helper: "Keep the feed focused on what is new",
-                                onchange: move |hidden| app_state.settings.write().hide_watched = hidden,
+                        div {
+                            onpointerdown: move |e| {
+                                let p = e.client_coordinates();
+                                origin.set(Some((p.x, p.y)));
+                            },
+                            Stack { gap: Space::Md,
+                                // `defer_selection`: the pick moves with the new look.
+                                SegmentGroup {
+                                    value: platform_style,
+                                    label: "Style",
+                                    defer_selection: true,
+                                    onchange: move |picked: PlatformStyle| {
+                                        spawn(async move {
+                                            let mut shown = platform_style;
+                                            g3_ui::reveal_theme(origin(), move || {
+                                                app_state.settings.write().platform_style = picked;
+                                                shown.set(picked);
+                                            })
+                                            .await;
+                                        });
+                                    },
+                                    SegmentButton { value: PlatformStyle::Auto, "Auto" }
+                                    SegmentButton { value: PlatformStyle::Ios, "iOS" }
+                                    SegmentButton { value: PlatformStyle::Material, "Material" }
+                                }
+                                SegmentGroup {
+                                    value: appearance,
+                                    label: "Theme",
+                                    defer_selection: true,
+                                    onchange: move |picked: Appearance| {
+                                        spawn(async move {
+                                            let mut shown = appearance;
+                                            g3_ui::reveal_theme(origin(), move || {
+                                                app_state.settings.write().appearance = picked;
+                                                shown.set(picked);
+                                            })
+                                            .await;
+                                        });
+                                    },
+                                    SegmentButton { value: Appearance::Auto, "Auto" }
+                                    SegmentButton { value: Appearance::Dark, "Dark" }
+                                    SegmentButton { value: Appearance::Light, "Light" }
+                                }
+                                Toggle {
+                                    checked: hide_watched,
+                                    label: "Hide watched videos",
+                                    helper: "Keep the feed focused on what is new",
+                                    onchange: move |hidden| app_state.settings.write().hide_watched = hidden,
+                                }
                             }
                         }
                     }
