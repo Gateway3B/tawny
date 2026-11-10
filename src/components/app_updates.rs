@@ -89,7 +89,8 @@ mod native {
                                     let started = match action {
                                         Action::Check => updater.start_check(),
                                         Action::Download => updater.start_download(),
-                                        Action::Install => updater.install(),
+                                        // A store page opens without a download first.
+                                        Action::Install | Action::OpenStore => updater.install(),
                                     };
                                     match started {
                                         Ok(()) => state.set(updater.state()),
@@ -101,7 +102,7 @@ mod native {
                         }
                     }
                     Text { variant: TextVariant::Caption,
-                        "Releases come from github.com/Gateway3B/tawny and are checked against Tawny's signing key before they install."
+                        "Releases come from github.com/g3techhq/releases and are checked against Tawny's signing key before they install."
                     }
                 }
             }
@@ -113,6 +114,7 @@ mod native {
         Check,
         Download,
         Install,
+        OpenStore,
     }
 
     impl Action {
@@ -120,6 +122,7 @@ mod native {
             match self {
                 Action::Check => "Check for updates",
                 Action::Download => "Download",
+                Action::OpenStore => "Open the store",
                 // Desktop closes and reopens; Android may show the system's own
                 // confirmation.
                 Action::Install => {
@@ -144,6 +147,10 @@ mod native {
             UpdaterState::UpToDate => (
                 "This is the latest version".to_string(),
                 Some(Action::Check),
+            ),
+            UpdaterState::Available(update) if update.store => (
+                format!("Version {} is in the store", update.version),
+                Some(Action::OpenStore),
             ),
             UpdaterState::Available(update) => (
                 format!("Version {} is available", update.version),
@@ -194,6 +201,7 @@ mod native {
                 current_version: "0.1.0".to_string(),
                 notes: None,
                 pub_date: None,
+                store: false,
             }
         }
 
@@ -204,6 +212,14 @@ mod native {
             let (text, action) = describe(&UpdaterState::Available(update()));
             assert_eq!(text, "Version 0.2.0 is available");
             assert_eq!(action, Some(Action::Download));
+            let store = Update {
+                store: true,
+                ..update()
+            };
+            assert_eq!(
+                describe(&UpdaterState::Available(store)).1,
+                Some(Action::OpenStore)
+            );
             let downloading = UpdaterState::Downloading {
                 update: update(),
                 progress: DownloadProgress {

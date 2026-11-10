@@ -1,12 +1,14 @@
 # Releases and app updates
 
-Tawny's Android and Windows apps update themselves from this repository's
-GitHub releases. Settings → App updates checks
-`https://github.com/Gateway3B/tawny/releases/latest/download/latest.json`,
+Tawny's Android and Windows apps update themselves from
+[g3techhq/releases](https://github.com/g3techhq/releases), the release
+repository every g3 app shares. Settings → App updates checks
+`https://raw.githubusercontent.com/g3techhq/releases/main/apps/tawny/latest.json`,
 downloads the build for the device, checks it against the release key
 compiled into the app, and installs it. The updater itself is
-g3-native-plugins' `updater` feature; its README ("App updates") covers what
-each platform does.
+g3-native-plugins' `updater` feature (and `updater-install` on Android, for
+installing an APK); its README ("App updates") covers what each platform
+does. The releases repository's README covers how any app joins.
 
 | Platform | Release file | Installs by |
 | --- | --- | --- |
@@ -28,41 +30,43 @@ iOS, macOS and Linux get no release yet, so Settings shows no updates there.
    ```
 
 3. **Release** (`.github/workflows/release.yml`) checks the tag matches
-   `Cargo.toml`, builds the APK and the Windows installer, signs both, and
-   publishes the release with its generated notes. The release is a draft
-   until `latest.json` is uploaded, so no app sees it half-made.
+   `Cargo.toml` and that the secrets are in place, builds the APK and the
+   Windows installer, and calls the shared publish workflow. That signs both,
+   publishes them as the release `tawny-v0.2.0` in g3techhq/releases, and
+   only then updates `apps/tawny/latest.json`, so no app sees a release
+   before its files are there.
 
 The release builds carry no `SERVER_URL`: one build for any server, set up on
 first launch (see [mobile.md](mobile.md#the-backend-address)).
 
 ## Keys and secrets
 
-Two keys, both stored only as repository secrets:
+All in this repository's secrets:
 
 | Secret | What it is | Why |
 | --- | --- | --- |
-| `TAWNY_UPDATER_KEY` | The release key's secret half, from `node scripts/release-signing.mjs keygen <folder>` | The app installs only files it signed. Its public half is `UPDATER_PUBLIC_KEY` in `src/updater.rs` |
+| `UPDATER_KEY` | Tawny's release key, the secret half (`~/.tawny-release/tawny-updater.key`) | The app installs only files it signed. Its public half is `UPDATER_PUBLIC_KEY` in `src/updater.rs` |
+| `RELEASES_TOKEN` | A fine-grained token with *Contents: read and write* on g3techhq/releases only | Publishing there from this repository |
 | `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | The APK signing key, as for [Build Mobile Artifacts](deployment.md#native-mobile-artifacts) | Android installs an update only when it is signed with the same key as the installed app |
 
-The workflow stops before building if `TAWNY_UPDATER_KEY` is missing or does
-not belong to the public key in `src/updater.rs`, and the Android job stops if
-the keystore is missing: an unsigned APK, or one signed with another key,
-could not update anyone.
+The workflow stops before building if a secret is missing or `UPDATER_KEY`
+does not belong to the public key in `src/updater.rs`: an app would refuse
+every file it signed.
 
-Losing either secret strands every install: an app keeps trusting the key it
-was built with. Keep an offline copy of both. To replace the release key,
-ship one release signed with the old key whose app carries the new public
-key, then switch the secret.
-
-`scripts/release-signing.mjs` writes keys and signatures in minisign's
-format, so `minisign -V -P <public key> -m <file>` checks a release file by
-hand. `scripts/release-manifest.mjs` writes `latest.json`.
+Losing `UPDATER_KEY` strands every install, since an app keeps trusting the
+key it was built with. Keep an offline copy. To replace it, ship one release
+signed with the old key whose app carries the new public key, then switch the
+secret. A new key comes from the releases repository:
+`node scripts/release-signing.mjs keygen <folder> tawny`.
 
 ## Installing for the first time
 
-- **Android**: download the APK from the release on the phone and open it.
-  Android asks to allow the browser or file manager to install apps. A phone
-  that has a Tawny signed with a different key (a debug build, say) must
-  uninstall it first.
+From the release's page in g3techhq/releases:
+
+- **Android**: download the APK on the phone and open it. Android asks to
+  allow the browser or file manager to install apps. A phone that has a
+  Tawny signed with a different key (a debug build, say) must uninstall it
+  first.
 - **Windows**: run the `-setup.exe`. It installs for the current user, under
-  `%LOCALAPPDATA%\Programs\Tawny`.
+  `%LOCALAPPDATA%\Programs\Tawny`. It is not code-signed, so SmartScreen
+  warns the first time.

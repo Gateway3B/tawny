@@ -1,10 +1,10 @@
 name: Release
 
 # Pushing a tag `vX.Y.Z` (matching Cargo.toml's version) builds the Android
-# APK and the Windows installer, signs both for the in-app updater, and
-# publishes them as a GitHub release with the `latest.json` the app checks
-# (https://github.com/Gateway3B/tawny/releases/latest/download/latest.json).
-# See docs/releases.md.
+# APK and the Windows installer, then hands them to g3techhq/releases' shared
+# publish workflow, which signs them for the in-app updater, publishes them
+# as the release `tawny-vX.Y.Z` there, and updates apps/tawny/latest.json,
+# the file installed apps check. See docs/releases.md.
 
 on:
   push:
@@ -47,18 +47,28 @@ jobs:
           }
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      # Fails before an hour of builds, not after, if the signing secret does
-      # not belong to the key compiled into the app.
-      - name: Match the signing key to the app
+      - name: Check out the release scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: g3techhq/releases
+          path: releases
+          persist-credentials: false
+
+      # Fails before an hour of builds, not after, if a secret is missing or
+      # the signing key does not belong to the one compiled into the app. The
+      # publish workflow checks again before it signs.
+      - name: Check the release secrets
         env:
-          TAWNY_UPDATER_KEY: ${{ secrets.TAWNY_UPDATER_KEY }}
+          UPDATER_KEY: ${{ secrets.UPDATER_KEY }}
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          : "${TAWNY_UPDATER_KEY:?Add the TAWNY_UPDATER_KEY repository secret (docs/releases.md)}"
-          key="$(node scripts/release-signing.mjs public-key | sed -n 2p)"
+          : "${UPDATER_KEY:?Add the UPDATER_KEY repository secret (docs/releases.md)}"
+          : "${RELEASES_TOKEN:?Add the RELEASES_TOKEN repository secret (docs/releases.md)}"
+          key="$(node releases/scripts/release-signing.mjs public-key | sed -n 2p)"
           grep -qF "$key" src/updater.rs || {
-            echo "TAWNY_UPDATER_KEY does not match UPDATER_PUBLIC_KEY in src/updater.rs" >&2
+            echo "UPDATER_KEY does not match UPDATER_PUBLIC_KEY in src/updater.rs" >&2
             exit 1
           }
 
@@ -219,61 +229,19 @@ jobs:
           retention-days: 3
 
   publish:
-    name: Publish the release
+    name: Publish
     needs: [prepare, android, windows]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Download the builds
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: release-*
-          path: release
-          merge-multiple: true
-
-      - name: Sign for the updater
-        env:
-          TAWNY_UPDATER_KEY: ${{ secrets.TAWNY_UPDATER_KEY }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          node scripts/release-signing.mjs sign release/*.apk release/*-setup.zip
-
-      # A draft first: `releases/latest` skips drafts, so no app sees the
-      # release until every file, latest.json last, is in place.
-      - name: Create the draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-          VERSION: ${{ needs.prepare.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
-            --title "Tawny $VERSION" --generate-notes \
-            release/*.apk release/*-setup.exe release/*-setup.zip
-
-      - name: Write and upload latest.json, then publish
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-          VERSION: ${{ needs.prepare.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > release/notes.md
-          apk="$(ls release/*.apk | head -n 1)"
-          update="$(ls release/*-setup.zip | head -n 1)"
-          node scripts/release-manifest.mjs --version "$VERSION" \
-            --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG" \
-            --notes-file release/notes.md --out release/latest.json \
-            "android=$apk" "windows-x86_64-nsis=$update"
-          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" release/latest.json
-          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+    uses: g3techhq/releases/.github/workflows/publish.yml@main
+    with:
+      app: tawny
+      version: ${{ needs.prepare.outputs.version }}
+      artifacts: release-*
+      files: |
+        android=Tawny_${{ needs.prepare.outputs.version }}.apk
+        windows-x86_64-nsis=Tawny_${{ needs.prepare.outputs.version }}_x64-setup.zip
+      attach: Tawny_${{ needs.prepare.outputs.version }}_x64-setup.exe
+      notes: "Tawny ${{ needs.prepare.outputs.version }}. Changes: https://github.com/Gateway3B/tawny/commits/${{ github.ref_name }}"
+      key_file: src/updater.rs
+    secrets:
+      updater_key: ${{ secrets.UPDATER_KEY }}
+      releases_token: ${{ secrets.RELEASES_TOKEN }}

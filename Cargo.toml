@@ -90,7 +90,8 @@ mobile = [
     "dep:dirs",
     "g3-auth/mobile",
     "g3-cache/mobile",
-    "g3-native-plugins/updater",
+    # Tawny is sideloaded on Android, so it installs its own APK updates.
+    "g3-native-plugins/updater-install",
     # The local relay that hands streams resolved on the phone to the player.
     "reqwest",
 ]

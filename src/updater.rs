@@ -1,9 +1,9 @@
 //! Where the native apps look for a newer Tawny, and the key a release must be
 //! signed with (g3-native-plugins' `updater`).
 //!
-//! Releases are GitHub releases of this repository, made by
-//! `.github/workflows/release.yml`; `releases/latest` always redirects to the
-//! newest one that is not a draft. See docs/releases.md.
+//! Releases are published to g3techhq/releases, the release repository every
+//! g3 app shares, by `.github/workflows/release.yml`. The app reads
+//! apps/tawny/latest.json there. See docs/releases.md.
 
 use g3_native_plugins::{Updater, UpdaterConfig};
 
@@ -15,7 +15,7 @@ RWSB9afB3GFi5g+d7vZFHPNSNFvkxLJWIpaSE23r74b8LTJimW/QqSnb
 ";
 
 pub const RELEASES: &str =
-    "https://github.com/Gateway3B/tawny/releases/latest/download/latest.json";
+    "https://raw.githubusercontent.com/g3techhq/releases/main/apps/tawny/latest.json";
 
 /// The builds a release carries: the Android APK and the Windows installer.
 /// Elsewhere there is nothing to update to, so Settings shows no updates.
@@ -47,6 +47,6 @@ mod tests {
         // inputs directly.
         let config = UpdaterConfig::new(UPDATER_PUBLIC_KEY, env!("CARGO_PKG_VERSION"));
         assert!(Updater::new().configure(config).is_ok());
-        assert!(RELEASES.starts_with("https://github.com/Gateway3B/tawny/releases/latest/"));
+        assert!(RELEASES.ends_with("/apps/tawny/latest.json"));
     }
 }
