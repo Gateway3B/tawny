@@ -1403,6 +1403,8 @@
     // first. The Play button is then exactly what the viewer needs.
     listen(video, "tawnyautoplayblocked", () => {
       setStarting(false);
+      setPlaybackIntent(false);
+      root.querySelector("[data-player-native-playback-stop]")?.click();
       updatePlaybackState();
     });
     listen(video, "ended", () => {

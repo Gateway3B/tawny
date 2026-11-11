@@ -47,8 +47,12 @@ player.rs ─ resolve_session (playback_resolver.rs)
   streams byte ranges through unbuffered. Each stream gets an unguessable path.
 - **Fallback.** Live streams, videos YouTube refuses these clients, a resolve
   slower than 45 seconds, or a missing V8 sandbox all fall back to the server.
-  The transport's session renewal (`refreshUrl`) always goes to the server, so
-  a device session that stops working mid-video recovers through it.
+  Native transport renewal uses the same authenticated Rust resolver as the
+  initial attachment, including a fresh on-device resolve when enabled. A
+  WebView fetch to the guarded server endpoint has no Rust session cookie and
+  returns 401; it cannot renew a native session. The eval channel stays with
+  the media element until it is replaced or detached, and credentials stay in
+  the native cookie jar.
 
 ## What it costs
 

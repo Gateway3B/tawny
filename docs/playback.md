@@ -154,3 +154,29 @@ The transport renews an expired playback session once, and a renewal that
 then plays for 30 seconds earns another. A single renewal per video ran out on
 long background listening, where proxy registrations expire after 90 minutes
 and a network drop also spends one.
+
+Every source reload checks whether the page is hidden, including recovery
+after a failed segment or session renewal. Adaptive playback reloads with
+audio alone while hidden, then restores the latest session's picture at the
+current position when the page becomes visible. Applying this only to the
+initial attachment let a network failure restart a hidden video track, which
+Chrome could suspend again. Renewal requests retry transient connection and
+server failures up to three times with backoff, retaining the old runtime
+until a replacement is ready. A renewal from a video that has since been
+closed or replaced cannot load or report a failure into the new player.
+
+Native builds renew over the player's eval channel through `resolve_session`,
+which uses the app's authenticated HTTP client and, on Android, its on-device
+resolver when enabled. Calling the guarded renewal URL with WebView `fetch`
+returned 401 because the session lives in Rust's cookie jar. That spent a full
+player retry for each interruption, rather than renewing the current stream.
+The channel closes when its media element is replaced or detached.
+
+Android's playback service holds a partial CPU wake lock and a Wi-Fi lock
+while playback is intended, including loading and buffering. The foreground
+service keeps the process eligible to run, but does not itself keep the CPU
+awake: if audio runs out during a network interruption, its own audio wake
+lock can disappear before the next segment arrives. Explicit Pause releases
+the playback locks immediately, independently of the twenty-minute service
+grace period. Closing the player, exhausting automatic recovery, or destroying
+the service releases them too. The screen remains free to turn off.

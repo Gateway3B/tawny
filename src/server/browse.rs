@@ -40,11 +40,15 @@ impl AppServerState {
         .await
         {
             Ok(Some(page)) => rusty_comments_page(&page),
-            _ => CommentsPage {
-                disabled: details.top_comments.ctoken.is_none(),
+            Ok(None) => CommentsPage {
+                disabled: true,
                 remote_available: true,
                 ..CommentsPage::default()
             },
+            Err(_) => {
+                crate::telemetry::diagnostic(crate::telemetry::Diagnostic::MetadataExtractFailed);
+                CommentsPage::default()
+            }
         };
         Ok(normalize_rusty_video_details(
             video_id,
@@ -121,6 +125,7 @@ impl AppServerState {
         // Direct extraction is the only remote source. When it fails, serve the
         // most recent cached payload, then fall back to whatever the library
         // already knows about the video.
+        crate::telemetry::diagnostic(crate::telemetry::Diagnostic::MetadataExtractFailed);
         if let Some(cached) = stale {
             return Ok(self.proxy_captions(cached).await);
         }
@@ -159,7 +164,12 @@ impl AppServerState {
         Ok(cached
             .into_iter()
             .next()
-            .and_then(|cached| serde_json::from_str(&cached.payload_json).ok()))
+            .and_then(|cached| serde_json::from_str::<VideoDetails>(&cached.payload_json).ok())
+            // A failed comments request must not be treated as a complete
+            // answer for two hours. Keep it only as a stale fallback.
+            .filter(|details| {
+                !fresh_only || (details.remote_available && details.comments.remote_available)
+            }))
     }
 
     pub(crate) async fn write_video_details_cache(&self, details: &VideoDetails) -> Result<()> {
@@ -743,5 +753,60 @@ impl AppServerState {
             remote_available: false,
             next_page: None,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn incomplete_video_details_remain_stale_until_comments_recover() {
+        let state = AppServerState::initialize().await.unwrap();
+        let mut details = VideoDetails {
+            video: crate::models::DemoLibrary::demo().videos[0].clone(),
+            channel: None,
+            description: String::new(),
+            like_count: 0,
+            dislike_count: 0,
+            captions: Vec::new(),
+            chapters: Vec::new(),
+            preview_frames: None,
+            related_videos: Vec::new(),
+            comments: CommentsPage::default(),
+            remote_available: false,
+        };
+        for remote_available in [false, true] {
+            details.remote_available = remote_available;
+            state.write_video_details_cache(&details).await.unwrap();
+            assert!(
+                state
+                    .read_video_details_cache(&details.video.id, true)
+                    .await
+                    .unwrap()
+                    .is_none(),
+                "an incomplete response would prevent the next request from retrying"
+            );
+            assert_eq!(
+                state
+                    .read_video_details_cache(&details.video.id, false)
+                    .await
+                    .unwrap(),
+                Some(details.clone()),
+                "partial metadata must remain available offline"
+            );
+        }
+
+        // Disabled comments are a successful response, not a retryable error.
+        details.comments.remote_available = true;
+        details.comments.disabled = true;
+        state.write_video_details_cache(&details).await.unwrap();
+        assert_eq!(
+            state
+                .read_video_details_cache(&details.video.id, true)
+                .await
+                .unwrap(),
+            Some(details)
+        );
     }
 }

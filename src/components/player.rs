@@ -4,9 +4,9 @@ use crate::{
     },
     app::Route,
     models::{
-        AudioTrackOption, CaptionTrack, PlaybackFailure, PlaybackFailureOrigin, PlaybackProtocol,
-        PlaybackSession, PlaybackSource, SponsorAction, SponsorBlockSettings, SponsorSegment,
-        Video, VideoChapter, VideoComment, VideoDetails, VideoPreviewFrames,
+        AudioTrackOption, CaptionTrack, CommentsPage, PlaybackFailure, PlaybackFailureOrigin,
+        PlaybackProtocol, PlaybackSession, PlaybackSource, SponsorAction, SponsorBlockSettings,
+        SponsorSegment, Video, VideoChapter, VideoComment, VideoDetails, VideoPreviewFrames,
     },
     playback_resolver::resolve_session,
     state::AppState,
@@ -401,6 +401,7 @@ fn attach_player_session(
     video_id: &str,
     player_key: &str,
     prefer_sabr: bool,
+    from_device: bool,
     audio_only: bool,
     preferred_audio_language: &str,
     resume_seconds: u64,
@@ -414,6 +415,7 @@ fn attach_player_session(
     let video_id = video_id.to_string();
     let player_key = player_key.to_string();
     let preferred_audio_language = preferred_audio_language.to_string();
+    let native_refresh = cfg!(any(feature = "mobile", feature = "desktop"));
     spawn(async move {
         let script = format!(
             r#"
@@ -428,14 +430,14 @@ fn attach_player_session(
             // watch-to-watch navigation can replace the element before this
             // script runs.  Never let an old resolver attach its stream to the
             // newly mounted element simply because they share an id.
-            if (!media || media.dataset.playerKey !== playerKey) {{ dioxus.send(false); return; }}
+            if (!media || media.dataset.playerKey !== playerKey) {{ dioxus.send('detached'); return; }}
             for (let attempt = 0; attempt < 100 && !window.TawnyTransport; attempt++) {{
                 await new Promise((resolve) => setTimeout(resolve, 25));
             }}
             if (!window.TawnyTransport) {{
                 window.__tawnyAttachEval = {{ phase: 'transport-missing', hasMedia: true }};
                 media.dispatchEvent(new Event('error'));
-                dioxus.send(false);
+                dioxus.send('detached');
                 return;
             }}
             try {{
@@ -457,6 +459,10 @@ fn attach_player_session(
                 }}
                 const serverBase = window.TawnyTransport.playbackServerBase({{ serverUrl }});
                 const refreshPath = `/api/v1/playback/${{encodeURIComponent(videoId)}}?prefer_sabr={prefer_sabr}&fresh=true`;
+                const refreshSession = {native_refresh}
+                    ? window.TawnyTransport.nativeSessionRefresher(media,
+                        (message) => dioxus.send(message), () => dioxus.recv())
+                    : null;
                 await window.TawnyTransport.attach(media, session, {{
                     playbackRate: {playback_rate},
                     videoId,
@@ -465,25 +471,49 @@ fn attach_player_session(
                     preferredAudioLanguage,
                     startTime: {resume_seconds},
                     refreshUrl: new URL(refreshPath, `${{serverBase}}/`).href,
+                    refreshSession,
                 }});
                 if (window.__tawnyActivePlayerMedia !== media || media.dataset.playerKey !== playerKey) {{
                     await Promise.resolve(window.TawnyTransport.detach?.(media)).catch(() => {{}});
                     media.pause();
-                    dioxus.send(false);
+                    dioxus.send('detached');
                     return;
                 }}
                 window.__tawnyAttachEval = {{ phase: 'attached', hasMedia: true }};
-                dioxus.send(true);
+                dioxus.send({native_refresh} ? 'attached' : 'detached');
+                // Finishing the eval closes Rust-to-JS replies. Keep its
+                // channel alive until this media element is detached.
+                if (refreshSession) await refreshSession.closed;
             }} catch (error) {{
                 window.__tawnyAttachEval = {{ phase: 'failed', hasMedia: true, error: String(error) }};
                 console.warn('Tawny transport exhausted its sources', error);
                 media.dispatchEvent(new Event('error'));
-                dioxus.send(false);
+                media.__tawnyDisposeRefreshBridge?.();
+                dioxus.send('detached');
             }}
             "#
         );
         let mut eval = document::eval(&script);
-        let _ = eval.recv::<bool>().await;
+        while let Ok(message) = eval.recv::<String>().await {
+            match message.as_str() {
+                "attached" => {}
+                "refresh" => {
+                    let resolved =
+                        resolve_session(video_id.clone(), prefer_sabr, true, from_device).await;
+                    let answer = match resolved {
+                        Ok(session) => serde_json::json!({ "session": session }),
+                        Err(error) => serde_json::json!({
+                            "error": error.to_string(),
+                            "retryable": error.retryable,
+                        }),
+                    };
+                    if eval.send(answer).is_err() {
+                        break;
+                    }
+                }
+                _ => break,
+            }
+        }
     });
 }
 
@@ -850,6 +880,32 @@ pub fn PersistentPlayer(expanded: ReadSignal<bool>) -> Element {
         (resolve_failed_for_now || playback_failed()).then_some(attempts)
     });
 
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let mut plugins = use_context::<g3_native_plugins::NativePlugins>();
+        use_effect(move || {
+            if auto_retry_attempt().is_some() {
+                return;
+            }
+            let failed = playback_failed()
+                || playback_resource
+                    .read()
+                    .as_ref()
+                    .and_then(|value| value.as_ref())
+                    .is_some_and(|(id, result)| {
+                        playing_id().as_ref() == Some(id) && result.is_err()
+                    });
+            // Keep buffering and automatic recovery alive, but a final failure
+            // must release Android's playback locks while the error is shown.
+            if failed {
+                let _ = plugins
+                    .media
+                    .write()
+                    .set_playback_active(false, String::new());
+            }
+        });
+    }
+
     use_effect(move || {
         let Some(attempt) = auto_retry_attempt() else {
             return;
@@ -1104,6 +1160,7 @@ pub fn PersistentPlayer(expanded: ReadSignal<bool>) -> Element {
     // Per-video preference, read here so a change re-attaches the transport with
     // (or without) the video stream rather than only hiding the picture.
     let attach_audio_only = video.audio_only;
+    let attach_from_device = from_device && !video.is_live;
     // Resume where this video was left, unless it already ran to the end - then
     // starting over is what replaying it means.
     let attach_resume_seconds = video.resume_seconds();
@@ -1158,6 +1215,7 @@ pub fn PersistentPlayer(expanded: ReadSignal<bool>) -> Element {
                                     &attach_video_id,
                                     &player_key,
                                     prefer_sabr,
+                                    attach_from_device,
                                     attach_audio_only,
                                     &preferred_audio_language,
                                     attach_resume_seconds,
@@ -1751,7 +1809,7 @@ fn VideoDetailInner(id: String) -> Element {
         });
     });
 
-    let mut details_cached = use_signal(|| false);
+    let mut comments_seed = use_signal(|| None::<CommentsPage>);
     // Keyed by video rather than a flag: this page is the only place history is
     // recorded, so it must still record when it is reused for another video.
     let mut history_recorded_for = use_signal(|| None::<String>);
@@ -1786,6 +1844,40 @@ fn VideoDetailInner(id: String) -> Element {
     // Cached per video, so reopening one (or opening it offline) shows its
     // details at once while they refresh behind it.
     let details_resource = use_cached(get_video_details, (id.clone(),));
+    let mut details_retries = use_signal(|| 0usize);
+    let details_need_retry = use_memo(move || {
+        details_resource.read().as_ref().is_some_and(|answer| {
+            !answer
+                .as_ref()
+                .is_ok_and(|details| details.remote_available && details.comments.remote_available)
+        })
+    });
+    use_effect(move || {
+        let attempt = details_retries();
+        if !details_need_retry() || details_resource.pending() || attempt >= 2 {
+            return;
+        }
+        spawn(async move {
+            let mut eval = document::eval(&format!(
+                "await new Promise(resolve => setTimeout(resolve, {})); dioxus.send(true);",
+                AUTO_RETRY_DELAYS_MS[attempt]
+            ));
+            if eval.recv::<bool>().await.is_ok()
+                && *details_retries.peek() == attempt
+                && *details_need_retry.peek()
+                && !details_resource.pending()
+            {
+                details_retries.set(attempt + 1);
+                details_resource.refresh();
+            }
+        });
+    });
+    let retry_details = use_callback(move |_: ()| {
+        // Supersede any delayed automatic retry without discarding the last
+        // details or the comment pages already on screen.
+        details_retries.set(2);
+        details_resource.refresh();
+    });
     // What a card handed over when it was tapped (see `AppState::play`), so
     // the page has something to show before the details arrive. A peek: the
     // playing copy changes every second of playback.
@@ -1824,7 +1916,7 @@ fn VideoDetailInner(id: String) -> Element {
             .cloned()
     };
     use_effect(move || {
-        if !transition_settled() || details_cached() {
+        if !transition_settled() {
             return;
         }
         let details = details_resource
@@ -1832,11 +1924,16 @@ fn VideoDetailInner(id: String) -> Element {
             .as_ref()
             .and_then(|result| result.as_ref().ok())
             .cloned();
-        if let Some(details) = details.as_ref() {
+        if let Some(details) = details.as_ref()
+            && comments_seed.peek().as_ref() != Some(&details.comments)
+        {
+            // A cached fallback can arrive before the refreshed answer. Seed
+            // again when that answer changes, preserving extra pages when it
+            // does not.
             comments.set(details.comments.comments.clone());
             comments_next_page.set(details.comments.next_page.clone());
             comments_initialized.set(true);
-            details_cached.set(true);
+            comments_seed.set(Some(details.comments.clone()));
         }
     });
 
@@ -1907,6 +2004,13 @@ fn VideoDetailInner(id: String) -> Element {
                     EmptyState {
                         title: "Video unavailable",
                         color: Color::Danger,
+                        action: rsx! {
+                            Button {
+                                loading: details_resource.pending(),
+                                onclick: move |_| retry_details.call(()),
+                                "Try again"
+                            }
+                        },
                         "This video could not be loaded from YouTube or the server's cache."
                     }
                 } else {
@@ -1945,6 +2049,8 @@ fn VideoDetailInner(id: String) -> Element {
         details.comments.comments.len()
     };
     let details_remote_available = details.remote_available;
+    let details_loading =
+        details_resource.pending() || (details_need_retry() && details_retries() < 2);
 
     rsx! {
         // The sheet itself: this is what slides up over the shell and back
@@ -2090,7 +2196,7 @@ fn VideoDetailInner(id: String) -> Element {
                     }
                 }
 
-                if details.description.is_empty() && !details_remote_available {
+                if details.description.is_empty() && !details_remote_available && details_loading {
                     Card { title: "Description",
                         Stack { gap: Space::Sm,
                             // Four lines: the same as the clamp the real
@@ -2102,6 +2208,19 @@ fn VideoDetailInner(id: String) -> Element {
                             // The 'Show more' button below the text is part of
                             // the height being held.
                             Skeleton { class: "h-8 mt-1", width: "5.5rem" }
+                        }
+                    }
+                }
+                if details.description.is_empty() && !details_remote_available && !details_loading {
+                    Card { title: "Description unavailable",
+                        Text { tone: TextTone::Secondary,
+                            "YouTube details could not be loaded."
+                        }
+                        Button {
+                            fill: ButtonFill::Clear,
+                            size: ButtonSize::Sm,
+                            onclick: move |_| retry_details.call(()),
+                            "Try again"
                         }
                     }
                 }
@@ -2191,14 +2310,22 @@ fn VideoDetailInner(id: String) -> Element {
             // Same as the chapter list, and the heaviest of the two: twenty
             // cards, each with an avatar, built while the player is trying to
             // grow.
-            if !transition_settled() {
+            if !transition_settled() || (comments.read().is_empty() && details_loading) {
                 Spinner { center: true }
             } else if comments().is_empty() {
-                EmptyState {
-                    title: "No comments",
-                    if comments_initialized() && !details.comments.remote_available {
-                        "Comments need a connected video source."
-                    } else {
+                if !details.comments.remote_available {
+                    EmptyState {
+                        title: "Comments unavailable",
+                        action: rsx! {
+                            Button {
+                                onclick: move |_| retry_details.call(()),
+                                "Try again"
+                            }
+                        },
+                        "Comments could not be loaded from YouTube."
+                    }
+                } else {
+                    EmptyState { title: "No comments",
                         "No comments are available."
                     }
                 }

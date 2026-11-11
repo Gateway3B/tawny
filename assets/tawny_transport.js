@@ -537,7 +537,51 @@
   }
 
   function canRefresh(options) {
-    return options.refreshUrl && (options.refreshAttempts || 0) < 1;
+    return (options.refreshSession || options.refreshUrl) && (options.refreshAttempts || 0) < 1;
+  }
+
+  // Native sessions live in Rust's cookie jar, outside the WebView. Keep its
+  // authenticated resolver on the eval channel for this media element's life.
+  function nativeSessionRefresher(video, send, receive) {
+    video.__tawnyDisposeRefreshBridge?.();
+    let disposed = false;
+    let pending = 0;
+    let finish;
+    const closed = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      video.removeEventListener("tawnytransportdetach", dispose);
+      if (video.__tawnyDisposeRefreshBridge === dispose) video.__tawnyDisposeRefreshBridge = null;
+      send("detached");
+      if (pending === 0) finish();
+    };
+    video.addEventListener("tawnytransportdetach", dispose, { once: true });
+    video.__tawnyDisposeRefreshBridge = dispose;
+    const refresh = async () => {
+      if (disposed) throw new Error("Playback changed");
+      pending += 1;
+      try {
+        send("refresh");
+        const answer = await receive();
+        if (disposed) throw new Error("Playback changed");
+        if (answer.error) {
+          const error = new Error(answer.error);
+          error.retryable = answer.retryable;
+          throw error;
+        }
+        return answer.session;
+      } finally {
+        pending -= 1;
+        // Rust may still be resolving when the player closes. Keep its reply
+        // channel alive until that answer is consumed, then release the eval.
+        if (disposed && pending === 0) finish();
+      }
+    };
+    refresh.closed = closed;
+    return refresh;
   }
 
   // How far a renewed session has to play before it may be renewed again.
@@ -559,17 +603,47 @@
       phase: "refreshing-session",
       position,
     });
-    const response = await fetch(options.refreshUrl, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`Playback refresh failed with HTTP ${response.status}`);
+    // A connection handoff can break both the segment and the renewal request.
+    // Keep the current runtime until a replacement arrives, and give transient
+    // failures time to clear instead of immediately exhausting playback.
+    let refreshedSession;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (video.__tawnyGeneration !== generation) throw new Error("Playback changed");
+      let response;
+      try {
+        if (options.refreshSession) {
+          refreshedSession = await options.refreshSession();
+          break;
+        }
+        response = await fetch(options.refreshUrl, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(45_000),
+        });
+        if (response.ok) {
+          refreshedSession = await response.json();
+          break;
+        }
+      } catch (error) {
+        if (attempt === 2 || error.retryable === false) throw error;
+        response = null;
+      }
+      if (response && ![408, 429].includes(response.status) && response.status < 500) {
+        throw new Error(`Playback refresh failed with HTTP ${response.status}`);
+      }
+      if (attempt === 2) {
+        throw new Error(`Playback refresh failed with HTTP ${response.status}`);
+      }
+      if (video.__tawnyGeneration !== generation) throw new Error("Playback changed");
+      recordTransportEvent({ phase: "retrying-session", attempt: attempt + 1, position });
+      await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
     }
-    const refreshedSession = await response.json();
+    const resumeTime = Math.max(position, playbackPosition(video));
     return loadSources(
       video,
       refreshedSession,
       {
         ...options,
-        startTime: position,
+        startTime: resumeTime,
         refreshAttempts: (options.refreshAttempts || 0) + 1,
       },
       generation,
@@ -578,7 +652,11 @@
   }
 
   async function loadSources(video, session, options, generation, startIndex) {
+    if (video.__tawnyGeneration !== generation) throw new Error("Playback changed");
     session = normalizePlaybackSession(session, options);
+    cancelRestoreWhenVisible(video);
+    const hiddenStart = startsHidden(options);
+    if (hiddenStart) restoreVideoWhenVisible(video, session, options, generation);
     const sources = [session.primary, ...(session.alternatives || [])].filter(
       (source) => source && source.protocol !== "EmbedFallback",
     );
@@ -589,6 +667,7 @@
     for (let index = startIndex; index < sources.length; index += 1) {
       if (video.__tawnyGeneration !== generation) throw new Error("Playback changed");
       await destroyRuntime(video);
+      if (video.__tawnyGeneration !== generation) throw new Error("Playback changed");
       const source = sources[index];
       recordTransportEvent({
         phase: "loading",
@@ -615,7 +694,10 @@
         capture: true,
       });
       try {
-        await loadOne(video, source, runtime, recoveryOptions);
+        await loadOne(video, source, runtime, {
+          ...recoveryOptions,
+          audioOnly: Boolean(options.audioOnly || hiddenStart),
+        });
         video.removeEventListener("error", runtime.errorHandler, true);
         video.playbackRate = options.playbackRate || 1;
         video.defaultPlaybackRate = options.playbackRate || 1;
@@ -668,6 +750,7 @@
             ? refreshPlaybackSession(video, nextOptions, generation, position)
             : loadSources(video, session, nextOptions, generation, index + 1);
           recovery.catch((error) => {
+            if (video.__tawnyGeneration !== generation) return;
             emit(video, "tawnytransporterror", { message: String(error) });
             video.dispatchEvent(new CustomEvent("tawnytransportexhausted"));
             video.dispatchEvent(new Event("error"));
@@ -754,16 +837,13 @@
       generation,
       position: attachOptions.startTime,
     });
-    if (startsHidden(attachOptions)) {
-      restoreVideoWhenVisible(video, session, attachOptions, generation);
-      return loadSources(video, session, { ...attachOptions, audioOnly: true }, generation, 0);
-    }
     return loadSources(video, session, attachOptions, generation, 0);
   }
 
   async function detach(video) {
     if (!video) return;
     video.__tawnyGeneration = nextGeneration++;
+    video.__tawnyDisposeRefreshBridge?.();
     cancelRestoreWhenVisible(video);
     await destroyRuntime(video);
   }
@@ -962,6 +1042,7 @@
     events: transportEvents,
     normalizePlaybackSession,
     normalizePlaybackUrl,
+    nativeSessionRefresher,
     playbackServerBase,
     qualityState,
     restoresRefresh,

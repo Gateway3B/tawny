@@ -49,4 +49,33 @@ test("player controls update without replacing media when minimized and reopened
     await original.evaluate((video) => video === document.querySelector("#tawny-player-media")),
   ).toBe(true);
   await expect(appPage.getByRole("group", { name: "Video controls", exact: true })).toHaveCount(1);
+
+  await appPage.evaluate(() => {
+    window.nativeFullscreenChanges = [];
+    for (const [action, value] of [
+      ["hide", true],
+      ["show", false],
+    ]) {
+      document
+        .querySelector(`[data-player-native-system-bars-${action}]`)
+        .addEventListener("click", () => {
+          window.nativeFullscreenChanges.push(value);
+        });
+    }
+  });
+  await appPage.locator("#tawny-player").focus();
+  await appPage.keyboard.press("f");
+  await expect
+    .poll(() => appPage.evaluate(() => document.fullscreenElement?.id))
+    .toBe("tawny-player");
+  await appPage.keyboard.press("Escape");
+  await expect.poll(() => appPage.evaluate(() => document.fullscreenElement)).toBeNull();
+  await expect
+    .poll(() => appPage.evaluate(() => window.nativeFullscreenChanges))
+    .toEqual([true, false]);
+
+  await appPage.evaluate(() => {
+    document.querySelector("#tawny-player-media").dispatchEvent(new Event("tawnyautoplayblocked"));
+  });
+  expect(await media.evaluate((video) => video.__tawnyPlaybackIntent)).toBe(false);
 });
