@@ -34,6 +34,7 @@
       if (
         changed &&
         previous.width === grid.clientWidth &&
+        !grid.closest(".g3-content-scroll[data-scroll-preserving]") &&
         !reducedMotion.matches &&
         !document.documentElement.dataset.routeTransition
       ) {

@@ -5,6 +5,12 @@
 @source not "./.tawny-data";
 @source not "./rustypipe_reports";
 
+/* ScrollMemory owns the card anchor. Browser anchoring would apply a second,
+   independent correction when refreshed videos arrive above it. */
+.tawny-shell .g3-content-scroll {
+  overflow-anchor: none;
+}
+
 :root {
   --tawny-amber: #f5a524;
   --tawny-amber-soft: rgba(245, 165, 36, 0.14);

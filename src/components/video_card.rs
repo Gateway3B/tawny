@@ -47,10 +47,11 @@ pub fn VideoGrid(
     empty_message: Option<String>,
     playlist_id: Option<String>,
     shorts_layout: Option<bool>,
+    #[props(default)] in_grid: bool,
 ) -> Element {
     let shorts = shorts_layout.unwrap_or(false);
     let empty_copy =
-        empty_message.unwrap_or_else(|| "Your cached library will appear here.".to_string());
+        empty_message.unwrap_or_else(|| "Your saved videos will appear here.".to_string());
     // A page slides in only once it has rendered, and a card is the costliest
     // thing on any page, so a grid draws its first screenful and the rest
     // follows once the slide has finished. That puts every list-bearing page's
@@ -72,23 +73,34 @@ pub fn VideoGrid(
     super::use_duration_hydration(candidates);
     let videos = videos.read();
 
-    rsx! {
-        if videos.is_empty() {
-            EmptyState {
-                title: "Nothing here yet",
-                icon: rsx! { VideoIcon { size: 40 } },
-                "{empty_copy}"
-            }
-        } else {
-            // Shorts are portrait, so more of them fit across.
-            Grid {
-                class: "video-grid relative content-start",
-                columns: GridColumns::Fit(if shorts { 10.0 } else { 18.0 }),
-                gap: Space::Lg,
-                for video in videos.iter().take(limit) {
-                    VideoCard { key: "{video.id}", video: video.clone(), playlist_id: playlist_id.clone(), short: shorts }
+    let cards = rsx! {
+        for video in videos.iter().take(limit) {
+            VideoCard { key: "{video.id}", video: video.clone(), playlist_id: playlist_id.clone(), short: shorts }
+        }
+    };
+
+    if videos.is_empty() {
+        return rsx! {
+            div { class: "col-span-full",
+                EmptyState {
+                    title: "Nothing here yet",
+                    icon: rsx! { VideoIcon { size: 40 } },
+                    "{empty_copy}"
                 }
             }
+        };
+    }
+    if in_grid {
+        return cards;
+    }
+
+    rsx! {
+        // Shorts are portrait, so more of them fit across.
+        Grid {
+            class: "video-grid relative content-start",
+            columns: GridColumns::Fit(if shorts { 10.0 } else { 18.0 }),
+            gap: Space::Lg,
+            {cards}
         }
     }
 }
@@ -96,20 +108,31 @@ pub fn VideoGrid(
 /// Where a [`VideoGrid`] will be, laid out the same way, while the page works
 /// out what goes in it.
 #[component]
-pub fn VideoGridSkeleton(count: usize, shorts_layout: Option<bool>) -> Element {
+pub fn VideoGridSkeleton(
+    count: usize,
+    shorts_layout: Option<bool>,
+    #[props(default)] in_grid: bool,
+) -> Element {
     let shorts = shorts_layout.unwrap_or(false);
+
+    let placeholders = rsx! {
+        for index in 0..count {
+            div { key: "{index}", class: "flex flex-col gap-2",
+                Skeleton { shape: SkeletonShape::Block, class: if shorts { "aspect-[9/16] rounded-lg" } else { "aspect-video rounded-lg" } }
+                Skeleton { width: "85%" }
+                Skeleton { width: "50%" }
+            }
+        }
+    };
+    if in_grid {
+        return placeholders;
+    }
 
     rsx! {
         Grid {
             columns: GridColumns::Fit(if shorts { 10.0 } else { 18.0 }),
             gap: Space::Lg,
-            for index in 0..count {
-                div { key: "{index}", class: "flex flex-col gap-2",
-                    Skeleton { shape: SkeletonShape::Block, class: if shorts { "aspect-[9/16] rounded-lg" } else { "aspect-video rounded-lg" } }
-                    Skeleton { width: "85%" }
-                    Skeleton { width: "50%" }
-                }
-            }
+            {placeholders}
         }
     }
 }

@@ -233,6 +233,9 @@
   .col-span-2 {
     grid-column: span 2 / span 2;
   }
+  .col-span-full {
+    grid-column: 1 / -1;
+  }
   .row-span-2 {
     grid-row: span 2 / span 2;
   }
@@ -504,6 +507,9 @@
       font-size: 0.95rem;
     }
   }
+}
+.tawny-shell .g3-content-scroll {
+  overflow-anchor: none;
 }
 :root {
   --tawny-amber: #f5a524;

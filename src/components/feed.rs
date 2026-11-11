@@ -6,8 +6,8 @@ use crate::{
 use dioxus::prelude::*;
 use g3_cache::{invalidate_cached, use_cached};
 use g3_ui::{
-    Chip, Color, Content, Divider, DividerOrientation, InfiniteScroll, SegmentButton, SegmentGroup,
-    Shelf, ShellSize, Space, Stack, Text, TextTone,
+    Chip, Color, Content, Divider, DividerOrientation, Grid, GridColumns, InfiniteScroll,
+    SegmentButton, SegmentGroup, Shelf, ShellSize, Space, Stack, Text, TextTone,
 };
 
 use super::{PageHeader, VideoGrid, VideoGridSkeleton, use_duration_hydration};
@@ -62,22 +62,25 @@ pub fn Feed() -> Element {
     });
 
     let mut refresh = move || {
+        if *app_state.syncing.peek() {
+            return;
+        }
         app_state.syncing.set(true);
-        spawn(async move {
+        // A refresh belongs to the library, not this route. Leaving Feed must
+        // not cancel the request and strand its shared busy flag forever.
+        dioxus::core::spawn_forever(async move {
             match refresh_subscription_feed().await {
                 Ok(refresh) => {
                     invalidate_cached(get_feed_page);
                     let message = if refresh.imported == 0 {
                         "No new videos".to_string()
-                    } else if refresh.failed_channels == 0 {
-                        format!("Feed refreshed from {}", refresh.sources.join(" + "))
                     } else {
-                        "Feed refreshed".to_string()
+                        "New videos added".to_string()
                     };
                     app_state.show_toast(message, Color::Success);
                 }
                 Err(_) => {
-                    app_state.show_toast("Offline — showing your cached feed", Color::Warning)
+                    app_state.show_toast("You're offline. Showing your saved feed.", Color::Warning)
                 }
             }
             app_state.syncing.set(false);
@@ -168,14 +171,22 @@ pub fn Feed() -> Element {
                     }
                 }
 
-                for page in 0..page_count {
-                    FeedPageView {
-                        key: "{page}",
-                        query,
-                        page,
-                        last: page + 1 == page_count,
-                        has_more,
-                        empty_message: "Try another filter, or find channels to follow in Search.".to_string(),
+                // Keep independent cached reads, but share the layout: 24
+                // cards leave a hole when each page starts a five-column grid.
+                Grid {
+                    class: "video-grid relative content-start",
+                    columns: GridColumns::Fit(18.0),
+                    gap: Space::Lg,
+                    for page in 0..page_count {
+                        FeedPageView {
+                            key: "{page}",
+                            query,
+                            page,
+                            last: page + 1 == page_count,
+                            has_more,
+                            in_grid: true,
+                            empty_message: "Try another filter, or find channels to follow in Search.".to_string(),
+                        }
                     }
                 }
 
@@ -200,6 +211,7 @@ pub(super) fn FeedPageView(
     last: ReadSignal<bool>,
     has_more: Signal<bool>,
     empty_message: String,
+    #[props(default)] in_grid: bool,
 ) -> Element {
     let feed = use_cached(get_feed_page, (query(), page));
     // Copied out when the page's answer changes, not on every render.
@@ -223,11 +235,12 @@ pub(super) fn FeedPageView(
     });
 
     match &*feed.read() {
-        None => rsx! { VideoGridSkeleton { count: if page == 0 { 8 } else { 4 } } },
+        None => rsx! { VideoGridSkeleton { count: if page == 0 { 8 } else { 4 }, in_grid } },
         Some(Err(_)) if page == 0 => rsx! {
             VideoGrid {
                 videos: Vec::new(),
                 empty_message: "Could not load your feed. Pull down to try again.".to_string(),
+                in_grid,
             }
         },
         Some(Err(_)) => rsx! {},
@@ -235,10 +248,10 @@ pub(super) fn FeedPageView(
             let without = found.without_duration;
             rsx! {
                 if without > 0 {
-                    Text { tone: TextTone::Secondary,
-                        "{without} more "
-                        if without == 1 { "video has" } else { "videos have" }
-                        " no length yet, so a duration filter cannot speak for them. Visible cards are being filled in now."
+                    div { class: "col-span-full",
+                        Text { tone: TextTone::Secondary,
+                            "Some video lengths are still loading. Those videos will appear once their lengths are known."
+                        }
                     }
                 }
                 // "Nothing here yet" speaks for the whole feed, so only a first
@@ -246,7 +259,7 @@ pub(super) fn FeedPageView(
                 // first page can show its cached answer from before any follows
                 // while the second has already loaded videos.
                 if !found.videos.is_empty() || (page == 0 && last()) {
-                    VideoGrid { videos, empty_message: empty_message.clone() }
+                    VideoGrid { videos, empty_message: empty_message.clone(), in_grid }
                 }
             }
         }
