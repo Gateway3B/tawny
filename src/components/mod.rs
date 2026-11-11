@@ -16,6 +16,8 @@ mod library;
 
 mod linkify;
 
+mod mouse_navigation;
+
 mod overlays;
 
 mod player;

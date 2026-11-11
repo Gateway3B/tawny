@@ -53,6 +53,9 @@ catch-all redirect sends an unknown path to the feed.
   `BackButton`, which pops and falls back to the page's `back_to` route for a
   deep link with no history.
 - Build `Route` variants; never parse a path string back into one.
+- The shell bridges mouse Back/Forward buttons and browser-navigation keys to
+  router history. Native WebViews have a separate document history, so their
+  default mouse traversal cannot navigate Tawny's pages.
 - Per-screen filters that should survive leaving the screen live in
   `AppState` (`feed_filter`, `explore_filter`, `channel_tab`); ones that belong
   to one visit are local signals. Opening a sheet over a page and closing it

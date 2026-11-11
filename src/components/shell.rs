@@ -452,6 +452,7 @@ pub fn AppShell() -> Element {
 
 #[component]
 fn ShellContent() -> Element {
+    super::mouse_navigation::use_mouse_navigation::<Route>();
     let route: Route = use_route();
     let mut app_state = use_context::<AppState>();
 
