@@ -145,9 +145,21 @@ fn main() {
     updater::configure();
 
     #[cfg(any(feature = "desktop", feature = "mobile"))]
-    dioxus::LaunchBuilder::new()
-        .with_cfg(NativeConfig::new().with_custom_head(app::native_head()))
-        .launch(App);
+    let config = NativeConfig::new().with_custom_head(app::native_head());
+
+    // The window needs its own icon, including when run without dx's packager.
+    // Embedding the ICO also makes Cargo relink when its Windows resource changes.
+    #[cfg(all(feature = "desktop", not(feature = "mobile")))]
+    let config = config.with_icon(
+        dioxus::desktop::icon_from_memory(include_bytes!("../assets/icon/icon.ico"))
+            .expect("the bundled Tawny icon is valid"),
+    );
+
+    #[cfg(all(feature = "desktop", not(feature = "mobile"), target_os = "windows"))]
+    let config = config.with_menu(None);
+
+    #[cfg(any(feature = "desktop", feature = "mobile"))]
+    dioxus::LaunchBuilder::new().with_cfg(config).launch(App);
 
     #[cfg(not(any(feature = "desktop", feature = "mobile")))]
     dioxus::launch(App);

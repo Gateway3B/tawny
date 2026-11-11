@@ -1312,6 +1312,11 @@
         closeOptions();
         return;
       }
+      if (key === "escape" && fullscreenElement()) {
+        event.preventDefault();
+        Promise.resolve(toggleFullscreen(root)).catch(() => {});
+        return;
+      }
       const handled = [" ", "k", "j", "l", "arrowleft", "arrowright", "m", "f", "c"];
       if (!handled.includes(key)) return;
       event.preventDefault();

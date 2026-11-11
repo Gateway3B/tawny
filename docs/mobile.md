@@ -71,6 +71,15 @@ Native builds initialize the cookie runtime before launch
 
 ## Builds
 
+Windows embeds `assets/icon/icon.ico` in the executable and installer. Regenerate
+its sizes from the shared SVG with `node scripts/windows-icon.mjs` after changing
+the artwork. The desktop crop enlarges the owl by removing the mobile adaptive
+icon's safe-zone padding. A bundle containing only the SVG falls back to
+Dioxus's icon on Windows.
+
+Desktop player fullscreen also expands the native window to the monitor's
+bounds. Exiting fullscreen or removing the player restores the previous window.
+
 **Build Mobile** (`.github/workflows/build-mobile.yml`) produces the Android
 and iOS artifacts; see [deployment.md](deployment.md#native-mobile-artifacts).
 

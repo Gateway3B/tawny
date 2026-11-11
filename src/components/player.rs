@@ -28,6 +28,8 @@ use g3_ui::{
 };
 
 mod controls;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod fullscreen;
 
 use super::{DownloadButton, VideoGrid, linkify::Linkified};
 use controls::PlayerControls;
@@ -206,7 +208,7 @@ fn NativePlayerBridges(title: String) -> Element {
 fn NativePlayerBridges(title: String) -> Element {
     let _ = title;
 
-    rsx! {}
+    rsx! { fullscreen::NativeFullscreenBridge {} }
 }
 
 /// Pull the transport's own account of why playback stopped.
