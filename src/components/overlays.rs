@@ -37,12 +37,6 @@ pub fn AppOverlays() -> Element {
     let mut new_group_name = use_signal(String::new);
     let mut new_group_channel = use_signal(|| None::<GroupPickerChannel>);
 
-    #[cfg(any(
-        target_arch = "wasm32",
-        target_os = "android",
-        target_os = "ios",
-        target_os = "macos"
-    ))]
     let mut plugins = use_context::<g3_native_plugins::NativePlugins>();
     let target = app_state.playlist_picker_video();
     let action_target = (app_state.video_actions_video)();
@@ -418,20 +412,25 @@ pub fn AppOverlays() -> Element {
                     start: rsx! { Share2 { size: 17 } },
                     onclick: move |_| {
                         let link = share_action_url.clone();
-                        let text = share_text_target
-                            .as_ref()
-                            .map(|video| format!("{}\n{}", video.title, link))
-                            .unwrap_or(link);
-                        cfg_if::cfg_if! {
-                            if #[cfg(any(target_arch = "wasm32", target_os = "android", target_os = "ios", target_os = "macos"))] {
-                                if let Err(error) = plugins.clipboard.write().share(text) {
-                                    app_state.show_toast(error, Color::Warning);
-                                }
-                            } else {
-                                let _ = text;
-                                app_state.show_toast("Sharing is not available on this platform", Color::Warning);
+                        let mut clipboard = plugins.clipboard.write();
+                        // macOS, Linux and browsers without Web Share have no
+                        // sheet, and the plugin would copy the title and link
+                        // without a word. Copy the link alone, and say so.
+                        if clipboard.has_share_sheet() {
+                            let text = share_text_target
+                                .as_ref()
+                                .map(|video| format!("{}\n{}", video.title, link))
+                                .unwrap_or(link);
+                            if let Err(error) = clipboard.share(text) {
+                                app_state.show_toast(error, Color::Warning);
+                            }
+                        } else {
+                            match clipboard.copy_to_clipboard(link) {
+                                Ok(()) => app_state.show_toast("Link copied", Color::Success),
+                                Err(error) => app_state.show_toast(error, Color::Warning),
                             }
                         }
+                        drop(clipboard);
                         app_state.share_open.set(false);
                     },
                     "Share"
@@ -457,16 +456,9 @@ pub fn AppOverlays() -> Element {
                     start: rsx! { Copy { size: 17 } },
                     onclick: move |_| {
                         let link = copy_action_url.clone();
-                        cfg_if::cfg_if! {
-                            if #[cfg(any(target_arch = "wasm32", target_os = "android", target_os = "ios", target_os = "macos"))] {
-                                match plugins.clipboard.write().copy_to_clipboard(link) {
-                                    Ok(()) => app_state.show_toast("Link copied", Color::Success),
-                                    Err(error) => app_state.show_toast(error, Color::Warning),
-                                }
-                            } else {
-                                let _ = link;
-                                app_state.show_toast("Copy is not available on this platform", Color::Warning);
-                            }
+                        match plugins.clipboard.write().copy_to_clipboard(link) {
+                            Ok(()) => app_state.show_toast("Link copied", Color::Success),
+                            Err(error) => app_state.show_toast(error, Color::Warning),
                         }
                     },
                     "Copy link"
