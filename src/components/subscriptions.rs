@@ -57,11 +57,7 @@ pub fn ChannelCard(channel: Channel) -> Element {
                     "aria-pressed": if is_subscribed { "true" } else { "false" },
                     start: is_subscribed.then(|| rsx! { Check { size: 15 } }),
                     onclick: move |_| {
-                        let now_subscribed = app_state.toggle_subscription_for(&toggle_channel);
-                        {
-                            let message = if now_subscribed { "Subscribed" } else { "Unsubscribed" };
-                            app_state.show_toast(message, Color::Neutral);
-                        }
+                        app_state.toggle_subscription_for(&toggle_channel);
                     },
                     if is_subscribed { "Subscribed" } else { "Subscribe" }
                 }

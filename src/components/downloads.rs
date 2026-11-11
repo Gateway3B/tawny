@@ -222,8 +222,11 @@ pub fn DownloadSheet() -> Element {
                 format!("Preparing {}…", quality.label().to_lowercase()),
                 Color::Neutral,
             );
-            if let Err(error) = start_download(app_state, video, quality).await {
-                app_state.show_toast(format!("Could not download: {error}"), Color::Danger);
+            if start_download(app_state, video, quality).await.is_err() {
+                app_state.show_toast(
+                    "Could not download this video. Please try again.",
+                    Color::Danger,
+                );
             }
         });
     });

@@ -293,12 +293,12 @@ pub fn SettingsPage() -> Element {
                             Item {
                                 wrap: true,
                                 start: rsx! { ShieldCheck { size: 19 } },
-                                label: "Prefer SABR",
-                                description: "Use adaptive streaming when the stream supports it",
+                                label: "Adjust quality automatically",
+                                description: "Prefer streams that adapt to your internet connection",
                                 end: rsx! {
                                     Toggle {
                                         checked: prefer_sabr,
-                                        aria_label: "Prefer SABR",
+                                        aria_label: "Adjust quality automatically",
                                         onchange: move |enabled| app_state.settings.write().prefer_sabr = enabled,
                                     }
                                 },
@@ -485,8 +485,8 @@ fn SubscriptionTransferCard() -> Element {
                                         color,
                                     );
                                 }
-                                Err(error) => {
-                                    app_state.show_toast(format!("Import failed: {error}"), Color::Danger);
+                                Err(_) => {
+                                    app_state.show_toast("Could not import that file. Choose a subscription export and try again.", Color::Danger);
                                 }
                             }
                         }

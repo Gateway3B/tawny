@@ -294,13 +294,7 @@ fn ChannelHero(channel: ReadSignal<Channel>) -> Element {
                         "aria-pressed": if is_subscribed { "true" } else { "false" },
                         start: is_subscribed.then(|| rsx! { Check { size: 16 } }),
                         onclick: move |_| {
-                            let now_subscribed = app_state.toggle_subscription_for(&toggle_channel);
-                            {
-                                app_state.show_toast(
-                                    if now_subscribed { "Subscribed" } else { "Unsubscribed" },
-                                    Color::Neutral,
-                                );
-                            }
+                            app_state.toggle_subscription_for(&toggle_channel);
                         },
                         if is_subscribed { "Subscribed" } else { "Subscribe" }
                     }
@@ -755,7 +749,7 @@ pub fn ChannelDetail(id: String) -> Element {
                         title: "Channel unavailable",
                         color: Color::Danger,
                         icon: rsx! { Tv { size: 40 } },
-                        "This channel could not be loaded from YouTube or the server's cache."
+                        "This channel is unavailable right now. Please try again later."
                     }
                 } else {
                     Spinner { center: true }

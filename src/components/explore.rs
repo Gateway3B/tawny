@@ -125,14 +125,15 @@ pub fn Explore() -> Element {
                 Ok(found) => {
                     if !found.remote_available {
                         app_state.show_toast(
-                            "Showing cached matches — remote source is unavailable",
+                            "Search is unavailable right now. Showing saved results.",
                             Color::Warning,
                         );
                     }
                     results.set(Some(found));
                 }
-                Err(_) => app_state
-                    .show_toast("Server is offline — showing cached matches", Color::Warning),
+                Err(_) => {
+                    app_state.show_toast("You're offline. Showing saved results.", Color::Warning)
+                }
             }
             searching.set(false);
         });

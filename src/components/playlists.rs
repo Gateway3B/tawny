@@ -523,7 +523,6 @@ pub fn Playlists() -> Element {
                     label: "Playlist name",
                     value: playlist_name,
                     placeholder: "Sunday watchlist",
-                    helper: "It will be cached on this device immediately.",
                     autofocus: true,
                 }
             }

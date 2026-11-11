@@ -109,10 +109,7 @@ impl DownloadEntry {
                     format!("Downloading {percent}%")
                 }
             }
-            DownloadState::Failed => self
-                .error
-                .clone()
-                .unwrap_or_else(|| "The download failed".to_string()),
+            DownloadState::Failed => "The download couldn't finish. Please try again.".to_string(),
         }
     }
 
@@ -364,7 +361,7 @@ mod tests {
         );
         assert_eq!(
             entry(DownloadState::Failed).summary(),
-            "The download failed"
+            "The download couldn't finish. Please try again."
         );
     }
 

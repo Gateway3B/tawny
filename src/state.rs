@@ -811,11 +811,18 @@ impl AppState {
         let content = current
             .map(|channel| channel.subscription_content)
             .unwrap_or(channel.subscription_content);
-        self.set_subscriptions(vec![SubscriptionChange {
-            channel: channel.clone(),
-            subscribed,
-            content,
-        }]);
+        self.set_subscriptions(
+            vec![SubscriptionChange {
+                channel: channel.clone(),
+                subscribed,
+                content,
+            }],
+            Some(if subscribed {
+                "Subscribed"
+            } else {
+                "Unsubscribed"
+            }),
+        );
         subscribed
     }
 
@@ -828,15 +835,28 @@ impl AppState {
         if channel.subscription_content == content {
             return false;
         }
-        self.set_subscriptions(vec![SubscriptionChange {
-            channel,
-            subscribed: true,
-            content,
-        }]);
+        self.set_subscriptions(
+            vec![SubscriptionChange {
+                channel,
+                subscribed: true,
+                content,
+            }],
+            None,
+        );
         true
     }
 
-    fn set_subscriptions(self, changes: Vec<SubscriptionChange>) {
+    fn set_subscriptions(
+        self,
+        changes: Vec<SubscriptionChange>,
+        confirmation: Option<&'static str>,
+    ) {
+        let session = consume_context::<crate::auth::Session>();
+        let owner = session
+            .account
+            .peek()
+            .as_ref()
+            .map(|account| account.id.clone());
         let shown = changes.clone();
         self.edit_viewer(move |viewer| {
             for change in shown {
@@ -855,7 +875,39 @@ impl AppState {
                 .subscriptions
                 .sort_by_key(|channel| channel.name.to_lowercase());
         });
-        self.send(DataChange::Subscriptions, api::set_subscriptions(changes));
+        // Unsubscribing removes the card (and its scope) immediately. The
+        // request and its confirmation must outlive that optimistic removal.
+        dioxus::core::spawn_forever(async move {
+            if owner
+                .as_deref()
+                .is_some_and(|owner| !session.matches(owner))
+            {
+                return;
+            }
+            let result = api::set_subscriptions(changes).await;
+            if owner
+                .as_deref()
+                .is_some_and(|owner| !session.matches(owner))
+            {
+                return;
+            }
+            invalidate(DataChange::Subscriptions);
+            match result {
+                Ok(()) => {
+                    if let Some(message) = confirmation {
+                        self.show_toast(message, Color::Neutral);
+                    }
+                }
+                Err(_) => self.show_toast(
+                    match confirmation {
+                        Some("Unsubscribed") => "Couldn't unsubscribe. Please try again.",
+                        Some("Subscribed") => "Couldn't subscribe. Please try again.",
+                        _ => "Couldn't update subscriptions. Please try again.",
+                    },
+                    Color::Danger,
+                ),
+            }
+        });
     }
 
     /// Apply a parsed subscription export.
@@ -925,7 +977,7 @@ impl AppState {
         }
 
         if !changes.is_empty() {
-            self.set_subscriptions(changes);
+            self.set_subscriptions(changes, None);
         }
         if !groups.is_empty() {
             self.save_groups(groups);
