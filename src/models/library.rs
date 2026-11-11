@@ -49,6 +49,46 @@ pub struct SubscriptionChange {
 /// How many history entries an account keeps.
 pub const HISTORY_LIMIT: usize = 250;
 
+/// One account's whole library, to move it between this device and a server
+/// (`export_library`, then `import_library` on the other side).
+///
+/// It carries the videos its lists point at, so the other side can show them
+/// before it has met them itself.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct LibraryExport {
+    /// Followed channels, each with the uploads it wants.
+    pub subscriptions: Vec<Channel>,
+    pub groups: Vec<SubscriptionGroup>,
+    pub playlists: Vec<Playlist>,
+    pub queue: Vec<String>,
+    pub history: Vec<HistoryEntry>,
+    pub progress: Vec<VideoProgress>,
+    pub videos: Vec<Video>,
+}
+
+impl LibraryExport {
+    pub fn is_empty(&self) -> bool {
+        self.subscriptions.is_empty()
+            && self.groups.is_empty()
+            && self
+                .playlists
+                .iter()
+                .all(|playlist| playlist.video_ids.is_empty())
+            && self.queue.is_empty()
+            && self.history.is_empty()
+            && self.progress.is_empty()
+    }
+}
+
+/// What an import added that the account did not have.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LibraryImport {
+    pub channels: usize,
+    pub playlists: usize,
+    pub playlist_videos: usize,
+    pub history: usize,
+}
+
 #[cfg_attr(
     not(feature = "server"),
     allow(

@@ -50,6 +50,19 @@ const fn fallback_default(debug: bool, native: bool) -> &'static str {
 
 const BACKEND_URL_KEY: &str = "tawny.backend-url";
 
+/// `device` when the viewer chose to keep everything on this device, rather
+/// than a server. The server's address stays saved beside it, so moving back
+/// to that server later offers it again.
+const BACKEND_MODE_KEY: &str = "tawny.backend-mode";
+
+/// Whether this build can run its backend on the device (see
+/// `crate::device_backend`). The web cannot: a browser page cannot run a
+/// server, and YouTube does not answer a page's requests.
+pub const DEVICE_BACKEND_AVAILABLE: bool = cfg!(all(
+    not(feature = "server"),
+    any(feature = "desktop", feature = "mobile")
+));
+
 /// Trim a URL into the form the server functions want: an origin with no
 /// trailing slash.
 ///
@@ -68,7 +81,8 @@ pub fn normalize_backend_url(url: &str) -> Option<String> {
     if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
         return None;
     }
-    if trimmed.split("://").nth(1).is_none_or(str::is_empty) {
+    let parsed = dioxus_fullstack::reqwest::Url::parse(trimmed).ok()?;
+    if parsed.host_str().is_none() || parsed.query().is_some() || parsed.fragment().is_some() {
         return None;
     }
     Some(trimmed.to_string())
@@ -76,10 +90,42 @@ pub fn normalize_backend_url(url: &str) -> Option<String> {
 
 /// The backend this client should talk to, stored value first.
 pub fn backend_url() -> String {
+    if uses_device_backend() {
+        return device_backend_url().unwrap_or_default();
+    }
+    server_backend_url().unwrap_or_else(default_backend_url)
+}
+
+/// The server's address, when one was saved, whether or not it is in use.
+pub fn server_backend_url() -> Option<String> {
     stored(BACKEND_URL_KEY)
         .as_deref()
         .and_then(normalize_backend_url)
-        .unwrap_or_else(default_backend_url)
+}
+
+/// Whether the viewer chose to keep their library on this device.
+pub fn uses_device_backend() -> bool {
+    DEVICE_BACKEND_AVAILABLE && stored(BACKEND_MODE_KEY).as_deref() == Some("device")
+}
+
+/// The device backend's address, starting it on first use.
+pub fn device_backend_url() -> Result<String, String> {
+    #[cfg(all(not(feature = "server"), any(feature = "desktop", feature = "mobile")))]
+    return crate::device_backend::start();
+
+    #[cfg(not(all(not(feature = "server"), any(feature = "desktop", feature = "mobile"))))]
+    Err("This version of Tawny cannot keep a library on the device.".into())
+}
+
+/// Keep the library on this device from now on.
+///
+/// Starts the backend first, so a device that cannot run it keeps whatever
+/// it had chosen before.
+pub fn use_device_backend() -> Result<String, String> {
+    let url = device_backend_url()?;
+    store(BACKEND_MODE_KEY, "device");
+    install();
+    Ok(url)
 }
 
 /// The backend to offer before one was chosen.
@@ -107,10 +153,12 @@ fn page_origin() -> Option<String> {
 /// A first launch has not chosen one, which is what puts the setup screen in
 /// front of the app rather than letting it fail against a default nobody picked.
 pub fn has_chosen_backend() -> bool {
-    stored(BACKEND_URL_KEY)
-        .as_deref()
-        .and_then(normalize_backend_url)
-        .is_some()
+    // A device backend that will not start counts as no choice: the setup
+    // screen then says why and offers a server instead.
+    if uses_device_backend() {
+        return device_backend_url().is_ok();
+    }
+    server_backend_url().is_some()
 }
 
 /// Save the backend and point the server functions at it.
@@ -120,6 +168,7 @@ pub fn has_chosen_backend() -> bool {
 pub fn set_backend_url(url: &str) -> Option<String> {
     let normalized = normalize_backend_url(url)?;
     store(BACKEND_URL_KEY, &normalized);
+    store(BACKEND_MODE_KEY, "server");
     install();
     Some(normalized)
 }
@@ -323,6 +372,9 @@ mod tests {
         assert_eq!(normalize_backend_url("   "), None);
         assert_eq!(normalize_backend_url("/"), None);
         assert_eq!(normalize_backend_url("https://"), None);
+        assert_eq!(normalize_backend_url("http://[broken"), None);
+        assert_eq!(normalize_backend_url("http://localhost:bad"), None);
+        assert_eq!(normalize_backend_url("https://tawny.example?query"), None);
     }
 
     #[test]

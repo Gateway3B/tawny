@@ -68,8 +68,10 @@ to compile. Prefer the patterns already in `src/` over what you remember.
 src/app.rs              Route enum + transitions + theme. Read first.
 src/state.rs            AppState: the viewer, settings, the player, overlays
 src/data_change.rs      What each kind of mutation makes stale in the client cache
-src/main.rs             Server: DB, layers, the session-less routes, router
-src/server_url.rs       The backend address, chosen before launch (native builds)
+src/main.rs             Server: start-up; src/server_router.rs: its layers and routes
+src/server_url.rs       The backend address, chosen before launch (native builds), or "device"
+src/device_backend/     The server run inside the app ("On this device"): the library and its loader
+src/library_move.rs     Moving the library between this device and a server (docs/device-backend.md)
 src/health.rs           Container probe, outside the session layers
 src/auth/               Accounts and sessions (g3-auth), and the client's session
 src/db/                 Connection and schema sync
@@ -266,6 +268,7 @@ just dev                  # or reuse a server already on :8080
 - [docs/architecture.md](docs/architecture.md): the system, the caches, the server
 - [docs/playback.md](docs/playback.md), [docs/youtube.md](docs/youtube.md): the domain engines
 - [docs/on-device-playback.md](docs/on-device-playback.md): Android resolving and streaming without the server
+- [docs/device-backend.md](docs/device-backend.md): the app's own backend ("On this device"), moving a library
 - [docs/deployment.md](docs/deployment.md), [docs/docker.md](docs/docker.md): images and hosting
 - The g3 crates' READMEs and source:
   [g3-ui](https://github.com/g3techhq/g3-ui),

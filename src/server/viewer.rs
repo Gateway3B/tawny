@@ -111,7 +111,10 @@ impl AppServerState {
         })
     }
 
-    async fn queue_and_history(&self, owner: &str) -> Result<(Vec<String>, Vec<HistoryEntry>)> {
+    pub(super) async fn queue_and_history(
+        &self,
+        owner: &str,
+    ) -> Result<(Vec<String>, Vec<HistoryEntry>)> {
         let rows: Vec<DbQueueHistory> = self
             .db
             .query("SELECT queue_json, history_json FROM library_state WHERE owner = type::record($owner) LIMIT 1")
@@ -654,15 +657,25 @@ impl AppServerState {
             if was.unwrap_or(false) != change.subscribed {
                 changed.push(channel_id.clone());
             }
-            self.db
-                .query(
-                    r#"UPSERT type::record('user_subscription', $record_key) SET
+            // Older releases used a different record key. Update the existing
+            // follow by its unique owner/channel pair instead of inserting a
+            // second record and colliding with that unique index.
+            let query = if was.is_some() {
+                r#"UPDATE user_subscription SET
+                    subscribed = $subscribed,
+                    content = $content,
+                    updated_at = time::now()
+                    WHERE owner = type::record($owner) AND channel_id = $channel_id"#
+            } else {
+                r#"UPSERT type::record('user_subscription', $record_key) SET
                         owner = type::record($owner),
                         channel_id = $channel_id,
                         subscribed = $subscribed,
                         content = $content,
-                        updated_at = time::now()"#,
-                )
+                        updated_at = time::now()"#
+            };
+            self.db
+                .query(query)
                 .bind(("record_key", Self::owner_key(owner, channel_id)))
                 .bind(("owner", owner.to_string()))
                 .bind(("channel_id", channel_id.clone()))
@@ -1072,12 +1085,12 @@ impl AppServerState {
         self.write_history(owner, &[]).await
     }
 
-    async fn write_queue(&self, owner: &str, queue: &[String]) -> Result<()> {
+    pub(super) async fn write_queue(&self, owner: &str, queue: &[String]) -> Result<()> {
         self.write_state_field(owner, "queue_json", serde_json::to_string(queue)?)
             .await
     }
 
-    async fn write_history(&self, owner: &str, history: &[HistoryEntry]) -> Result<()> {
+    pub(super) async fn write_history(&self, owner: &str, history: &[HistoryEntry]) -> Result<()> {
         self.write_state_field(owner, "history_json", serde_json::to_string(history)?)
             .await
     }

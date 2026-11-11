@@ -1,4 +1,9 @@
 //! Explicit authentication scope, without retrying scoped failures as root.
+//!
+//! A server always connects to the SurrealDB its Compose stack runs. Only the
+//! backend inside the app (`device_backend`) keeps its own database file.
+use std::path::Path;
+
 use anyhow::{Result, anyhow};
 use surrealdb::{Surreal, engine::any::Any};
 
@@ -98,6 +103,17 @@ pub async fn connect() -> Result<Surreal<Any>> {
     Access::read(|key| std::env::var(key).ok())?.open().await
 }
 
+/// The library file a backend inside the app keeps under `data_dir`, in
+/// SurrealDB's embedded engine. It has no users to sign in as.
+pub async fn connect_embedded(data_dir: &Path) -> Result<Surreal<Any>> {
+    let endpoint = format!("surrealkv://{}", data_dir.join("database").display());
+    let db = surrealdb::engine::any::connect(endpoint)
+        .await
+        .map_err(|_| anyhow!("Could not open the library file."))?;
+    db.use_ns("tawny").use_db("main").await?;
+    Ok(db)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,5 +165,31 @@ mod tests {
         assert!(Access::read(values(None, None)).unwrap().scope == Scope::Root);
         assert!(Access::read(values(Some("root"), Some("SURREALDB_NAME"))).is_ok());
         assert!(Access::read(values(Some("database"), Some("SURREALDB_NAME"))).is_err());
+    }
+
+    #[tokio::test]
+    async fn a_device_library_file_opens_and_keeps_its_data() {
+        let dir = std::env::temp_dir().join(format!("tawny-embedded-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        {
+            let db = connect_embedded(&dir).await.unwrap();
+            db.query("CREATE marker:one SET at = 1").await.unwrap();
+        }
+        // A dropped handle closes the file in the background; until then the
+        // file is still locked.
+        let mut reopened = None;
+        for _ in 0..100 {
+            if let Ok(db) = connect_embedded(&dir).await {
+                reopened = Some(db);
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        let db = reopened.expect("the file is released once its handle is dropped");
+        let mut answer = db.query("SELECT VALUE at FROM marker:one").await.unwrap();
+        let at: Option<i64> = answer.take(0).unwrap();
+        assert_eq!(at, Some(1));
+        drop(db);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

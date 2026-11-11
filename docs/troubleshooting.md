@@ -85,7 +85,7 @@ Check the sidecar first, then the server log for the resolve.
 `http://127.0.0.1:8080` through `adb reverse`; a physical device needs
 `SERVER_URL` set to a reachable address. See [mobile.md](mobile.md).
 
-**A packaged app still shows the old server's library**
-Saving a backend address repoints the server functions at once, but a packaged
-build keeps its in-memory session and library across the reload. Close and
-reopen the app.
+**Connecting to a server fails**
+Saving a server address reconnects in place, cancelling the previous attempt
+and clearing the previous account's cached library. An attempt times out after
+20 seconds so the address can be corrected and retried without restarting.

@@ -1,5 +1,9 @@
 set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
 
+# Where a development desktop app finds the device backend it loads for
+# "On this device" (src/device_backend). `just backend-desktop` builds it.
+export TAWNY_BACKEND_LIBRARY := justfile_directory() / "target" / "device-backend" / if os() == "windows" { "tawny_backend.dll" } else if os() == "macos" { "libtawny_backend.dylib" } else { "libtawny_backend.so" }
+
 default:
     @just --list
 
@@ -13,17 +17,27 @@ setup:
 dev:
     dx serve
 
-# Android emulator/device.
-dev-android:
+# Android emulator/device. Builds the device backend first, for "On this
+# device"; without it, choosing that says this build has none.
+dev-android: backend-android
     dx serve --platform android
 
 # iOS simulator (macOS only).
 dev-ios:
     dx serve --platform ios
 
-# The desktop app.
-dev-desktop:
+# The desktop app, with the device backend built for "On this device".
+dev-desktop: backend-desktop
     dx serve --platform desktop
+
+# The server as a library the desktop app loads to keep a library on the
+# device. See docs/device-backend.md.
+backend-desktop:
+    node scripts/device-backend.mjs desktop
+
+# The same for Android, for both ABIs, into the APK's native libraries.
+backend-android:
+    node scripts/device-backend.mjs android
 
 # Start SurrealDB and the extractor sidecars in the background. The server
 # seeds a demo catalog into an empty database on its first start.

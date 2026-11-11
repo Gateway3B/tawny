@@ -18,6 +18,10 @@ small HTTP adapter exposing the two operations Tawny needs.
 The other two services come from upstream images and need nothing published:
 SurrealDB, and the bgutil PO-token provider.
 
+A server always runs as this Compose stack. Someone trying Tawny without one
+can keep their library in the desktop or Android app instead and move it to a
+server later; see [device-backend.md](device-backend.md).
+
 ## One-time GitHub setup
 
 1. Merge the deployment workflow and let its first `main` run finish.

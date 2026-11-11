@@ -48,7 +48,7 @@ pub(crate) fn configured_ytdlp_service_url() -> Option<String> {
 }
 
 pub(crate) fn configured_http_url(variable: &str) -> Option<String> {
-    let configured = std::env::var(variable).ok()?;
+    let configured = server_setting(variable)?;
     let configured = configured.trim().trim_end_matches('/');
     if configured.is_empty() {
         return None;
@@ -81,16 +81,46 @@ pub(crate) fn ytdlp_service_channel_shorts_url(
     Some(url)
 }
 
-pub(crate) fn ytdlp_po_provider_args(provider_url: Option<&str>) -> Vec<String> {
+/// Clients that hand out stream URLs without a PO token, in the order the
+/// phone asks them (`android/localstreams`). yt-dlp's default clients answer
+/// too, but their URLs are gated: the first part of the file plays, then
+/// YouTube refuses the rest with a 403.
+///
+/// One run each, not one run for both: asked together, yt-dlp keeps one copy
+/// of an itag the two share, and `web_embedded`'s copy 403'd. An older yt-dlp
+/// that does not know `android_sdkless` fails that run, and the next asks
+/// `web_embedded`.
+const TOKENLESS_PLAYER_CLIENTS: [&str; 2] = ["android_sdkless", "web_embedded"];
+
+/// The yt-dlp runs to try for one video, each a set of extra arguments, until
+/// one answers.
+///
+/// With a PO-token provider, one run through it. With none (a server whose
+/// provider container is down, or a desktop app's own backend, which has
+/// none), one run per client that needs no token. Node is enabled for
+/// YouTube's JavaScript challenges because it is the runtime a machine that
+/// builds Tawny already has; yt-dlp keeps Deno, its default, if that is
+/// installed instead.
+pub(crate) fn ytdlp_client_attempts(provider_url: Option<&str>) -> Vec<Vec<String>> {
     let Some(provider_url) = provider_url else {
-        return Vec::new();
+        return TOKENLESS_PLAYER_CLIENTS
+            .iter()
+            .map(|client| {
+                vec![
+                    "--extractor-args".into(),
+                    format!("youtube:player_client={client}"),
+                    "--js-runtimes".into(),
+                    "node".into(),
+                ]
+            })
+            .collect();
     };
-    vec![
+    vec![vec![
         "--extractor-args".into(),
         format!("youtubepot-bgutilhttp:base_url={provider_url}"),
         "--extractor-args".into(),
         "youtube:player_client=mweb".into(),
-    ]
+    ]]
 }
 
 /// A stream URL yt-dlp extracted, keyed by itag.
@@ -554,34 +584,44 @@ impl AppServerState {
             )
             .remedy("Set TAWNY_YTDLP_SERVICE_URL (or TAWNY_YTDLP_BIN) and restart the server."));
         };
-        let mut command = tokio::process::Command::new(binary);
-        command.args([
-            "-J",
-            "--no-warnings",
-            "--no-playlist",
-            "--socket-timeout",
-            "15",
-        ]);
         let po_provider_url = self.reachable_ytdlp_po_provider_url().await;
-        command.args(ytdlp_po_provider_args(po_provider_url));
-        command.arg(format!("https://www.youtube.com/watch?v={video_id}"));
-        let output = command.stdin(std::process::Stdio::null()).output();
-        let output = match tokio::time::timeout(Duration::from_secs(30), output).await {
-            Ok(Ok(output)) if output.status.success() => output,
-            Ok(Ok(output)) => {
-                return Err(classify_ytdlp_error(&String::from_utf8_lossy(
-                    &output.stderr,
-                )));
+        let mut failure = None;
+        let mut answer = None;
+        for attempt in ytdlp_client_attempts(po_provider_url) {
+            let mut command = tokio::process::Command::new(binary);
+            command.args([
+                "-J",
+                "--no-warnings",
+                "--no-playlist",
+                "--socket-timeout",
+                "15",
+            ]);
+            command.args(attempt);
+            command.arg(format!("https://www.youtube.com/watch?v={video_id}"));
+            let output = command.stdin(std::process::Stdio::null()).output();
+            match tokio::time::timeout(Duration::from_secs(30), output).await {
+                Ok(Ok(output)) if output.status.success() => {
+                    answer = Some(output);
+                    break;
+                }
+                Ok(Ok(output)) => {
+                    failure = Some(classify_ytdlp_error(&String::from_utf8_lossy(
+                        &output.stderr,
+                    )));
+                }
+                Ok(Err(error)) => {
+                    return Err(PlaybackFailure::new(
+                        PlaybackFailureOrigin::Setup,
+                        "The server could not run yt-dlp.",
+                    )
+                    .remedy("Check that TAWNY_YTDLP_BIN points at a working yt-dlp.")
+                    .detail(error.to_string()));
+                }
+                Err(_) => failure = Some(extraction_timed_out()),
             }
-            Ok(Err(error)) => {
-                return Err(PlaybackFailure::new(
-                    PlaybackFailureOrigin::Setup,
-                    "The server could not run yt-dlp.",
-                )
-                .remedy("Check that TAWNY_YTDLP_BIN points at a working yt-dlp.")
-                .detail(error.to_string()));
-            }
-            Err(_) => return Err(extraction_timed_out()),
+        }
+        let Some(output) = answer else {
+            return Err(failure.unwrap_or_else(extraction_timed_out));
         };
         serde_json::from_slice::<YtdlpDump>(&output.stdout)
             .map(formats_from_ytdlp_dump)

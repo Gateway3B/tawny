@@ -345,3 +345,28 @@ pub async fn clear_history() -> Result<()> {
     state.note_change(&owner.0, LibraryChange::History);
     Ok(())
 }
+
+/// Everything this account keeps, to move it to another backend: from this
+/// device to a server, or back. See `server::library_move`.
+#[get(
+    "/api/v1/library/export",
+    state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
+    owner: crate::auth::Owner
+)]
+pub async fn export_library() -> Result<LibraryExport> {
+    Ok(state.export_library(&owner.0).await.map_err(server_error)?)
+}
+
+/// Add a library exported elsewhere to this account. It merges and never
+/// removes, so importing the same library twice changes nothing.
+#[post(
+    "/api/v1/library/import",
+    state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
+    owner: crate::auth::Owner
+)]
+pub async fn import_library(library: LibraryExport) -> Result<LibraryImport> {
+    Ok(state
+        .import_library(&owner.0, library)
+        .await
+        .map_err(server_error)?)
+}

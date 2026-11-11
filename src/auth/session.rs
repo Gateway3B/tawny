@@ -6,7 +6,7 @@
 //! exists. `AppStateProvider` bootstraps the session here; a first launch
 //! refetches every cached read once its guest account exists.
 
-use dioxus::prelude::*;
+use dioxus::{core::Task, prelude::*};
 
 use crate::{
     api::{create_guest_account, current_account},
@@ -30,6 +30,7 @@ pub enum SessionStatus {
 pub struct Session {
     pub account: Signal<Option<Account>>,
     pub status: Signal<SessionStatus>,
+    connection: Signal<u64>,
 }
 
 impl Session {
@@ -51,6 +52,18 @@ impl Session {
     pub fn forget(&mut self) {
         self.account.set(None);
     }
+
+    /// A native WebView reload keeps this Rust state alive. Reconnect through
+    /// the provider instead, so the old request is cancelled before retrying.
+    pub fn reconnect(&mut self) {
+        self.forget();
+        self.status.set(SessionStatus::Connecting);
+        self.connection += 1;
+    }
+
+    pub fn is_reconnecting(self) -> bool {
+        (self.connection)() > 0 && matches!((self.status)(), SessionStatus::Connecting)
+    }
 }
 
 /// Create the session context and bootstrap it.
@@ -62,44 +75,78 @@ pub fn use_session_provider() -> Session {
     let mut session = use_context_provider(|| Session {
         account: Signal::new(None),
         status: Signal::new(SessionStatus::Connecting),
+        connection: Signal::new(0),
     });
 
-    let mut started = use_signal(|| false);
+    let mut pending = use_signal(|| None::<Task>);
 
     use_effect(move || {
-        if started() {
-            return;
+        let connection = (session.connection)();
+        if let Some(task) = *pending.peek() {
+            task.cancel();
         }
-        started.set(true);
-        spawn(async move {
-            if let Ok(account) = current_account().await {
-                session.adopt(account);
-                return;
+        let task = spawn(async move {
+            if connection > 0 {
+                g3_cache::set_cache_owner(None).await;
             }
-            match create_guest_account().await {
+            match connect().await {
                 Ok(account) => {
                     session.adopt(account);
-                    // Whatever the screens asked for before this account existed
-                    // was refused; ask again now that it does.
                     g3_cache::invalidate_all_cached();
                 }
-                Err(error) => session
-                    .status
-                    .set(SessionStatus::Failed(readable(&error.to_string()))),
+                Err(error) => session.status.set(SessionStatus::Failed(error)),
             }
         });
+        pending.set(Some(task));
     });
 
     session
+}
+
+async fn connect() -> Result<Account, String> {
+    use futures_util::future::{Either, select};
+
+    let request = Box::pin(async {
+        if let Ok(account) = current_account().await {
+            return Ok(account);
+        }
+        create_guest_account().await.map_err(|_| {
+            "Could not connect to Tawny. Check the server address and try again.".to_string()
+        })
+    });
+    // Bound the whole attempt, including a server that accepts a connection
+    // but never replies. Dropping the losing future also cancels its request.
+    let deadline = Box::pin(async {
+        let mut timer = document::eval(
+            "await new Promise(resolve => setTimeout(resolve, 20000)); dioxus.send(true);",
+        );
+        let _ = timer.recv::<bool>().await;
+        Err("Connection timed out. Check your internet connection and try again.".to_string())
+    });
+    match select(request, deadline).await {
+        Either::Left((result, _)) | Either::Right((result, _)) => result,
+    }
 }
 
 pub fn use_session() -> Session {
     use_context::<Session>()
 }
 
-/// Server errors arrive as transport prose. This keeps the one case a viewer
-/// can actually act on - not reaching the server at all - legible.
+/// Keep account guidance, while hiding transport and server internals.
 pub fn readable(error: &str) -> String {
+    for message in [
+        "Enter an email address.",
+        "That does not look like an email address.",
+        "An account already uses that email.",
+        "Use at least 8 characters.",
+        "Use at most 512 characters.",
+        "That email and password do not match an account.",
+        "This account already has an email address.",
+    ] {
+        if error.contains(message) {
+            return message.into();
+        }
+    }
     let lowered = error.to_lowercase();
     if lowered.contains("error sending request")
         || lowered.contains("failed to fetch")
@@ -108,13 +155,27 @@ pub fn readable(error: &str) -> String {
     {
         "Could not reach that server. Check the address and that it is running.".into()
     } else {
-        error.to_string()
+        "Something went wrong. Please try again.".into()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn account_errors_show_guidance_without_transport_details() {
+        assert_eq!(
+            readable(
+                "error receiving status code: That email and password do not match an account. (401)"
+            ),
+            "That email and password do not match an account."
+        );
+        assert_eq!(
+            readable("error decoding response body: invalid JSON at line 1"),
+            "Something went wrong. Please try again."
+        );
+    }
 
     #[test]
     fn a_result_from_an_old_account_no_longer_matches_after_switch_or_sign_out() {
@@ -124,6 +185,7 @@ mod tests {
             let mut session = Session {
                 account: Signal::new(None),
                 status: Signal::new(SessionStatus::Connecting),
+                connection: Signal::new(0),
             };
             let account = |id: &str| Account {
                 id: id.into(),
@@ -139,6 +201,11 @@ mod tests {
             assert!(session.matches("app_user:second"));
             session.forget();
             assert!(!session.matches("app_user:second"));
+            session.reconnect();
+            assert!(session.is_reconnecting());
+            assert!(matches!((session.status)(), SessionStatus::Connecting));
+            session.adopt(account("app_user:third"));
+            assert!(!session.is_reconnecting());
         });
     }
 }

@@ -4,5 +4,5 @@ mod access;
 
 mod connection;
 
-pub use access::connect;
+pub use access::{connect, connect_embedded};
 pub use connection::*;

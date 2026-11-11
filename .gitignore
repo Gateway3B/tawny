@@ -19,3 +19,6 @@ dx*.log
 # Runtime caches the extractor writes into the working directory.
 /rustypipe_cache.json
 /bg_snapshot.bin
+
+# Built by scripts/device-backend.mjs
+/android/localstreams/src/main/jniLibs/

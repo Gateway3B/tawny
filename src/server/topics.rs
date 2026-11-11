@@ -166,7 +166,7 @@ async fn ensure_model_files() -> Result<std::path::PathBuf> {
         .with_context(|| format!("creating {}", dir.display()))?;
     // Its own client: the shared one gives up after 15 seconds, and the
     // weights are 90 MB.
-    let http = reqwest::Client::builder()
+    let http = super::http_client()
         .user_agent("Tawny/0.1 model download")
         .connect_timeout(Duration::from_secs(10))
         .read_timeout(Duration::from_secs(30))

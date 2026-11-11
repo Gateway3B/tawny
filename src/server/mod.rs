@@ -50,6 +50,8 @@ mod browse;
 
 mod feed;
 
+mod library_move;
+
 mod proxy;
 
 mod resolve;
@@ -504,9 +506,71 @@ impl From<DbSubscriptionGroup> for SubscriptionGroup {
     }
 }
 
+/// A backend running inside the app on the viewer's own phone or computer
+/// (`crate::device_backend`), rather than a server configured by its
+/// environment. The app says where its data lives and which loopback address
+/// it serves; nothing is read from the environment the app happened to be
+/// started in, which on a desktop can be a developer's shell.
+pub(crate) struct DeviceBackend {
+    #[cfg_attr(
+        test,
+        allow(
+            dead_code,
+            reason = "Tests keep their data in a directory of their own."
+        )
+    )]
+    pub data_dir: std::path::PathBuf,
+    /// `http://127.0.0.1:<port>`: what playback proxy URLs are built from.
+    pub public_url: String,
+}
+
+static DEVICE_BACKEND: std::sync::OnceLock<DeviceBackend> = std::sync::OnceLock::new();
+
+/// Make this process a device backend. Before [`AppServerState::initialize`];
+/// only the first call counts.
+pub(crate) fn run_on_device(device: DeviceBackend) {
+    let _ = DEVICE_BACKEND.set(device);
+}
+
+pub(crate) fn on_device() -> Option<&'static DeviceBackend> {
+    DEVICE_BACKEND.get()
+}
+
+/// A setting from a server's environment. A device backend has none: these
+/// configure a deployment (its public address, sidecars, WebSub), and a
+/// desktop app started from a developer's shell must not pick up theirs.
+pub(crate) fn server_setting(key: &str) -> Option<String> {
+    if on_device().is_some() {
+        return None;
+    }
+    std::env::var(key).ok()
+}
+
+/// A client for YouTube and the other outside services.
+///
+/// reqwest otherwise verifies certificates through rustls-platform-verifier,
+/// which on Android needs JNI and a Kotlin component a backend inside the app
+/// does not set up, so a phone uses the bundled roots instead, as the local
+/// relay does.
+pub(crate) fn http_client() -> reqwest::ClientBuilder {
+    let builder = reqwest::Client::builder();
+    #[cfg(target_os = "android")]
+    let builder = builder.tls_certs_only(
+        webpki_root_certs::TLS_SERVER_ROOT_CERTS
+            .iter()
+            .filter_map(|cert| reqwest::Certificate::from_der(cert).ok()),
+    );
+    builder
+}
+
 fn default_data_dir() -> std::path::PathBuf {
     #[cfg(test)]
     return std::env::temp_dir().join(format!("tawny-test-{}", std::process::id()));
+
+    #[cfg(not(test))]
+    if let Some(device) = on_device() {
+        return device.data_dir.clone();
+    }
 
     #[cfg(not(test))]
     if let Ok(path) = std::env::var("TAWNY_DATA_DIR") {
@@ -547,7 +611,10 @@ impl AppServerState {
     pub async fn initialize() -> Result<Self> {
         let data_dir = default_data_dir();
         std::fs::create_dir_all(&data_dir).context("create Tawny data directory")?;
-        let db = crate::db::connect().await?;
+        let db = match on_device() {
+            Some(_) => crate::db::connect_embedded(&data_dir).await?,
+            None => crate::db::connect().await?,
+        };
         crate::db::sync_schema(&db).await?;
         crate::auth::prepare_sessions(&db).await?;
 
@@ -573,23 +640,23 @@ impl AppServerState {
         let youtube = youtube_builder
             .build()
             .context("initialize direct YouTube extractor")?;
-        let public_url = std::env::var("TAWNY_PUBLIC_URL")
+        let public_url = on_device()
+            .map(|device| device.public_url.clone())
+            .or_else(|| server_setting("TAWNY_PUBLIC_URL"))
             // The Android bundle's generated network-security policy permits
             // cleartext loopback by literal IP. `localhost` is a different
             // policy entry even though it resolves to the same interface.
-            .unwrap_or_else(|_| "http://127.0.0.1:8080".into())
+            .unwrap_or_else(|| "http://127.0.0.1:8080".into())
             .trim_end_matches('/')
             .to_string();
-        let websub_callback_url = std::env::var("TAWNY_WEBSUB_CALLBACK_URL")
-            .ok()
+        let websub_callback_url = server_setting("TAWNY_WEBSUB_CALLBACK_URL")
             .filter(|url| !url.trim().is_empty())
             .or_else(|| {
                 (!public_url.contains("localhost") && !public_url.contains("127.0.0.1"))
                     .then(|| format!("{public_url}/api/v1/websub/youtube"))
             });
         let websub_secret_path = data_dir.join("websub-secret");
-        let websub_secret = std::env::var("TAWNY_WEBSUB_SECRET")
-            .ok()
+        let websub_secret = server_setting("TAWNY_WEBSUB_SECRET")
             .map(|secret| secret.trim().to_string())
             .filter(|secret| !secret.is_empty())
             .unwrap_or_else(|| {
@@ -615,11 +682,11 @@ impl AppServerState {
         let ytdlp_bin = ytdlp_service_url.is_none().then(locate_ytdlp).flatten();
         let state = Self {
             db: Arc::new(db),
-            http: reqwest::Client::builder()
+            http: http_client()
                 .user_agent("Tawny/0.1 subscription updater")
                 .timeout(Duration::from_secs(15))
                 .build()?,
-            media_http: reqwest::Client::builder()
+            media_http: http_client()
                 .user_agent("Tawny/0.1 media proxy")
                 // A media fetch that never returns is worse than one that
                 // fails: the browser request hangs open, MediaSource simply
@@ -655,8 +722,7 @@ impl AppServerState {
                 .duration_since(UNIX_EPOCH)
                 .map(|elapsed| elapsed.as_nanos() as u64)
                 .unwrap_or(1),
-            sponsor_api_url: std::env::var("TAWNY_SPONSORBLOCK_URL")
-                .ok()
+            sponsor_api_url: server_setting("TAWNY_SPONSORBLOCK_URL")
                 .map(|url| url.trim_end_matches('/').to_string())
                 .filter(|url| !url.is_empty()),
         };
@@ -1066,7 +1132,7 @@ mod tests {
         playback_proxy, playback_proxy_options, reconciliation_limit, requested_byte_range,
         segment_ranges, sniff_media_type, store_segment_ranges, unambiguous_segment_ranges,
         url_path_ends_with, video_published_epoch, webm_segment_ranges, websub_channel_from_topic,
-        ytdlp_hls_source, ytdlp_po_provider_args, ytdlp_service_channel_shorts_url,
+        ytdlp_client_attempts, ytdlp_hls_source, ytdlp_service_channel_shorts_url,
         ytdlp_service_video_url,
     };
     use crate::models::PlaybackProtocol;
@@ -1289,15 +1355,30 @@ mod tests {
 
     #[test]
     fn configures_ytdlp_for_video_bound_po_tokens() {
-        assert!(ytdlp_po_provider_args(None).is_empty());
+        let tokenless = ytdlp_client_attempts(None);
         assert_eq!(
-            ytdlp_po_provider_args(Some("http://127.0.0.1:4416")),
+            tokenless
+                .iter()
+                .map(|attempt| attempt[1].as_str())
+                .collect::<Vec<_>>(),
             vec![
+                "youtube:player_client=android_sdkless",
+                "youtube:player_client=web_embedded",
+            ]
+        );
+        assert!(
+            tokenless.iter().all(
+                |attempt| attempt.ends_with(&["--js-runtimes".to_string(), "node".to_string()])
+            )
+        );
+        assert_eq!(
+            ytdlp_client_attempts(Some("http://127.0.0.1:4416")),
+            vec![vec![
                 "--extractor-args",
                 "youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416",
                 "--extractor-args",
                 "youtube:player_client=mweb",
-            ]
+            ]]
         );
     }
 
@@ -1857,6 +1938,40 @@ mod tests {
     }
 
     /// Unsubscribing must not silence a channel other accounts still follow.
+    #[tokio::test]
+    async fn a_subscription_with_a_legacy_record_key_can_be_changed() {
+        let state = AppServerState::initialize().await.unwrap();
+        let owner = test_owner(&state).await;
+        let channel = demo_channels()[0].clone();
+        state.upsert_channel(&channel).await.unwrap();
+        state.db.query("CREATE type::record('user_subscription', 'legacy-subscription') SET owner = type::record($owner), channel_id = $channel, subscribed = true, content = 'videos'")
+            .bind(("owner", owner.clone()))
+            .bind(("channel", channel.id.clone()))
+            .await.unwrap().check().unwrap();
+
+        set_follow(&state, &owner, &channel, false).await;
+        assert!(state.viewer(&owner).await.unwrap().subscriptions.is_empty());
+        assert!(!state.channel_is_subscribed(&channel.id).await.unwrap());
+
+        set_follow(&state, &owner, &channel, true).await;
+        assert_eq!(state.viewer(&owner).await.unwrap().subscriptions.len(), 1);
+        let rows: Vec<g3_auth::RecordId> = state
+            .db
+            .query("SELECT VALUE id FROM user_subscription WHERE owner = type::record($owner)")
+            .bind(("owner", owner))
+            .await
+            .unwrap()
+            .check()
+            .unwrap()
+            .take(0)
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0],
+            g3_auth::RecordId::new("user_subscription", "legacy-subscription")
+        );
+    }
+
     #[tokio::test]
     async fn a_channel_stays_polled_while_anyone_still_follows_it() {
         let state = AppServerState::initialize().await.unwrap();

@@ -14,14 +14,15 @@
 use dioxus::prelude::*;
 use g3_ui::{
     AlertButton, AlertOptions, Button, ButtonExpand, ButtonFill, Card, Color, Content,
-    ContentWidth, Header, HeadingLevel, Input, InputType, Space, Stack, Text, TextTone,
-    TextVariant, use_alert,
+    ContentWidth, Header, HeadingLevel, Input, InputType, Space, Stack, Text, TextTone, use_alert,
 };
 
 use crate::{
     api::{delete_account, register_account, sign_in_to_account, sign_out_of_account},
     auth::{SessionStatus, readable, use_session},
-    models::{Credentials, validate_email, validate_password},
+    data_change::{DataChange, invalidate},
+    library_move,
+    models::{Credentials, LibraryImport, validate_email, validate_password},
     server_url,
     state::AppState,
 };
@@ -59,54 +60,93 @@ fn reload_client() {
 /// mistakes to make.
 #[component]
 pub fn AccountGate(children: Element) -> Element {
-    let session = use_session();
+    let mut session = use_session();
+    let app_state = use_context::<AppState>();
     let mut backend_chosen = use_signal(|| true);
 
     use_effect(move || backend_chosen.set(server_url::has_chosen_backend()));
+    let on_saved = use_callback(move |()| {
+        backend_chosen.set(true);
+        app_state.forget_account();
+        session.reconnect();
+    });
 
-    if !backend_chosen() {
+    if !backend_chosen()
+        || session.is_reconnecting()
+        || matches!((session.status)(), SessionStatus::Failed(_))
+    {
         return rsx! {
             BackendSetupScreen {
-                on_saved: move |_| {
-                    backend_chosen.set(true);
-                    reload_client();
-                },
+                connecting: session.is_reconnecting(),
+                on_saved,
             }
         };
     }
 
-    match (session.status)() {
-        SessionStatus::Failed(message) => rsx! {
-            BackendSetupScreen {
-                problem: message,
-                on_saved: move |_| reload_client(),
-            }
-        },
-        // The app renders while the guest is being minted rather than behind a
-        // spinner. Everything on screen at that moment comes from the local
-        // cache, and blocking it would make a cold start feel like a network
-        // failure.
-        _ => rsx! { {children} },
-    }
+    rsx! { {children} }
 }
 
-/// The address field's value, filled in on the client.
+/// The server address field's value, filled in on the client.
 ///
 /// The stored address lives in client storage the server cannot read, so a
 /// server render of `backend_url()` wrote its own fallback, `localhost`, into
 /// the field. Hydration keeps markup it believes matches, so the field went on
 /// showing `localhost` after every reload, even though the address had saved
 /// and was in use. Both sides render it empty, and the client fills it in.
-fn use_backend_url_field() -> Signal<String> {
+///
+/// With the library on this device, it is the server saved before, if any:
+/// the backend in use is the device's own loopback address, which is no use
+/// to type anywhere.
+fn use_server_address_field() -> Signal<String> {
     let mut url = use_signal(String::new);
-    use_effect(move || url.set(server_url::backend_url()));
+    use_effect(move || {
+        url.set(if server_url::uses_device_backend() {
+            server_url::server_backend_url().unwrap_or_default()
+        } else {
+            server_url::backend_url()
+        })
+    });
     url
 }
 
+/// Whether this build can keep the library on the device, known on the
+/// client only: the server renders the web's answer, which is no.
+fn use_device_backend_available() -> Signal<bool> {
+    let mut available = use_signal(|| false);
+    use_effect(move || available.set(server_url::DEVICE_BACKEND_AVAILABLE));
+    available
+}
+
 #[component]
-fn BackendSetupScreen(problem: Option<String>, on_saved: EventHandler<()>) -> Element {
-    let url = use_backend_url_field();
-    let mut error = use_signal(|| problem.clone().unwrap_or_default());
+fn BackendSetupScreen(connecting: bool, on_saved: EventHandler<()>) -> Element {
+    let url = use_server_address_field();
+    let session = use_session();
+    let device_available = use_device_backend_available();
+    let mut error = use_signal(String::new);
+    let mut device_error = use_signal(String::new);
+    let mut chose_device = use_signal(|| false);
+    use_effect(move || {
+        let on_device = server_url::uses_device_backend();
+        chose_device.set(on_device);
+        if on_device && let Err(message) = server_url::device_backend_url() {
+            device_error.set(message);
+        }
+    });
+    use_effect(move || {
+        if let SessionStatus::Failed(message) = (session.status)() {
+            // A first launch still tries the build's default address before
+            // anything is chosen. That failure is not the viewer's to fix,
+            // so it waits until they pick a backend.
+            if !server_url::has_chosen_backend() && !server_url::uses_device_backend() {
+                return;
+            }
+            if *chose_device.peek() {
+                device_error.set(message);
+            } else {
+                error.set(message);
+            }
+        }
+    });
 
     rsx! {
         // Shown before the app shell exists, so this screen brings its own bar:
@@ -114,36 +154,72 @@ fn BackendSetupScreen(problem: Option<String>, on_saved: EventHandler<()>) -> El
         // Dynamic Island on a phone.
         Header { title: "Tawny" }
         Content { width: ContentWidth::Readable,
-            Card {
-                title: "Connect to a Tawny server",
-                heading_level: HeadingLevel::H1,
-                Stack {
-                    Text { tone: TextTone::Secondary,
-                        "Tawny stores your subscriptions and history on a server you or someone you trust runs. Enter its address to begin."
-                    }
-                    Input {
-                        label: "Server address",
-                        value: url,
-                        input_type: InputType::Url,
-                        placeholder: "https://tawny.example",
-                        error: Some(error()).filter(|message| !message.is_empty()),
-                        oninput: move |_| error.set(String::new()),
-                    }
-
-                    Button {
-                        expand: ButtonExpand::Block,
-                        onclick: move |_| {
-                            match server_url::set_backend_url(&url()) {
-                                Some(_) => on_saved.call(()),
-                                None => error.set(
-                                    "Enter a full address, including http:// or https://.".into(),
-                                ),
+            Stack {
+                if device_available() {
+                    Card {
+                        title: "Use Tawny on this device",
+                        heading_level: HeadingLevel::H1,
+                        Stack {
+                            Text { tone: TextTone::Secondary,
+                                "Your subscriptions, playlists and history stay on this device, and it talks to YouTube itself. Nothing to set up, and you can move everything to a server later."
                             }
-                        },
-                        "Connect"
+                            if !device_error().is_empty() {
+                                Text { color: Color::Danger, "{device_error}" }
+                            }
+                            Button {
+                                expand: ButtonExpand::Block,
+                                loading: connecting && chose_device(),
+                                onclick: move |_| {
+                                    if connecting { return; }
+                                    device_error.set(String::new());
+                                    chose_device.set(true);
+                                    match server_url::use_device_backend() {
+                                        Ok(_) => on_saved.call(()),
+                                        Err(message) => device_error.set(message),
+                                    }
+                                },
+                                if connecting && chose_device() { "Starting…" } else { "Start on this device" }
+                            }
+                        }
                     }
-                    Text { variant: TextVariant::Caption,
-                        "Changing this restarts the app. On a packaged build, close and reopen it."
+                }
+                Card {
+                    title: "Connect to a Tawny server",
+                    heading_level: if device_available() { HeadingLevel::H2 } else { HeadingLevel::H1 },
+                    Stack {
+                        Text { tone: TextTone::Secondary,
+                            if device_available() {
+                                "A server you or someone you trust runs keeps one library for all your devices. Enter its address."
+                            } else {
+                                "Tawny stores your subscriptions and history on a server you or someone you trust runs. Enter its address to begin."
+                            }
+                        }
+                        Input {
+                            label: "Server address",
+                            value: url,
+                            input_type: InputType::Url,
+                            placeholder: "https://tawny.example",
+                            error: Some(error()).filter(|message| !message.is_empty()),
+                            oninput: move |_| error.set(String::new()),
+                        }
+
+                        Button {
+                            expand: ButtonExpand::Block,
+                            fill: if device_available() { ButtonFill::Outline } else { ButtonFill::Solid },
+                            loading: connecting && !chose_device(),
+                            onclick: move |_| {
+                                if connecting { return; }
+                                error.set(String::new());
+                                chose_device.set(false);
+                                match server_url::set_backend_url(&url()) {
+                                    Some(_) => on_saved.call(()),
+                                    None => error.set(
+                                        "Enter a full address, including http:// or https://.".into(),
+                                    ),
+                                }
+                            },
+                            if connecting && !chose_device() { "Connecting…" } else { "Connect" }
+                        }
                     }
                 }
             }
@@ -193,7 +269,7 @@ fn AccountForm(account: crate::models::Account) -> Element {
             Stack {
                 if !account.is_recoverable() {
                     Text { color: Color::Warning,
-                        "You are signed in as a guest. This library lives only on this device's session - add an email and password to be able to sign back in, here or anywhere else."
+                        "You're using a guest account. Add an email and password to keep access to your library and use it on other devices."
                     }
                 }
                 if is_guest || signing_in() {
@@ -361,49 +437,201 @@ fn AccountForm(account: crate::models::Account) -> Element {
     }
 }
 
-/// The server section of the settings page.
+/// Where the library lives, on the settings page: this device or a server,
+/// and moving it from one to the other (see `library_move`).
 #[component]
 pub fn BackendSettings() -> Element {
-    let url = use_backend_url_field();
+    let url = use_server_address_field();
+    let device_available = use_device_backend_available();
     let mut error = use_signal(String::new);
-    let mut saved = use_signal(|| false);
+    let mut session = use_session();
+    let app_state = use_context::<AppState>();
+    let mut on_device = use_signal(|| false);
+    let mut moving = use_signal(|| false);
+    use_effect(move || on_device.set(server_url::uses_device_backend()));
+
+    // The reconnect that ends a move unmounts this section, so nothing is
+    // written after it.
+    let mut move_to = move |destination: library_move::Destination| {
+        if moving() {
+            return;
+        }
+        error.set(String::new());
+        moving.set(true);
+        spawn(async move {
+            match library_move::begin(destination).await {
+                Ok(()) => {
+                    app_state.forget_account();
+                    session.reconnect();
+                }
+                Err(message) => {
+                    error.set(message);
+                    moving.set(false);
+                }
+            }
+        });
+    };
 
     rsx! {
-        Card { title: "Server",
-            Stack { gap: Space::Md,
-                Input {
-                    label: "Server address",
-                    value: url,
-                    input_type: InputType::Url,
-                    error: Some(error()).filter(|message| !message.is_empty()),
-                    helper: saved().then(|| {
-                        "Saved. Restarting to connect to it - on a packaged build, close and reopen the app."
-                            .to_string()
-                    }),
-                    oninput: move |_| {
-                        error.set(String::new());
-                        saved.set(false);
-                    },
+        PendingLibrary {}
+        if on_device() {
+            Card { title: "Library", subtitle: "On this device",
+                Stack { gap: Space::Md,
+                    Text { tone: TextTone::Secondary,
+                        "Your subscriptions, playlists and history are kept on this device. Move them to a Tawny server to use them on your other devices too."
+                    }
+                    Input {
+                        label: "Server address",
+                        value: url,
+                        input_type: InputType::Url,
+                        placeholder: "https://tawny.example",
+                        error: Some(error()).filter(|message| !message.is_empty()),
+                        oninput: move |_| error.set(String::new()),
+                    }
+                    Button {
+                        expand: ButtonExpand::Block,
+                        loading: moving(),
+                        onclick: move |_| move_to(library_move::Destination::Server(url())),
+                        "Move to this server"
+                    }
                 }
+            }
+        } else {
+            Card { title: "Server",
+                Stack { gap: Space::Md,
+                    Input {
+                        label: "Server address",
+                        value: url,
+                        input_type: InputType::Url,
+                        error: Some(error()).filter(|message| !message.is_empty()),
+                        oninput: move |_| {
+                            error.set(String::new());
+                        },
+                    }
 
-                Button {
-                    fill: ButtonFill::Outline,
-                    color: Color::Neutral,
-                    expand: ButtonExpand::Block,
-                    onclick: move |_| {
-                        match server_url::set_backend_url(&url()) {
-                            Some(_) => {
-                                saved.set(true);
-                                reload_client();
+                    Button {
+                        fill: ButtonFill::Outline,
+                        color: Color::Neutral,
+                        expand: ButtonExpand::Block,
+                        onclick: move |_| {
+                            match server_url::set_backend_url(&url()) {
+                                Some(_) => {
+                                    app_state.forget_account();
+                                    session.reconnect();
+                                }
+                                None => error.set(
+                                    "Enter a full address, including http:// or https://.".into(),
+                                ),
                             }
-                            None => error.set(
-                                "Enter a full address, including http:// or https://.".into(),
-                            ),
+                        },
+                        "Save and reconnect"
+                    }
+
+                    if device_available() {
+                        Text { tone: TextTone::Secondary,
+                            "Or keep your library on this device instead, without a server."
                         }
-                    },
-                    "Save and reconnect"
+                        Button {
+                            fill: ButtonFill::Outline,
+                            color: Color::Neutral,
+                            expand: ButtonExpand::Block,
+                            loading: moving(),
+                            onclick: move |_| move_to(library_move::Destination::Device),
+                            "Move my library to this device"
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+/// A library a move brought here, waiting to be added to this account.
+///
+/// Not added on its own: the viewer may want it in an account they already
+/// have on this server, and signs in to that first.
+#[component]
+fn PendingLibrary() -> Element {
+    let app_state = use_context::<AppState>();
+    let mut pending = use_signal(|| None::<library_move::PendingMove>);
+    let mut adding = use_signal(|| false);
+    use_effect(move || pending.set(library_move::pending()));
+
+    let Some(waiting) = pending() else {
+        return rsx! {};
+    };
+    let from = waiting.source.clone();
+
+    rsx! {
+        Card { title: "Add your library",
+            Stack { gap: Space::Md,
+                Text {
+                    "Your library from {from} is ready to add to the account you are using here. To add it to an account you already have, sign in to that account first."
+                }
+                Button {
+                    expand: ButtonExpand::Block,
+                    loading: adding(),
+                    onclick: move |_| {
+                        let Some(waiting) = pending() else { return };
+                        if adding() { return; }
+                        adding.set(true);
+                        spawn(async move {
+                            match library_move::finish(waiting).await {
+                                Ok(added) => {
+                                    pending.set(None);
+                                    for change in [
+                                        DataChange::Subscriptions,
+                                        DataChange::Groups,
+                                        DataChange::Playlists,
+                                        DataChange::Queue,
+                                        DataChange::History,
+                                        DataChange::Watched,
+                                    ] {
+                                        invalidate(change);
+                                    }
+                                    app_state.show_toast(import_summary(added), Color::Success);
+                                }
+                                Err(message) => app_state.show_toast(message, Color::Danger),
+                            }
+                            adding.set(false);
+                        });
+                    },
+                    "Add library"
+                }
+                Button {
+                    fill: ButtonFill::Clear,
+                    color: Color::Neutral,
+                    expand: ButtonExpand::Block,
+                    onclick: move |_| {
+                        library_move::discard();
+                        pending.set(None);
+                    },
+                    "Don't add it"
+                }
+            }
+        }
+    }
+}
+
+/// What an import added, for a toast.
+fn import_summary(added: LibraryImport) -> String {
+    let count = |n: usize, one: &str, many: &str| match n {
+        0 => None,
+        1 => Some(format!("1 {one}")),
+        n => Some(format!("{n} {many}")),
+    };
+    let parts = [
+        count(added.channels, "channel", "channels"),
+        count(added.playlists, "playlist", "playlists"),
+        count(added.playlist_videos, "playlist video", "playlist videos"),
+        count(added.history, "video in history", "videos in history"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    match parts.as_slice() {
+        [] => "Your library was already here.".into(),
+        [only] => format!("Added {only}."),
+        [first @ .., last] => format!("Added {} and {last}.", first.join(", ")),
     }
 }

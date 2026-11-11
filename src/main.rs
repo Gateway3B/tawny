@@ -18,6 +18,8 @@ mod db;
 #[cfg(feature = "server")]
 mod health;
 
+mod library_move;
+
 mod library_sync;
 // The relay is Android's; the server build compiles it only to test it.
 #[cfg(any(target_os = "android", all(test, feature = "server")))]
@@ -32,6 +34,11 @@ mod playback_resolver;
 
 #[cfg(feature = "server")]
 mod server;
+
+#[cfg(feature = "server")]
+mod server_router;
+
+mod device_backend;
 
 mod server_url;
 
@@ -58,75 +65,11 @@ fn main() {
     let _ = dotenvy::dotenv();
     telemetry::init();
     dioxus::serve(|| async move {
-        use std::sync::Arc;
-
-        use axum_session::{SessionConfig, SessionLayer, SessionStore};
-        use axum_session_auth::AuthConfig;
-        use dioxus::server::axum::middleware::from_fn_with_state;
-        use dioxus::server::axum::routing::get;
-        use dioxus::server::axum::{Extension, Router};
-        use g3_auth::{AuthGuard, AuthSessionLayer, require_session};
-        use surrealdb::engine::any::Any;
-
         let state = server::AppServerState::initialize()
             .await
             .unwrap_or_else(|_| panic!("Tawny initialization failed; check configuration and private database migration status."));
         server::spawn_subscription_poller(state.clone());
-
-        let db = Arc::clone(&state.db);
-        let session_config = SessionConfig::default()
-            .with_cookie_path("/")
-            .with_secure(auth::secure_cookies());
-        let session_store =
-            SessionStore::new(Some(auth::session_pool(Arc::clone(&db))), session_config)
-                .await
-                .expect("create Tawny session store");
-        // Every page is public: the client signs a first-time visitor in as a
-        // guest from whichever page they opened. Server functions are not,
-        // unless marked `#[g3_auth::public]`.
-        let guard = AuthGuard::for_routes(app::Route::Feed {});
-        let rate_limits = auth::account_rate_limits().shared();
-
-        // Routes that answer without a session, outside the session layers.
-        // Probes should not allocate a viewer session; YouTube's hub has no
-        // cookie; and a proxy token is itself the capability, which a native
-        // media element fetches without the app's cookie.
-        let sessionless = Router::new()
-            .route("/api/v1/health", get(health::health))
-            .route(
-                "/api/v1/playback/proxy/{token}",
-                get(server::playback_proxy).options(server::playback_proxy_options),
-            )
-            .route(
-                "/api/v1/websub/youtube",
-                get(server::youtube_websub_verify).post(server::youtube_websub_notification),
-            )
-            .layer(Extension(state.clone()));
-
-        Ok(dioxus::server::router(App)
-            .layer(from_fn_with_state(
-                rate_limits,
-                g3_auth::rate_limit::enforce,
-            ))
-            .layer(Extension(state))
-            .layer(Extension(Arc::clone(&db)))
-            .layer(from_fn_with_state(
-                guard,
-                require_session::<auth::AppUser, Any>,
-            ))
-            .layer(
-                AuthSessionLayer::<auth::AppUser, Any>::new(Some(db))
-                    .with_config(AuthConfig::<String>::default().set_cache(false)),
-            )
-            .layer(SessionLayer::new(session_store))
-            .layer(dioxus::server::axum::middleware::from_fn(
-                auth::private_account_responses,
-            ))
-            .layer(g3_cache::cdn_cache_guard("/api"))
-            .merge(sessionless)
-            .layer(dioxus::server::axum::middleware::from_fn(
-                telemetry::request_complete,
-            )))
+        server_router::router(state).await
     });
 }
 

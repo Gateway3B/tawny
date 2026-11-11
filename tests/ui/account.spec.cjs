@@ -29,6 +29,65 @@ test("settings keeps local account controls without company services", async ({
 });
 
 test.describe("Tawny first launch", () => {
+  test("a server that stops replying times out and can be retried", async ({ page, baseURL }) => {
+    await page.addInitScript(() => window.localStorage.removeItem("tawny.backend-url"));
+    const held = [];
+    await page.route("**/api/v1/auth/account", (route) => held.push(route));
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Connect to a Tawny server" })).toBeVisible();
+    await page.getByRole("textbox", { name: "Server address" }).fill(baseURL);
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Connecting…", exact: true })).toBeDisabled();
+    await expect(
+      page.getByText("Connection timed out. Check your internet connection and try again.", {
+        exact: true,
+      }),
+    ).toBeVisible({ timeout: 25_000 });
+    await page.unroute("**/api/v1/auth/account");
+    for (const route of held) await route.abort().catch(() => {});
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    await expect(page.locator(".g3-app-shell")).toBeVisible();
+  });
+
+  test("Connect reports failures and retries in place without reloading", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(() => {
+      window.localStorage.removeItem("tawny.backend-url");
+    });
+    let offline = true;
+    await page.route(/\/api\/v1\/auth\/(account|guest)$/, async (route) => {
+      if (!offline) return route.continue();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await route.fulfill({ status: 502, body: "upstream connection failed: internal detail" });
+    });
+    let navigations = 0;
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) navigations++;
+    });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const problem = page.getByText(
+      "Could not connect to Tawny. Check the server address and try again.",
+      { exact: true },
+    );
+    await expect(problem).toBeVisible();
+    await expect(page.getByText(/packaged build|close and reopen|internal detail/i)).toHaveCount(0);
+    await page.getByRole("textbox", { name: "Server address" }).fill(baseURL);
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Connecting…", exact: true })).toBeDisabled();
+    await expect(problem).toBeVisible();
+    offline = false;
+    const beforeRetry = navigations;
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    await expect(page.locator(".g3-app-shell")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Connect to a Tawny server" })).toHaveCount(0);
+    expect(navigations).toBe(beforeRetry);
+    await expect(page.getByText(/packaged build|internal detail/i)).toHaveCount(0);
+    await page.screenshot({ path: "target/connect-retry-mobile.png" });
+  });
+
   test("requires a complete server URL before connecting", async ({ page }) => {
     await page.addInitScript(() => {
       window.localStorage.removeItem("tawny.backend-url");
@@ -37,6 +96,7 @@ test.describe("Tawny first launch", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "Connect to a Tawny server" })).toBeVisible();
     await expect(page.getByText(/g3tech/i)).toHaveCount(0);
+    await expect(page.getByText(/packaged build|close and reopen/i)).toHaveCount(0);
 
     await page.getByRole("textbox", { name: "Server address" }).fill("tawny.example");
     await page.getByRole("button", { name: "Connect", exact: true }).click();
@@ -50,7 +110,7 @@ test("deleting a test account finishes immediately and starts a new guest", asyn
   await openApp(appPage, "/settings");
   const before = await (await appPage.request.get("/api/v1/auth/account")).json();
   await appPage.getByRole("button", { name: "Delete account", exact: true }).click();
-  const dialog = appPage.getByRole("dialog");
+  const dialog = appPage.getByRole("alertdialog");
   await expect(dialog).toContainText("Other devices will be signed out.");
   const deleted = appPage.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/v1/auth/delete" && response.ok(),
