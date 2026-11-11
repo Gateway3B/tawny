@@ -10,8 +10,8 @@ use g3_native_plugins::{Updater, UpdaterConfig};
 /// The public half of the release key (`scripts/release-signing.mjs keygen`).
 /// The release workflow refuses to publish when its secret does not match
 /// this, since an app would refuse every file it signed.
-pub const UPDATER_PUBLIC_KEY: &str = "untrusted comment: minisign public key E66261DCC1A7F581
-RWSB9afB3GFi5g+d7vZFHPNSNFvkxLJWIpaSE23r74b8LTJimW/QqSnb
+pub const UPDATER_PUBLIC_KEY: &str = "untrusted comment: minisign public key 9A1942D685589173
+RWRzkViF1kIZmg3FaW1x7GImyBZtm0cHfRHx6ZpZEUAGc03N+WZdZya8
 ";
 
 pub const RELEASES: &str =

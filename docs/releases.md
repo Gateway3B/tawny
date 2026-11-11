@@ -45,7 +45,7 @@ All in this repository's secrets:
 
 | Secret | What it is | Why |
 | --- | --- | --- |
-| `UPDATER_KEY` | Tawny's release key, the secret half (`~/.tawny-release/tawny-updater.key`) | The app installs only files it signed. Its public half is `UPDATER_PUBLIC_KEY` in `src/updater.rs` |
+| `UPDATER_KEY` | Tawny's release key, the secret half (`~/.g3-release/tawny-updater.key`, key id `9A1942D685589173`) | The app installs only files it signed. Its public half is `UPDATER_PUBLIC_KEY` in `src/updater.rs` |
 | `RELEASES_TOKEN` | A fine-grained token with *Contents: read and write* on g3techhq/releases only | Publishing there from this repository |
 | `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | The APK signing key, as for [Build Mobile Artifacts](deployment.md#native-mobile-artifacts) | Android installs an update only when it is signed with the same key as the installed app |
 
@@ -58,6 +58,29 @@ key it was built with. Keep an offline copy. To replace it, ship one release
 signed with the old key whose app carries the new public key, then switch the
 secret. A new key comes from the releases repository:
 `node scripts/release-signing.mjs keygen <folder> tawny`.
+
+Tawny 0.1.2 changed the key (to `9A1942D685589173`, which lives on the
+workstation as well as in the secret, so a release can be published from
+either). Installs from before 0.1.2 trust the old key and refuse 0.1.2, so
+they must install it by hand once; from then on they update themselves.
+
+## Publishing from a workstation
+
+The releases repository's `scripts/publish-local.mjs` does what the publish
+workflow does, from a machine with `~/.g3-release/tawny-updater.key` (see the
+releases README, "Publishing from a workstation"). Build the same files as
+**Release** (`dx bundle --android --release --no-default-features --fullstack
+false --package-types apk`, and `dx bundle --desktop ... --package-types nsis
+--package-types updater`), name them as it does, then from a clean
+`../releases` on `main`:
+
+```bash
+node scripts/publish-local.mjs --app tawny --name Tawny --version <x.y.z>   --key ~/.g3-release/tawny-updater.key --public-key ../tawny/src/updater.rs   --file android=Tawny_<x.y.z>.apk   --file windows-x86_64-nsis=Tawny_<x.y.z>_x64-setup.zip   --attach Tawny_<x.y.z>_x64-setup.exe   --source Gateway3B/tawny@<sha> --notes @notes.md --prerelease
+```
+
+A dev APK built this way is debug-signed (the workstation's
+`~/.android/debug.keystore`), so it installs over `dx serve` and `adb`
+builds, but not over a release-keystore build, and the other way round.
 
 ## Installing for the first time
 
