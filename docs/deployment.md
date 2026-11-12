@@ -36,9 +36,9 @@ are published. If you keep them private, the Portainer host needs
 
 ## Native mobile artifacts
 
-Versioned releases that installed apps update themselves from are a separate
-workflow, run by pushing a `v*` tag: see [releases.md](releases.md). What
-follows is for one-off builds.
+Versioned releases that installed apps update themselves from are published
+from a workstation: see [releases.md](releases.md). What follows is for
+one-off builds.
 
 Native compilation is intentionally separate from image publication and pull
 request CI. Run **Build Mobile Artifacts** manually, choose Android, iOS, or

@@ -1,21 +1,24 @@
 //! Where the native apps look for a newer Tawny, and the key a release must be
 //! signed with (g3-native-plugins' `updater`).
 //!
-//! Releases are published to g3techhq/releases, the release repository every
-//! g3 app shares, by `.github/workflows/release.yml`. The app reads
-//! apps/tawny/latest.json there. See docs/releases.md.
+//! Releases are published to this repository, Gateway3B/tawny, from a
+//! workstation (the releases repository's `scripts/publish-local.mjs
+//! --manifest asset`). The app reads the `latest.json` asset of the latest
+//! release. See docs/releases.md.
 
 use g3_native_plugins::{Updater, UpdaterConfig};
 
 /// The public half of the release key (`scripts/release-signing.mjs keygen`).
-/// The release workflow refuses to publish when its secret does not match
-/// this, since an app would refuse every file it signed.
+/// The publish script refuses a key that does not match this, since an app
+/// would refuse every file it signed.
 pub const UPDATER_PUBLIC_KEY: &str = "untrusted comment: minisign public key 9A1942D685589173
 RWRzkViF1kIZmg3FaW1x7GImyBZtm0cHfRHx6ZpZEUAGc03N+WZdZya8
 ";
 
+/// GitHub redirects this to the latest release's `latest.json` asset; the
+/// updater follows the redirect on every platform.
 pub const RELEASES: &str =
-    "https://raw.githubusercontent.com/g3techhq/releases/main/apps/tawny/latest.json";
+    "https://github.com/Gateway3B/tawny/releases/latest/download/latest.json";
 
 /// The builds a release carries: the Android APK and the Windows installer.
 /// Elsewhere there is nothing to update to, so Settings shows no updates.
@@ -47,6 +50,9 @@ mod tests {
         // inputs directly.
         let config = UpdaterConfig::new(UPDATER_PUBLIC_KEY, env!("CARGO_PKG_VERSION"));
         assert!(Updater::new().configure(config).is_ok());
-        assert!(RELEASES.ends_with("/apps/tawny/latest.json"));
+        assert_eq!(
+            RELEASES,
+            "https://github.com/Gateway3B/tawny/releases/latest/download/latest.json"
+        );
     }
 }

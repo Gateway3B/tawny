@@ -135,3 +135,13 @@ style-report:
 
 style-test:
     node --test scripts/rust-style.test.mjs
+
+# --- Releases -------------------------------------------------------------
+
+# Publish a release to Gateway3B/tawny from a folder holding
+# Tawny_<version>.apk, Tawny_<version>_x64-setup.exe and
+# Tawny_<version>_x64-setup.zip, built from HEAD. Needs ../releases and
+# ~/.g3-release/tawny-updater.key. Pass --dry-run to check without
+# publishing. See docs/releases.md.
+publish version dir notes *flags:
+    node ../releases/scripts/publish-local.mjs --repo Gateway3B/tawny --manifest asset --app tawny --name Tawny --version {{version}} --key "{{home_directory()}}/.g3-release/tawny-updater.key" --public-key src/updater.rs --file "android={{dir}}/Tawny_{{version}}.apk" --file "windows-x86_64-nsis={{dir}}/Tawny_{{version}}_x64-setup.zip" --attach "{{dir}}/Tawny_{{version}}_x64-setup.exe" --source "Gateway3B/tawny@{{`git rev-parse HEAD`}}" "--notes=@{{notes}}" {{flags}}

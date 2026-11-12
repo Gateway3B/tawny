@@ -102,7 +102,7 @@ mod native {
                         }
                     }
                     Text { variant: TextVariant::Caption,
-                        "Releases come from github.com/g3techhq/releases and are checked against Tawny's signing key before they install."
+                        "Releases come from github.com/Gateway3B/tawny and are checked against Tawny's signing key before they install."
                     }
                 }
             }

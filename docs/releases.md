@@ -1,14 +1,15 @@
 # Releases and app updates
 
-Tawny's Android and Windows apps update themselves from
-[g3techhq/releases](https://github.com/g3techhq/releases), the release
-repository every g3 app shares. Settings → App updates checks
-`https://raw.githubusercontent.com/g3techhq/releases/main/apps/tawny/latest.json`,
+Tawny's Android and Windows apps update themselves from this repository's
+[releases](https://github.com/Gateway3B/tawny/releases). Settings → App
+updates checks
+`https://github.com/Gateway3B/tawny/releases/latest/download/latest.json`
+(GitHub redirects it to the `latest.json` asset of the latest release),
 downloads the build for the device, checks it against the release key
-compiled into the app, and installs it. The updater itself is
-g3-native-plugins' `updater` feature (and `updater-install` on Android, for
-installing an APK); its README ("App updates") covers what each platform
-does. The releases repository's README covers how any app joins.
+compiled into the app, and installs it. The repository is public, so
+nothing needs a token. The updater itself is g3-native-plugins' `updater`
+feature (and `updater-install` on Android, for installing an APK); its
+README ("App updates") covers what each platform does.
 
 | Platform | Release file | Installs by |
 | --- | --- | --- |
@@ -17,74 +18,78 @@ does. The releases repository's README covers how any app joins.
 
 iOS, macOS and Linux get no release yet, so Settings shows no updates there.
 
+Until 0.1.2, releases went to g3techhq/releases (tagged `tawny-v<version>`)
+and the app read `apps/tawny/latest.json` there. That file now bridges: it
+names the release here, so 0.1.2 installs update to a build that reads this
+repository. g3techhq/releases' `scripts/bridge-local.mjs --app tawny --from
+Gateway3B/tawny` rewrites it, and only needs running again if a 0.1.2
+install could miss a release.
+
 ## Cutting a release
 
-1. Raise `version` in `Cargo.toml`. The app offers a release only when it is
-   newer than its own version, and Android's `versionCode` comes from it
-   (`major * 1000000 + minor * 1000 + patch`).
-2. Commit, then tag and push:
+Releases are published from a workstation, with `~/.g3-release/tawny-updater.key`,
+`gh` logged in with push access here, and the g3techhq/releases checkout
+beside this one (`../releases`, for its `scripts/publish-local.mjs`). No
+workflow runs on the tag.
+
+1. Raise `version` in `Cargo.toml` (and the `tawny` entry's version in
+   `Cargo.lock`: commit only that line, not a lock rewritten by local
+   `[patch]` overrides). The app offers a release only when it is newer than
+   its own version, and Android's `versionCode` comes from it
+   (`major * 1000000 + minor * 1000 + patch`). Commit and push `main`.
+2. Build the two files from that commit:
 
    ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
+   dx bundle --android --release --no-default-features --fullstack false      --package-types apk --target aarch64-linux-android
+   dx bundle --desktop --release --no-default-features --fullstack false      --package-types nsis --package-types updater
    ```
 
-3. **Release** (`.github/workflows/release.yml`) checks the tag matches
-   `Cargo.toml` and that the secrets are in place, builds the APK and the
-   Windows installer, and calls the shared publish workflow. That signs both,
-   publishes them as the release `tawny-v0.2.0` in g3techhq/releases, and
-   only then updates `apps/tawny/latest.json`, so no app sees a release
-   before its files are there.
+   and put them in one folder as `Tawny_<x.y.z>.apk`,
+   `Tawny_<x.y.z>_x64-setup.exe` and `Tawny_<x.y.z>_x64-setup.zip` (the
+   `updater` package type wraps the installer in that zip).
+3. Publish:
+
+   ```bash
+   just publish <x.y.z> <folder> <notes.md>          # add --dry-run to check first
+   ```
+
+   which runs:
+
+   ```bash
+   node ../releases/scripts/publish-local.mjs --repo Gateway3B/tawny --manifest asset      --app tawny --name Tawny --version <x.y.z>      --key ~/.g3-release/tawny-updater.key --public-key src/updater.rs      --file android=<folder>/Tawny_<x.y.z>.apk      --file windows-x86_64-nsis=<folder>/Tawny_<x.y.z>_x64-setup.zip      --attach <folder>/Tawny_<x.y.z>_x64-setup.exe      --source Gateway3B/tawny@<HEAD> --notes @<notes.md>
+   ```
+
+   It signs both files, creates the draft release `v<x.y.z>` on that commit
+   with the files, their signatures, the setup `.exe` and `latest.json`,
+   checks they are all there, and only then publishes it as the latest
+   release, which is when apps see it. It refuses a version that is not
+   newer than the one the URL above serves, a tag that exists, and a key that
+   is not the one in `src/updater.rs`.
 
 The release builds carry no `SERVER_URL`: one build for any server, set up on
 first launch (see [mobile.md](mobile.md#the-backend-address)).
-
-## Keys and secrets
-
-All in this repository's secrets:
-
-| Secret | What it is | Why |
-| --- | --- | --- |
-| `UPDATER_KEY` | Tawny's release key, the secret half (`~/.g3-release/tawny-updater.key`, key id `9A1942D685589173`) | The app installs only files it signed. Its public half is `UPDATER_PUBLIC_KEY` in `src/updater.rs` |
-| `RELEASES_TOKEN` | A fine-grained token with *Contents: read and write* on g3techhq/releases only | Publishing there from this repository |
-| `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | The APK signing key, as for [Build Mobile Artifacts](deployment.md#native-mobile-artifacts) | Android installs an update only when it is signed with the same key as the installed app |
-
-The workflow stops before building if a secret is missing or `UPDATER_KEY`
-does not belong to the public key in `src/updater.rs`: an app would refuse
-every file it signed.
-
-Losing `UPDATER_KEY` strands every install, since an app keeps trusting the
-key it was built with. Keep an offline copy. To replace it, ship one release
-signed with the old key whose app carries the new public key, then switch the
-secret. A new key comes from the releases repository:
-`node scripts/release-signing.mjs keygen <folder> tawny`.
-
-Tawny 0.1.2 changed the key (to `9A1942D685589173`, which lives on the
-workstation as well as in the secret, so a release can be published from
-either). Installs from before 0.1.2 trust the old key and refuse 0.1.2, so
-they must install it by hand once; from then on they update themselves.
-
-## Publishing from a workstation
-
-The releases repository's `scripts/publish-local.mjs` does what the publish
-workflow does, from a machine with `~/.g3-release/tawny-updater.key` (see the
-releases README, "Publishing from a workstation"). Build the same files as
-**Release** (`dx bundle --android --release --no-default-features --fullstack
-false --package-types apk`, and `dx bundle --desktop ... --package-types nsis
---package-types updater`), name them as it does, then from a clean
-`../releases` on `main`:
-
-```bash
-node scripts/publish-local.mjs --app tawny --name Tawny --version <x.y.z>   --key ~/.g3-release/tawny-updater.key --public-key ../tawny/src/updater.rs   --file android=Tawny_<x.y.z>.apk   --file windows-x86_64-nsis=Tawny_<x.y.z>_x64-setup.zip   --attach Tawny_<x.y.z>_x64-setup.exe   --source Gateway3B/tawny@<sha> --notes @notes.md --prerelease
-```
 
 A dev APK built this way is debug-signed (the workstation's
 `~/.android/debug.keystore`), so it installs over `dx serve` and `adb`
 builds, but not over a release-keystore build, and the other way round.
 
+## The release key
+
+Tawny's release key is `~/.g3-release/tawny-updater.key` (key id
+`9A1942D685589173`). The app installs only files it signed; its public half is
+`UPDATER_PUBLIC_KEY` in `src/updater.rs`. Losing it strands every install,
+since an app keeps trusting the key it was built with: keep an offline copy.
+To replace it, ship one release signed with the old key whose app carries the
+new public key. A new key comes from the releases repository:
+`node scripts/release-signing.mjs keygen <folder> tawny`.
+
+Tawny 0.1.2 changed the key (to `9A1942D685589173`). Installs from before
+0.1.2 trust the old key and refuse 0.1.2, so they must install it by hand
+once; from then on they update themselves.
+
 ## Installing for the first time
 
-From the release's page in g3techhq/releases:
+From the latest release's page, https://github.com/Gateway3B/tawny/releases/latest:
 
 - **Android**: download the APK on the phone and open it. Android asks to
   allow the browser or file manager to install apps. A phone that has a
