@@ -18,12 +18,8 @@ README ("App updates") covers what each platform does.
 
 iOS, macOS and Linux get no release yet, so Settings shows no updates there.
 
-Until 0.1.2, releases went to g3techhq/releases (tagged `tawny-v<version>`)
-and the app read `apps/tawny/latest.json` there. That file now bridges: it
-names the release here, so 0.1.2 installs update to a build that reads this
-repository. g3techhq/releases' `scripts/bridge-local.mjs --app tawny --from
-Gateway3B/tawny` rewrites it, and only needs running again if a 0.1.2
-install could miss a release.
+Releases up to 0.1.2 were published elsewhere and have been removed; every
+install has since updated to a build that reads this repository.
 
 ## Cutting a release
 
