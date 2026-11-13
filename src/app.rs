@@ -33,23 +33,15 @@ const TAWNY_DOWNLOADS_JS: Asset = asset!("/assets/tawny_downloads.js");
 
 const FAVICON_SVG: Asset = asset!("/assets/favicon.svg");
 
-/// Stylesheet links for the native WebView's initial `index.html`.
-///
-/// Statically-headed assets only reach the web build. On desktop and mobile
-/// every stylesheet was linked at runtime, after the first render had already
-/// reached the WebView, so the app painted unstyled until they loaded. Links in
-/// the served head block first paint the way the web build's do. The runtime
-/// links stay: the native bundles collect assets from them.
+/// The head of the native WebView's first page, so the first paint is already
+/// styled and in the theme's colors (see [`g3_ui::NativeHead`]). The theme is
+/// the automatic one: the saved appearance is not known until after launch.
 #[cfg(any(feature = "desktop", feature = "mobile"))]
 pub fn native_head() -> String {
-    [
-        g3_ui::UI_CSS,
-        g3_route_transitions::ROUTE_TRANSITIONS_CSS,
-        TAILWIND_CSS,
-    ]
-    .iter()
-    .map(|href| format!(r#"<link rel="stylesheet" href="{href}">"#))
-    .collect()
+    g3_ui::NativeHead::new()
+        .theme(&tawny_theme(Appearance::Auto))
+        .stylesheet(TAILWIND_CSS)
+        .to_string()
 }
 
 /// Primary destinations are stable roots. Pages reached from a card push above
