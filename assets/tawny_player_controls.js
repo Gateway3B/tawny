@@ -71,6 +71,57 @@
   // The player sits at the very top of the screen, which is also where a
   // pulled-down notification shade starts. A drag that begins in this strip is
   // someone reaching for the status bar, not asking to minimize the video.
+  /// Whether nobody is looking at the player. In the Android app the WebView
+  /// is kept running while media plays (so Chromium keeps the audio going), and
+  /// that also keeps the page "visible" with the screen off or another app in
+  /// front. The window losing focus is what still tells the page it is in the
+  /// background there.
+  function playerBackgrounded(doc) {
+    if (doc.visibilityState !== "visible") return true;
+    const androidApp = doc.documentElement?.dataset?.androidApp === "true";
+    return androidApp && typeof doc.hasFocus === "function" && !doc.hasFocus();
+  }
+
+  const BACKGROUND_PAUSE_RESUME_SECONDS = 2;
+  const BACKGROUND_STUCK_SECONDS = 6;
+  /// Enough buffered ahead that a stuck clock is not just the network.
+  const BACKGROUND_STUCK_BUFFER_SECONDS = 3;
+  /// Kicks in a row that brought no progress before the watchdog gives up.
+  const BACKGROUND_MAX_KICKS = 5;
+
+  /// What the background watchdog does with one sample of the player: resume
+  /// a pause nobody asked for, nudge a clock that stopped with data buffered,
+  /// or nothing. Only for the Android app with the screen off or another app in
+  /// front, where the page is still visible to Chromium but nobody can reach
+  /// the controls: a truly hidden page is the pause listener's business, and
+  /// Chromium refuses a hidden video anyway.
+  function backgroundRecovery(sample) {
+    if (!sample.unfocusedVisible || !sample.intent || sample.ended || sample.busy) return null;
+    if (sample.kicks >= BACKGROUND_MAX_KICKS || !sample.hasMetadata) return null;
+    if (sample.paused) {
+      return sample.stalledFor >= BACKGROUND_PAUSE_RESUME_SECONDS ? "play" : null;
+    }
+    if (sample.seeking) return null;
+    if (
+      sample.stalledFor >= BACKGROUND_STUCK_SECONDS &&
+      sample.bufferedAhead >= BACKGROUND_STUCK_BUFFER_SECONDS
+    ) {
+      return "nudge";
+    }
+    return null;
+  }
+
+  function bufferedAheadOf(video) {
+    const at = video.currentTime;
+    const ranges = video.buffered;
+    for (let index = 0; index < (ranges?.length || 0); index += 1) {
+      if (ranges.start(index) <= at + 0.25 && at < ranges.end(index)) {
+        return ranges.end(index) - at;
+      }
+    }
+    return 0;
+  }
+
   const TOP_DEAD_ZONE_PX = 44;
   const inTopDeadZone = (clientY) => clientY < TOP_DEAD_ZONE_PX;
 
@@ -1345,7 +1396,7 @@
         // request or rebuilding a SourceBuffer. That is not a user Pause, so
         // keep Android's audio session alive and let Shaka resume it. During an
         // actual lifecycle edge, actively ask Chromium to resume as well.
-        if (pipTransition || document.visibilityState !== "visible") {
+        if (pipTransition || playerBackgrounded(document)) {
           recoverIntendedPlayback(80);
         }
         return;
@@ -1447,6 +1498,56 @@
       recoverIntendedPlayback(60);
     });
     listen(window, "tawnynativeplaybackresume", () => recoverIntendedPlayback(0));
+    // Screen off in the Android app, the page stays visible to Chromium, so a
+    // pause from outside or a media pipeline that stopped with data buffered
+    // was not recovered until the screen came back on and the native resume
+    // above ran - which is why audio stopped off Wi-Fi and started again the
+    // moment the phone was unlocked. This does the same in the background.
+    let watchedPosition = video.currentTime;
+    let watchedSince = Date.now();
+    let backgroundKicks = 0;
+    const watchdog = setInterval(() => {
+      const now = Date.now();
+      if (video.currentTime !== watchedPosition || !playbackIntent) {
+        if (video.currentTime > watchedPosition + 1) backgroundKicks = 0;
+        watchedPosition = video.currentTime;
+        watchedSince = now;
+        if (!playbackIntent) backgroundKicks = 0;
+      }
+      if (video.__tawnyPlaybackIntent === false) return;
+      const unfocusedVisible =
+        document.visibilityState === "visible" && playerBackgrounded(document);
+      const action = backgroundRecovery({
+        unfocusedVisible,
+        intent: playbackIntent,
+        ended: video.ended,
+        busy: starting || scrubbing || pipTransition,
+        kicks: backgroundKicks,
+        hasMetadata: video.readyState >= HTMLMediaElement.HAVE_METADATA,
+        paused: video.paused,
+        seeking: video.seeking,
+        stalledFor: (now - watchedSince) / 1000,
+        bufferedAhead: bufferedAheadOf(video),
+      });
+      if (!action) return;
+      backgroundKicks += 1;
+      watchedSince = now;
+      window.TawnyTransport?.record?.({
+        phase: "background-recovery",
+        action,
+        position: video.currentTime,
+        kick: backgroundKicks,
+      });
+      if (action === "play") {
+        video.play().catch(() => {});
+      } else {
+        // A seek to where it already is flushes and restarts the decoders,
+        // which a pause and play (Shaka's own stall fix) does not.
+        const at = video.currentTime;
+        video.currentTime = at;
+      }
+    }, 1000);
+    signal.addEventListener("abort", () => clearInterval(watchdog), { once: true });
     listen(video, "enterpictureinpicture", () => {
       beginPipTransition();
       recoverIntendedPlayback(0);

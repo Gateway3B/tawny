@@ -1040,6 +1040,8 @@
     },
     buildDashManifest: generatedDash,
     events: transportEvents,
+    // For the player controls, so their recoveries land in the same log.
+    record: recordTransportEvent,
     normalizePlaybackSession,
     normalizePlaybackUrl,
     nativeSessionRefresher,

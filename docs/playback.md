@@ -180,3 +180,15 @@ lock can disappear before the next segment arrives. Explicit Pause releases
 the playback locks immediately, independently of the twenty-minute service
 grace period. Closing the player, exhausting automatic recovery, or destroying
 the service releases them too. The screen remains free to turn off.
+
+In the Android app the WebView keeps running while media plays, so with the
+screen off or another app in front the page still reports itself visible.
+Only the window losing focus says nobody is looking, and the player reads
+that as the background too (`playerBackgrounded`). A pause the viewer did not
+ask for is resumed there, as on a hidden page, and a background watchdog
+resumes one that slipped past the pause listener and nudges a clock that has
+stopped with data still buffered (a seek to the same position restarts the
+decoders). Before this, such a stop waited for the screen to come back on,
+when the native resume event played it again at once. Each kick is recorded in
+`TawnyTransport.events` as `background-recovery`; the watchdog gives up after
+five kicks that bring no progress.
