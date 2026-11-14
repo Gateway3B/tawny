@@ -61,6 +61,20 @@ pub async fn get_comments_page(video_id: String, next_page: String) -> Result<Co
         .map_err(server_error)?)
 }
 
+// A POST, so the link travels in the body rather than in a request line
+// proxies log.
+#[post(
+    "/api/v1/channels/resolve",
+    state: dioxus::fullstack::extract::State<crate::server::AppServerState>,
+    _owner: crate::auth::Owner
+)]
+pub async fn resolve_channel_url(url: String) -> Result<String> {
+    Ok(state
+        .resolve_channel_url(&url)
+        .await
+        .map_err(server_error)?)
+}
+
 #[get(
     "/api/v1/channels/{channel_id}?order",
     state: dioxus::fullstack::extract::State<crate::server::AppServerState>,

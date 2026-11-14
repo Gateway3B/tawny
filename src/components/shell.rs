@@ -361,6 +361,7 @@ fn ShellContent() -> Element {
     rsx! {
         NativeMediaCoordinator {}
         NativeBackCoordinator {}
+        crate::youtube_links::YoutubeLinkReceiver {}
         ToasterBridge {}
         // Keyed by the route so arriving at a page is a mount.
         {rsx! { ScrollMemory { key: "{route_path}", path: route_path.clone() } }}

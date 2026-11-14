@@ -303,6 +303,20 @@ impl AppServerState {
         video
     }
 
+    /// The channel id behind a link that names a channel only by `@handle`
+    /// or a vanity path, which YouTube has to be asked about.
+    pub async fn resolve_channel_url(&self, url: &str) -> Result<String> {
+        match youtube_call(
+            self.youtube.query().resolve_url(url, false),
+            "resolve a channel link",
+        )
+        .await?
+        {
+            rustypipe::model::UrlTarget::Channel { id } => Ok(id),
+            _ => Err(anyhow!("the link is not a channel")),
+        }
+    }
+
     pub async fn channel_details(
         &self,
         owner: &str,

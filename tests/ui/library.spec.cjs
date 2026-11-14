@@ -349,7 +349,7 @@ test.describe("Tawny library interactions", () => {
 
   test("exposes search and filter controls without overflowing", async ({ appPage }) => {
     await openApp(appPage, "/explore");
-    await expect(appPage.getByPlaceholder("Search videos and channels")).toBeVisible();
+    await expect(appPage.getByPlaceholder("Search, or paste a YouTube link")).toBeVisible();
     for (const label of ["All", "Videos", "Channels"]) {
       await expect(appPage.getByRole("radio", { name: label, exact: true })).toBeVisible();
     }

@@ -5,6 +5,7 @@ use crate::{
         AppSettings, Channel, DiscoverList, ExploreFilter, FeedFilter, FeedGroup, FeedQuery, Video,
     },
     state::AppState,
+    youtube_links::{open_youtube_link, parse_youtube_link},
 };
 use dioxus::prelude::*;
 use g3_cache::use_cached;
@@ -27,12 +28,21 @@ const RESULT_PAGE_SIZE: usize = 24;
 #[component]
 pub fn Explore() -> Element {
     let app_state = use_context::<AppState>();
-    let search = app_state.explore_search;
+    let mut search = app_state.explore_search;
     let explore_filter = app_state.explore_filter;
     let mut results = app_state.explore_results;
     let mut searching = use_signal(|| false);
     let mut visible_count = use_signal(|| RESULT_PAGE_SIZE);
     let needle = use_memo(move || search().trim().to_lowercase());
+    // A pasted YouTube link opens what it points at instead of searching for
+    // its text. The box is cleared first: the search is kept between visits,
+    // and coming back to it would open the link again.
+    use_effect(move || {
+        if let Some(link) = parse_youtube_link(&search()) {
+            search.set(String::new());
+            open_youtube_link(app_state, link);
+        }
+    });
     // A new query or filter is a new list: start it at one page again.
     use_effect(move || {
         let _ = (needle(), explore_filter());
@@ -200,7 +210,7 @@ pub fn Explore() -> Element {
                     Searchbar {
                         class: "min-w-0 flex-1",
                         value: search,
-                        placeholder: "Search videos and channels",
+                        placeholder: "Search, or paste a YouTube link",
                         debounce_ms: 0,
                         on_submit: run_search,
                     }

@@ -52,6 +52,8 @@ mod telemetry;
 #[cfg(any(feature = "desktop", feature = "mobile"))]
 mod updater;
 
+mod youtube_links;
+
 use app::App;
 // Both features re-export the same `dioxus-desktop` crate.
 #[cfg(all(feature = "desktop", not(feature = "mobile")))]
