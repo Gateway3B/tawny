@@ -51,7 +51,7 @@ function session(label = "original") {
   };
 }
 
-function harness(fetch) {
+function harness(fetch, userAgent = "") {
   const document = Object.assign(new Events(), { visibilityState: "visible" });
   const video = Object.assign(new Events(), {
     currentTime: 120,
@@ -72,14 +72,21 @@ function harness(fetch) {
       super();
       players.push(this);
     }
-    configure() {}
+    configuration = {};
+    variants = [];
+    selections = [];
+    configure(config) {
+      Object.assign(this.configuration, config);
+    }
     getNetworkingEngine = () => ({ registerRequestFilter() {}, registerResponseFilter() {} });
     attach = async () => {};
     load = async (uri, start) => {
-      this.manifest = await manifests.get(uri).text();
+      this.configurationAtLoad = structuredClone(this.configuration);
+      this.manifest = manifests.has(uri) ? await manifests.get(uri).text() : uri;
       video.currentTime = start;
     };
-    getVariantTracks = () => [];
+    getVariantTracks = () => this.variants;
+    selectVariantTrack = (...args) => this.selections.push(args);
     retryStreaming = () => true;
     destroy = async () => {
       this.destroyed = true;
@@ -87,6 +94,7 @@ function harness(fetch) {
     };
   }
   const window = {
+    navigator: { userAgent },
     shaka: {
       Player,
       polyfill: { installAll() {} },
@@ -135,6 +143,80 @@ function harness(fetch) {
   };
   return { document, video, players, delays, transport, fail, visible, settle };
 }
+
+test("live HLS prefers the HD audio ladder before loading on every platform", async () => {
+  for (const userAgent of ["Chrome", "Android", "iPhone"]) {
+    const h = harness(undefined, userAgent);
+    await h.transport.attach(
+      h.video,
+      {
+        primary: {
+          protocol: "Hls",
+          url: "https://media.example/live.m3u8",
+          mime_type: "application/vnd.apple.mpegurl",
+        },
+      },
+      { preferredAudioLanguage: "es" },
+    );
+    const config = h.players[0].configurationAtLoad;
+    assert.deepEqual(Array.from(config.preferredAudioCodecs), ["mp4a.40.2", "mp4a", "opus"]);
+    assert.equal(config.preferredAudioLanguage, "es");
+    assert.equal(config.manifest.hls.sequenceMode, false);
+    assert.equal(config.abr.enabled, true);
+    await h.transport.detach(h.video);
+  }
+});
+
+test("on-demand playback keeps its platform codec preferences", async () => {
+  for (const [userAgent, expected] of [
+    ["Chrome", ["opus", "mp4a"]],
+    ["Android", ["mp4a", "opus"]],
+  ]) {
+    const h = harness(undefined, userAgent);
+    await h.transport.attach(h.video, session());
+    assert.deepEqual(Array.from(h.players[0].configurationAtLoad.preferredAudioCodecs), expected);
+    await h.transport.detach(h.video);
+  }
+});
+
+test("quality switching retains audio identity and language before considering bitrate", async () => {
+  const h = harness();
+  await h.transport.attach(h.video, session());
+  const player = h.players[0];
+  const active = { id: 1, height: 240, audioId: 9, language: "en", active: true };
+  const preferred = { id: 2, height: 1080, audioId: 9, language: "en", bandwidth: 3_000_000 };
+  player.variants = [
+    active,
+    preferred,
+    { id: 3, height: 1080, audioId: 10, language: "en", bandwidth: 4_000_000 },
+    { id: 4, height: 1080, audioId: 11, language: "es", bandwidth: 5_000_000 },
+    {
+      id: 5,
+      height: 1080,
+      audioId: 9,
+      language: "en",
+      bandwidth: 6_000_000,
+      allowedByKeySystem: false,
+    },
+  ];
+  assert.equal(h.transport.setQuality(h.video, 1080), true);
+  assert.equal(player.selections[0][0], preferred);
+  assert.equal(player.selections[0][1], true);
+  assert.equal(player.configuration.abr.enabled, false);
+  assert.equal(h.transport.qualityState(h.video).selectedHeight, 1080);
+  assert.equal(h.transport.setQuality(h.video, 2160), false);
+  assert.equal(player.selections.length, 1);
+  assert.equal(h.transport.setQuality(h.video, null), true);
+  assert.equal(player.configuration.abr.enabled, true);
+  assert.equal(h.transport.qualityState(h.video).auto, true);
+
+  // The low-only HE-AAC track still has a path to HD when no variant there
+  // carries its audio id, while retaining the selected language.
+  active.audioId = 3;
+  assert.equal(h.transport.setQuality(h.video, 1080), true);
+  assert.equal(player.selections[1][0].id, 3);
+  await h.transport.detach(h.video);
+});
 
 test("a failed stream renews as audio while hidden and restores the latest session at its position", async () => {
   let requests = 0;

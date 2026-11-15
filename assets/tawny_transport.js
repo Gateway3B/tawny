@@ -314,7 +314,7 @@
     }
   }
 
-  function configureShaka(player, preferredAudioLanguage) {
+  function configureShaka(player, preferredAudioLanguage, kind) {
     const retry = {
       maxAttempts: 4,
       baseDelay: 500,
@@ -333,7 +333,13 @@
     );
     const androidPlatform = /Android/i.test((window.navigator && window.navigator.userAgent) || "");
     player.configure({
-      manifest: { retryParameters: retry },
+      manifest: {
+        retryParameters: retry,
+        // Sequence mode concatenates segments at the end of each buffer.
+        // A manual quality switch trims video while audio can stay buffered;
+        // use media timestamps so the replacement picture stays on its clock.
+        hls: { sequenceMode: false },
+      },
       // Shaka filters the manifest to one codec family before ABR starts.
       // Quality may still change, but the underlying decoder/container does not.
       preferredVideoCodecs: applePlatform
@@ -344,7 +350,15 @@
       // AVC/AAC is the most consistently hardware-decoded pair across
       // Android System WebView versions, so prefer it there before the more
       // device-dependent WebM and AV1 representations.
-      preferredAudioCodecs: applePlatform || androidPlatform ? ["mp4a", "opus"] : ["opus", "mp4a"],
+      // YouTube's live HE-AAC ladder stops at 240p. Select AAC-LC before
+      // Shaka filters variants and starts buffering, avoiding a codec change
+      // just to reach HD. A broad mp4a preference also matches HE-AAC.
+      preferredAudioCodecs:
+        kind === "hls"
+          ? ["mp4a.40.2", "mp4a", "opus"]
+          : applePlatform || androidPlatform
+            ? ["mp4a", "opus"]
+            : ["opus", "mp4a"],
       // Dubbed uploads ship a dozen or more audio languages and the manifest
       // order is not a preference - without this Shaka simply takes the first
       // one, which is how an English video ended up playing in Italian. Shaka
@@ -413,7 +427,7 @@
     runtime.player = player;
     const audioOnly = Boolean(options?.audioOnly);
     const preferredAudioLanguage = String(options?.preferredAudioLanguage || "en").trim() || "en";
-    configureShaka(player, preferredAudioLanguage);
+    configureShaka(player, preferredAudioLanguage, kind);
     const pendingRanges = new Map();
     const networking = player.getNetworkingEngine();
     networking.registerRequestFilter((_requestType, request) => {
@@ -477,7 +491,6 @@
     }
     await player.load(uri, startTime > 0 ? startTime : null, mime);
     if (runtime.cancelled) throw new Error("Playback changed");
-    preferFullLadderAudio(player);
     player.addEventListener("variantchanged", () => {
       if (!runtime.cancelled) emit(video, "tawnyqualitychange", qualityState(video));
     });
@@ -927,69 +940,12 @@
     }
   }
 
-  // The audio track, in the language already playing, that goes with the
-  // highest video quality, when it is not the one playing: `{ codec, label,
-  // language }`, or null. Shaka's ABR only moves between variants that share
-  // the audio track, and YouTube's live HLS offers two audio tracks of one
-  // language, HE-AAC and AAC-LC, pairing the HE-AAC one only with 144p and
-  // 240p. Shaka took HE-AAC, and a live stream sat at 240p on a connection
-  // estimated at 50 Mbit/s.
-  function fullLadderAudio(variants) {
-    const usable = variants.filter(
-      (track) => track.allowedByApplication !== false && track.allowedByKeySystem !== false,
-    );
-    const active = usable.find((track) => track.active);
-    if (!active || !active.height) return null;
-    const language = active.language || "und";
-    const sameLanguage = usable.filter((track) => (track.language || "und") === language);
-    const reach = (audioId) =>
-      Math.max(
-        0,
-        ...sameLanguage
-          .filter((track) => track.audioId === audioId)
-          .map((track) => track.height || 0),
-      );
-    const top = sameLanguage.reduce(
-      (best, track) => ((track.height || 0) > (best.height || 0) ? track : best),
-      active,
-    );
-    if (top.audioId === active.audioId || reach(active.audioId) >= (top.height || 0)) return null;
-    return { codec: top.audioCodec || null, label: top.label || null, language };
-  }
-
-  function preferFullLadderAudio(player) {
-    if (
-      typeof player.getVariantTracks !== "function" ||
-      typeof player.getAudioTracks !== "function" ||
-      typeof player.selectAudioTrack !== "function"
-    ) {
-      return;
-    }
-    const wanted = fullLadderAudio(player.getVariantTracks());
-    if (!wanted) return;
-    const track = player
-      .getAudioTracks()
-      .find(
-        (candidate) =>
-          !candidate.active &&
-          (candidate.language || "und") === wanted.language &&
-          (!wanted.codec || candidate.codecs === wanted.codec) &&
-          (!wanted.label || candidate.label === wanted.label),
-      );
-    if (!track) return;
-    recordTransportEvent({ phase: "audio-for-full-ladder", codec: wanted.codec });
-    player.selectAudioTrack(track);
-  }
-
   function setAudioTrack(video, language) {
     const runtime = runtimes.get(video);
     if (!runtime?.player || typeof runtime.player.selectAudioLanguage !== "function") {
       return false;
     }
     runtime.player.selectAudioLanguage(language);
-    // Choosing a language picks that language's first audio track, which may
-    // be the one the higher qualities do not go with.
-    preferFullLadderAudio(runtime.player);
     emit(video, "tawnyaudiotrackchange", audioTrackState(video));
     // Selecting a language rebuilds the variant list, so the quality chip has
     // to be told as well or it keeps advertising the old one.
@@ -1022,7 +978,13 @@
     const sameLanguage = active
       ? variants.filter((track) => track.language === active.language)
       : variants;
-    const candidates = sameLanguage.length ? sameLanguage : variants;
+    const languageCandidates = sameLanguage.length ? sameLanguage : variants;
+    // Keep the current audio stream when that quality supports it. Picking
+    // solely by bitrate can also switch audio formats or commentary tracks.
+    const sameAudio = active
+      ? languageCandidates.filter((track) => track.audioId === active.audioId)
+      : [];
+    const candidates = sameAudio.length ? sameAudio : languageCandidates;
     const selected = candidates.sort((left, right) => right.bandwidth - left.bandwidth)[0];
     runtime.manualQuality = requested;
     runtime.player.configure({ abr: { enabled: false } });
@@ -1048,7 +1010,6 @@
     playbackServerBase,
     qualityState,
     restoresRefresh,
-    fullLadderAudio,
     audioTrackState,
     setAudioTrack,
     setQuality,

@@ -104,9 +104,14 @@ the server as a bot.
 
 YouTube's live master playlist offers two audio tracks in one language,
 HE-AAC and AAC-LC, and pairs HE-AAC only with 144p and 240p. Shaka's ABR moves
-only between variants that share the audio track, so after loading, the
-transport switches to the audio track that goes with the highest quality
-(`fullLadderAudio`). The controls measure a live stream against its seekable
+only between variants that share the audio track, so the transport prefers
+AAC-LC before loading the manifest. Selecting audio after loading was too
+late: Shaka only offered audio compatible with the video already playing,
+which could exclude the HD ladder. HLS uses timestamp-based segment placement
+instead of sequence mode so clearing video for a quality change does not
+shift it against buffered audio. Manual quality changes retain the current
+audio stream when the requested quality supports it.
+The controls measure a live stream against its seekable
 window: "LIVE" at the edge, how far behind it otherwise, and a scrub bar
 across the hour that can be rewound.
 
