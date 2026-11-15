@@ -3405,7 +3405,7 @@ dependencies = [
 [[package]]
 name = "g3-auth"
 version = "0.2.0"
-source = "git+https://github.com/g3techhq/g3-auth?branch=main#41b9c88daf79e757b2eaaa08dcb721c2c1232558"
+source = "git+https://github.com/g3techhq/g3-auth?branch=main#7e930cff7a164218c4168264e9c901145035e874"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3429,7 +3429,7 @@ dependencies = [
 [[package]]
 name = "g3-auth-macros"
 version = "0.1.0"
-source = "git+https://github.com/g3techhq/g3-auth?branch=main#41b9c88daf79e757b2eaaa08dcb721c2c1232558"
+source = "git+https://github.com/g3techhq/g3-auth?branch=main#7e930cff7a164218c4168264e9c901145035e874"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3522,7 +3522,7 @@ dependencies = [
 [[package]]
 name = "g3-ui"
 version = "0.7.0"
-source = "git+https://github.com/g3techhq/g3-ui?branch=main#0aeb1321fb0544cd44fb411f9a1edbf17c0e486a"
+source = "git+https://github.com/g3techhq/g3-ui?branch=main#b617e215701e0975fe989eae6ada283fe187a568"
 dependencies = [
  "cfg-if",
  "chrono",
@@ -8847,7 +8847,7 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
 name = "tawny"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "argon2",
