@@ -664,8 +664,16 @@
     );
   }
 
+  // Closing the player removes its element, and that can happen while a
+  // source is still loading. A removed element still plays in Chromium once
+  // play() is called on it, so the video carried on with no player left to
+  // stop it. Gone from the page counts as replaced.
+  function playbackChanged(video, generation) {
+    return video.__tawnyGeneration !== generation || !video.isConnected;
+  }
+
   async function loadSources(video, session, options, generation, startIndex) {
-    if (video.__tawnyGeneration !== generation) throw new Error("Playback changed");
+    if (playbackChanged(video, generation)) throw new Error("Playback changed");
     session = normalizePlaybackSession(session, options);
     cancelRestoreWhenVisible(video);
     const hiddenStart = startsHidden(options);
@@ -676,11 +684,14 @@
     let lastError = new Error("No in-app playback source was available");
     const resumeTime = rememberedPosition(video, options);
     const recoveryOptions = { ...options, startTime: resumeTime };
+    // The element is rendered with `autoplay`, which starts it on its own as
+    // soon as a new source has enough data, play() or not.
+    if (options.startPaused) video.autoplay = false;
 
     for (let index = startIndex; index < sources.length; index += 1) {
-      if (video.__tawnyGeneration !== generation) throw new Error("Playback changed");
+      if (playbackChanged(video, generation)) throw new Error("Playback changed");
       await destroyRuntime(video);
-      if (video.__tawnyGeneration !== generation) throw new Error("Playback changed");
+      if (playbackChanged(video, generation)) throw new Error("Playback changed");
       const source = sources[index];
       recordTransportEvent({
         phase: "loading",
@@ -712,6 +723,10 @@
           audioOnly: Boolean(options.audioOnly || hiddenStart),
         });
         video.removeEventListener("error", runtime.errorHandler, true);
+        if (playbackChanged(video, generation)) {
+          await destroyRuntime(video);
+          throw new Error("Playback changed");
+        }
         video.playbackRate = options.playbackRate || 1;
         video.defaultPlaybackRate = options.playbackRate || 1;
         emit(video, "tawnytransportchange", sourceLabel(source));
@@ -737,11 +752,15 @@
         };
         video.addEventListener("timeupdate", runtime.positionHandler);
         video.addEventListener("ended", runtime.endedHandler, { once: true });
-        video.play().catch((error) => {
-          // Refused rather than interrupted: the controls stop waiting for a
-          // start that is not coming and offer Play instead.
-          if (error?.name === "NotAllowedError") emit(video, "tawnyautoplayblocked");
-        });
+        if (options.startPaused) {
+          video.pause();
+        } else {
+          video.play().catch((error) => {
+            // Refused rather than interrupted: the controls stop waiting for
+            // a start that is not coming and offer Play instead.
+            if (error?.name === "NotAllowedError") emit(video, "tawnyautoplayblocked");
+          });
+        }
 
         runtime.errorHandler = (event) => {
           event.stopImmediatePropagation();
@@ -758,7 +777,16 @@
             position,
             error: runtime.lastError,
           });
-          const nextOptions = { ...recoveryOptions, startTime: position };
+          // A paused player stays paused through recovery. Another device
+          // saving its position moves a paused player here to match (the
+          // library sync's catch-up), and a stream that expired while it sat
+          // paused fails on that seek: recovering used to play it, so a
+          // computer left idle started the video the phone was watching.
+          const nextOptions = {
+            ...recoveryOptions,
+            startTime: position,
+            startPaused: video.paused,
+          };
           const recovery = canRefresh(nextOptions)
             ? refreshPlaybackSession(video, nextOptions, generation, position)
             : loadSources(video, session, nextOptions, generation, index + 1);
@@ -822,17 +850,18 @@
       loadSources(
         video,
         session,
-        { ...options, audioOnly: false, startTime: playbackPosition(video) },
+        {
+          ...options,
+          audioOnly: false,
+          startTime: playbackPosition(video),
+          startPaused: !resume,
+        },
         generation,
         0,
-      )
-        .then(() => {
-          if (!resume) video.pause();
-        })
-        .catch((error) => {
-          emit(video, "tawnytransporterror", { message: String(error) });
-          video.dispatchEvent(new Event("error"));
-        });
+      ).catch((error) => {
+        emit(video, "tawnytransporterror", { message: String(error) });
+        video.dispatchEvent(new Event("error"));
+      });
     };
     document.addEventListener("visibilitychange", onVisible);
     video.__tawnyCancelRestore = () => document.removeEventListener("visibilitychange", onVisible);

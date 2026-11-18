@@ -57,13 +57,19 @@ function harness(fetch, userAgent = "") {
     currentTime: 120,
     duration: 6000,
     paused: true,
+    autoplay: true,
     isConnected: true,
     play() {
       this.paused = false;
       return Promise.resolve();
     },
+    pause() {
+      this.paused = true;
+    },
   });
   const players = [];
+  // Lets a test act while a Shaka load is still in flight.
+  const hooks = { load: null };
   const manifests = new Map();
   const delays = [];
   class Player extends Events {
@@ -83,6 +89,7 @@ function harness(fetch, userAgent = "") {
     load = async (uri, start) => {
       this.configurationAtLoad = structuredClone(this.configuration);
       this.manifest = manifests.has(uri) ? await manifests.get(uri).text() : uri;
+      await hooks.load?.();
       video.currentTime = start;
     };
     getVariantTracks = () => this.variants;
@@ -141,7 +148,7 @@ function harness(fetch, userAgent = "") {
   const settle = async () => {
     for (let i = 0; i < 20; i++) await new Promise(setImmediate);
   };
-  return { document, video, players, delays, transport, fail, visible, settle };
+  return { document, video, players, hooks, delays, transport, fail, visible, settle };
 }
 
 test("live HLS prefers the HD audio ladder before loading on every platform", async () => {
@@ -419,4 +426,52 @@ test("hidden attachment cleans up restoration on detach and respects explicit au
     assert.equal(h.players.length, 1);
     assert.equal(h.document.listeners.get("visibilitychange")?.length || 0, 0);
   }
+});
+
+test("a player closed while its stream loads never starts playing", async () => {
+  const h = harness();
+  const withFallback = session();
+  withFallback.alternatives = [session("fallback").primary];
+  h.hooks.load = () => {
+    h.video.isConnected = false;
+  };
+  await assert.rejects(h.transport.attach(h.video, withFallback), /Playback changed/);
+  assert.equal(h.video.paused, true);
+  assert.equal(h.players.length, 1, "the fallback source is not tried for a closed player");
+  assert.equal(h.players[0].destroyed, true);
+});
+
+test("a stream that fails while paused renews without starting to play", async () => {
+  const h = harness(async () => ({ ok: true, json: async () => session("renewed") }));
+  await h.transport.attach(h.video, session(), { refreshUrl: "/renew" });
+  h.video.pause();
+  // Another device's position moved the paused player; the expired stream
+  // fails on that seek.
+  h.video.currentTime = 300;
+  h.fail();
+  await h.settle();
+  assert.equal(h.players.length, 2);
+  assert.match(h.players[1].manifest, /renewed/);
+  assert.equal(h.video.currentTime, 300);
+  assert.equal(h.video.paused, true);
+  assert.equal(h.video.autoplay, false, "autoplay would start the new source by itself");
+  await h.transport.detach(h.video);
+});
+
+test("a stream that fails while playing renews and carries on playing", async () => {
+  const h = harness(async () => ({ ok: true, json: async () => session("renewed") }));
+  await h.transport.attach(h.video, session(), { refreshUrl: "/renew" });
+  assert.equal(h.video.paused, false);
+  h.fail();
+  await h.settle();
+  assert.equal(h.players.length, 2);
+  assert.equal(h.video.paused, false);
+  await h.transport.detach(h.video);
+});
+
+test("an attach asked to start paused loads without playing", async () => {
+  const h = harness();
+  await h.transport.attach(h.video, session(), { startPaused: true });
+  assert.equal(h.players.length, 1);
+  assert.equal(h.video.paused, true);
 });

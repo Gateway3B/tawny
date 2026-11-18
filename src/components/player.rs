@@ -454,6 +454,11 @@ fn attach_player_session(
                     previous.load();
                 }}
                 window.__tawnyActivePlayerMedia = media;
+                // Before the controls attach: they read `autoplay` to decide
+                // whether to show the video starting.
+                const startPaused = window.__tawnyPausedWhenFailed === videoId;
+                window.__tawnyPausedWhenFailed = null;
+                if (startPaused) media.autoplay = false;
                 if (window.TawnyPlayerControls) {{
                     window.TawnyPlayerControls.attach(media);
                 }}
@@ -470,10 +475,11 @@ fn attach_player_session(
                     audioOnly: {audio_only},
                     preferredAudioLanguage,
                     startTime: {resume_seconds},
+                    startPaused,
                     refreshUrl: new URL(refreshPath, `${{serverBase}}/`).href,
                     refreshSession,
                 }});
-                if (window.__tawnyActivePlayerMedia !== media || media.dataset.playerKey !== playerKey) {{
+                if (window.__tawnyActivePlayerMedia !== media || media.dataset.playerKey !== playerKey || !media.isConnected) {{
                     await Promise.resolve(window.TawnyTransport.detach?.(media)).catch(() => {{}});
                     media.pause();
                     dioxus.send('detached');
@@ -485,7 +491,18 @@ fn attach_player_session(
                 // channel alive until this media element is detached.
                 if (refreshSession) await refreshSession.closed;
             }} catch (error) {{
+                // Closed while it loaded: the transport gave up on purpose,
+                // and there is no player left to show a failure on.
+                if (!media.isConnected) {{
+                    media.pause();
+                    media.__tawnyDisposeRefreshBridge?.();
+                    dioxus.send('detached');
+                    return;
+                }}
                 window.__tawnyAttachEval = {{ phase: 'failed', hasMedia: true, error: String(error) }};
+                // The player answers this error by mounting a new element and
+                // attaching again; a video that sat paused stays paused there.
+                window.__tawnyPausedWhenFailed = media.paused && media.currentTime > 0 ? videoId : null;
                 console.warn('Tawny transport exhausted its sources', error);
                 media.dispatchEvent(new Event('error'));
                 media.__tawnyDisposeRefreshBridge?.();
@@ -636,6 +653,25 @@ fn clock_label(seconds: u64) -> String {
         format!("{minutes}:{seconds:02}")
     }
 }
+
+/// Takes the transport and controls off the last attached element and pauses
+/// it. Closing the player removes that element, but a removed element is only
+/// paused, not stopped: Shaka kept it, and anything that called `play()` on it
+/// afterwards (the controls, a media-session button) played a video that no
+/// longer had a player to close it with.
+const STOP_PLAYER_JS: &str = r#"
+const media = window.__tawnyActivePlayerMedia;
+if (media && !media.isConnected) {
+    window.__tawnyActivePlayerMedia = null;
+    window.__tawnyAttachEval = { phase: 'stopped', hasMedia: false };
+    window.TawnyPlayerControls?.detach?.(media);
+    media.pause();
+    await Promise.resolve(window.TawnyTransport?.detach?.(media)).catch(() => {});
+    media.pause();
+    media.removeAttribute('src');
+    media.load();
+}
+"#;
 
 const PROGRESS_REPORTER_JS: &str = r#"
 const key = Symbol.for('tawny.progress-reporter');
@@ -852,6 +888,15 @@ pub fn PersistentPlayer(expanded: ReadSignal<bool>) -> Element {
             use_embed.set(false);
             playback_failed.set(false);
             failure_detail.set(String::new());
+        }
+    });
+    // Closing the player has to stop the video, not only take its element
+    // away. Runs after the render that removed it, so the element it finds is
+    // the one that was closed; a stream still loading for it gives up on its
+    // own (the transport checks the element is still on the page).
+    use_effect(move || {
+        if playing_id().is_none() {
+            let _ = document::eval(STOP_PLAYER_JS);
         }
     });
     // A failure that is likely to pass - a busy extractor, a rate limit, a
