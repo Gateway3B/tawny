@@ -76,6 +76,15 @@ mkdirSync(folder, { recursive: true });
 if (!windowsOnly) {
   const out = join(bundles, "android");
   rmSync(out, { recursive: true, force: true });
+  // dx reuses its Gradle project between builds, and Gradle then patches the
+  // APK in place: a build after the libraries changed came out 35 MB larger,
+  // holes where the old ones were, and carried every earlier build's scripts
+  // beside the current ones. A release starts it afresh; Rust's own build
+  // cache is elsewhere, so this costs only the Gradle run.
+  rmSync(join(root, "target", "dx", "tawny", "release", "android"), {
+    recursive: true,
+    force: true,
+  });
   // Phones only: the APK carries no x86_64 app either.
   run(process.execPath, [
     "scripts/device-backend.mjs",

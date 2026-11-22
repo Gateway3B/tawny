@@ -55,7 +55,10 @@ workflow runs on the tag.
    installer in that zip). Gradle packages the Android backend from the
    localstreams module's `jniLibs`; the installer takes the Windows one from
    `target/device-backend/` through `[bundle] resources` in `Dioxus.toml`.
-   Neither bundle fails without its backend, so the script checks both:
+   The Android bundle starts from a fresh Gradle project (dx's reused one
+   patched the APK in place, 35 MB of dead space and every earlier build's
+   scripts inside). Neither bundle fails without its backend, so the script
+   checks both:
    0.1.7 and earlier shipped without one, and "On this device" told every
    install that the build had none.
 3. Publish:
