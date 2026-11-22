@@ -14,15 +14,34 @@ use dioxus::prelude::*;
 use dioxus_icons::lucide::{CircleCheck, Download, FileOutput, Trash2, X};
 use g3_route_transitions::animated_navigate;
 use g3_ui::{
-    BottomSheet, Button, ButtonExpand, ButtonFill, ButtonSize, Card, Color, Content, ContentWidth,
-    EmptyState, Item, ItemDetail, List, ListLines, Progress, Space, Stack, Text, TextTone,
+    BottomSheet, Button, ButtonExpand, ButtonFill, ButtonSize, Card, Color, Content, EmptyState,
+    Item, ItemDetail, List, ListLines, Progress, Space, Stack, Text, TextTone,
 };
 
-use super::PageHeader;
+use super::{PageHeader, VideoGrid};
 
 #[component]
 pub fn Downloads() -> Element {
     let app_state = use_context::<AppState>();
+    // Kept videos are ordinary video cards, as in a playlist: the same look,
+    // and the same ⋮, whose Download row opens the sheet that exports or
+    // removes them. The artwork kept with the download stands in for the
+    // remote thumbnail, so the page has pictures with no connection.
+    let kept = use_memo(move || {
+        app_state
+            .downloads
+            .read()
+            .iter()
+            .filter(|entry| entry.state == DownloadState::Done)
+            .filter_map(|entry| {
+                let mut video = entry.video.clone()?;
+                if let Some(thumbnail) = &entry.thumbnail {
+                    video.thumbnail_url = thumbnail.clone();
+                }
+                Some(video)
+            })
+            .collect::<Vec<Video>>()
+    });
     let entries = app_state.downloads.read().clone();
     let kept_bytes = entries
         .iter()
@@ -33,17 +52,23 @@ pub fn Downloads() -> Element {
         .iter()
         .filter(|entry| entry.state == DownloadState::Done)
         .count();
+    // Under way or failed, or kept without the video it was of: these need a
+    // progress bar or a way to cancel, which a video card has no place for.
+    let pending = entries
+        .into_iter()
+        .filter(|entry| entry.state != DownloadState::Done || entry.video.is_none())
+        .collect::<Vec<_>>();
 
     rsx! {
         PageHeader { title: "Downloads", back_to: Route::Playlists {} }
-        Content { width: ContentWidth::Readable,
+        Content {
             if !(app_state.downloads_supported)() {
                 EmptyState {
                     title: "Downloads are not available here",
                     icon: rsx! { Download { size: 40 } },
                     "This browser cannot keep videos offline. The Tawny app can."
                 }
-            } else if entries.is_empty() {
+            } else if kept_count == 0 && pending.is_empty() {
                 EmptyState {
                     title: "Nothing downloaded",
                     icon: rsx! { Download { size: 40 } },
@@ -58,8 +83,11 @@ pub fn Downloads() -> Element {
                             "{kept_count} videos on this device · {size_label(kept_bytes)}"
                         }
                     }
-                    for entry in entries {
+                    for entry in pending {
                         DownloadRow { key: "{entry.video_id}", entry }
+                    }
+                    if !kept.read().is_empty() {
+                        VideoGrid { videos: kept }
                     }
                 }
             }
