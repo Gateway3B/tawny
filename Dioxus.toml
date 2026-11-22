@@ -32,6 +32,12 @@ publisher = "Gateway3"
 # uses `[ios] icon`, and assets/icon/icon-512.png is the Play listing icon.
 icon = ["assets/icon/icon.svg"]
 category = "Entertainment"
+# The device backend ("On this device", docs/device-backend.md), installed
+# beside tawny.exe, where the app looks for it. `just backend-desktop --release`
+# builds it; dx only warns when it is missing, so `just release-build` checks
+# the installer has it. Android packages its copy from the localstreams
+# module's jniLibs instead, and ignores this list.
+resources = ["target/device-backend/tawny_backend.dll"]
 short_description = "A calm, local-first YouTube client."
 long_description = "Tawny is a self-hosted YouTube client for personal home labs, on mobile, web, and desktop."
 

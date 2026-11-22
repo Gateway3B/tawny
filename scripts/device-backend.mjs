@@ -142,10 +142,12 @@ function android() {
       "libtawny_backend.so",
     );
     // Debug info is most of a development build (over 400 MB) and is no use
-    // inside an APK. The exported symbols stay.
+    // inside an APK. A release also drops the symbol table, 110 MB to 83 MB:
+    // the two entry points are in the dynamic table, which stripping keeps,
+    // and only a development build is read in a debugger.
     const strip = spawnSync(
       join(bin, `llvm-strip${process.platform === "win32" ? ".exe" : ""}`),
-      ["--strip-debug", placed],
+      [release ? "--strip-all" : "--strip-debug", placed],
       { stdio: "inherit" },
     );
     if (strip.status !== 0) {

@@ -31,13 +31,14 @@ dev-desktop: backend-desktop
     dx serve --platform desktop
 
 # The server as a library the desktop app loads to keep a library on the
-# device. See docs/device-backend.md.
-backend-desktop:
-    node scripts/device-backend.mjs desktop
+# device. See docs/device-backend.md. `--release` for a build to hand out.
+backend-desktop *flags:
+    node scripts/device-backend.mjs desktop {{flags}}
 
-# The same for Android, for both ABIs, into the APK's native libraries.
-backend-android:
-    node scripts/device-backend.mjs android
+# The same for Android, for both ABIs (or `--abi arm64-v8a`), into the
+# APK's native libraries.
+backend-android *flags:
+    node scripts/device-backend.mjs android {{flags}}
 
 # Start SurrealDB and the extractor sidecars in the background. The server
 # seeds a demo catalog into an empty database on its first start.
@@ -138,10 +139,18 @@ style-test:
 
 # --- Releases -------------------------------------------------------------
 
+# Build Tawny_<version>.apk, Tawny_<version>_x64-setup.exe and
+# Tawny_<version>_x64-setup.zip into dir from HEAD, each with its device
+# backend. Pass --android-only or --windows-only to rebuild one.
+release-build version dir *flags:
+    node scripts/release-build.mjs {{version}} "{{dir}}" {{flags}}
+
 # Publish a release to Gateway3B/tawny from a folder holding
 # Tawny_<version>.apk, Tawny_<version>_x64-setup.exe and
-# Tawny_<version>_x64-setup.zip, built from HEAD. Needs ../releases and
+# Tawny_<version>_x64-setup.zip, built from HEAD (`just release-build`).
+# Checks the folder first. Needs ../releases and
 # ~/.g3-release/tawny-updater.key. Pass --dry-run to check without
 # publishing. See docs/releases.md.
 publish version dir notes *flags:
+    node scripts/release-check.mjs {{version}} "{{dir}}"
     node ../releases/scripts/publish-local.mjs --repo Gateway3B/tawny --manifest asset --app tawny --name Tawny --version {{version}} --key "{{home_directory()}}/.g3-release/tawny-updater.key" --public-key src/updater.rs --file "android={{dir}}/Tawny_{{version}}.apk" --file "windows-x86_64-nsis={{dir}}/Tawny_{{version}}_x64-setup.zip" --attach "{{dir}}/Tawny_{{version}}_x64-setup.exe" --source "Gateway3B/tawny@{{`git rev-parse HEAD`}}" "--notes=@{{notes}}" {{flags}}

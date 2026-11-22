@@ -33,16 +33,31 @@ workflow runs on the tag.
    `[patch]` overrides). The app offers a release only when it is newer than
    its own version, and Android's `versionCode` comes from it
    (`major * 1000000 + minor * 1000 + patch`). Commit and push `main`.
-2. Build the two files from that commit:
+2. Build the files from that commit into one folder:
 
    ```bash
+   just release-build <x.y.z> <folder>      # --android-only or --windows-only to redo one
+   ```
+
+   It builds each app's device backend (the library behind "Use Tawny on
+   this device", [device-backend.md](device-backend.md)) with `--release`,
+   then the app around it:
+
+   ```bash
+   just backend-android --release --abi arm64-v8a
    dx bundle --android --release --no-default-features --fullstack false      --package-types apk --target aarch64-linux-android
+   just backend-desktop --release
    dx bundle --desktop --release --no-default-features --fullstack false      --package-types nsis --package-types updater
    ```
 
-   and put them in one folder as `Tawny_<x.y.z>.apk`,
-   `Tawny_<x.y.z>_x64-setup.exe` and `Tawny_<x.y.z>_x64-setup.zip` (the
-   `updater` package type wraps the installer in that zip).
+   and copies them in as `Tawny_<x.y.z>.apk`, `Tawny_<x.y.z>_x64-setup.exe`
+   and `Tawny_<x.y.z>_x64-setup.zip` (the `updater` package type wraps the
+   installer in that zip). Gradle packages the Android backend from the
+   localstreams module's `jniLibs`; the installer takes the Windows one from
+   `target/device-backend/` through `[bundle] resources` in `Dioxus.toml`.
+   Neither bundle fails without its backend, so the script checks both:
+   0.1.7 and earlier shipped without one, and "On this device" told every
+   install that the build had none.
 3. Publish:
 
    ```bash
@@ -55,8 +70,10 @@ workflow runs on the tag.
    node ../releases/scripts/publish-local.mjs --repo Gateway3B/tawny --manifest asset      --app tawny --name Tawny --version <x.y.z>      --key ~/.g3-release/tawny-updater.key --public-key src/updater.rs      --file android=<folder>/Tawny_<x.y.z>.apk      --file windows-x86_64-nsis=<folder>/Tawny_<x.y.z>_x64-setup.zip      --attach <folder>/Tawny_<x.y.z>_x64-setup.exe      --source Gateway3B/tawny@<HEAD> --notes @<notes.md>
    ```
 
-   It signs both files, creates the draft release `v<x.y.z>` on that commit
-   with the files, their signatures, the setup `.exe` and `latest.json`,
+   It first runs `scripts/release-check.mjs`, which refuses a folder with a
+   file missing or an APK without `lib/<abi>/libtawny_backend.so` beside
+   each `libmain.so`. Then it signs both files, creates the draft release
+   `v<x.y.z>` on that commit with the files, their signatures, the setup `.exe` and `latest.json`,
    checks they are all there, and only then publishes it as the latest
    release, which is when apps see it. It refuses a version that is not
    newer than the one the URL above serves, a tag that exists, and a key that

@@ -69,6 +69,11 @@ build. For Android the script points Cargo at the NDK's clang
 the NDK's headers, and strips debug info. A development build is still about
 240 MB of unoptimised code; build with `--release` for a phone you hand out.
 
+Release builds carry it: `just release-build` builds both libraries with
+`--release` before the bundles, and an installer looks for the DLL beside
+`tawny.exe`, where `[bundle] resources` in `Dioxus.toml` puts it. See
+[releases.md](releases.md#cutting-a-release).
+
 The backend makes its data folder the process's working directory before it
 opens the database. SurrealKit's schema sync reads and creates
 `database/setup.surql` relative to the working directory, with no setting for
