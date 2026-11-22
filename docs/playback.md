@@ -77,6 +77,39 @@ mid-download shows as interrupted, to remove or download again. The browser
 is asked for persistent storage when the first download starts, so it does
 not clear them when space runs low.
 
+### Exporting a download
+
+A kept video can be exported as one ordinary file, for another app to open
+(Keyscribe, which reads falling-note piano videos, takes it from its file
+picker). Export video in the download sheet (the watch page's Downloaded
+button) writes `<title>.mp4` (`.m4a` for audio only): on Android into
+`Download/Tawny`, where every file picker sees it; elsewhere wherever the
+browser saves downloads.
+
+`assets/tawny_export.js` builds the file from Shaka's records in IndexedDB
+(`shaka_offline_db`, stores `manifest-v5` and `segment-v5`) without decoding
+anything. Each track is kept as an init segment (ftyp + moov) and fragments
+(moof + mdat). The export writes one ftyp + moov declaring both tracks
+(renumbered 1 and 2), then every fragment of both in time order, with only the
+track id in `tfhd` and the sequence number in `mfhd` rewritten. That is
+enough because YouTube's fragments address their samples from their own moof
+(`default-base-is-moof`); a fragment with an absolute `base-data-offset` is
+refused rather than written wrong. The result is a fragmented MP4 that ffmpeg,
+browsers and mediabunny read, seeking included.
+
+Only MP4 tracks are exported: the phone keeps AVC and AAC, which is what
+Android downloads are. A desktop or browser download kept as VP9 and Opus is
+WebM, and exporting one says so. An HLS-only download is not exported either.
+
+A page cannot write a file on Android, and a video is too big to cross the
+WebView bridge as a string. So `src/video_export.rs` opens the file in
+Downloads through the Kotlin module (`VideoExportPlugin`, MediaStore with
+`IS_PENDING` on Android 10 and later; the app's own Downloads folder on 8 and
+9, which need no storage permission), registers its descriptor with the local
+relay as an upload, and the page `PUT`s the file there in 8 MB chunks, each
+with its offset; a chunk out of place is refused. Finishing closes the file
+and publishes it; a failed export deletes it.
+
 What is not offline: the watch page shows a video's details from the
 client cache, so a video opened before going offline shows them and one
 never opened does not. Comments, SponsorBlock segments and watch progress

@@ -195,6 +195,97 @@ pub async fn remove_download(video_id: &str) {
     let _ = document::eval(&script).recv::<bool>().await;
 }
 
+/// Saves a kept video as one file another app can open (Keyscribe reads
+/// piano videos from one), answering what to tell the viewer. On Android the
+/// file goes in Download/Tawny; elsewhere, wherever the browser saves.
+pub async fn export_download(entry: &DownloadEntry) -> Result<String, String> {
+    let (extension, mime_type) = if entry.quality == AUDIO_ONLY_LABEL {
+        ("m4a", "audio/mp4")
+    } else {
+        ("mp4", "video/mp4")
+    };
+    let file_name = format!("{}.{extension}", export_file_stem(&entry.title()));
+    let video_id = serde_json::to_string(&entry.video_id).map_err(|error| error.to_string())?;
+
+    #[cfg(target_os = "android")]
+    {
+        let export = crate::video_export::begin(file_name, mime_type).await?;
+        let upload =
+            serde_json::to_string(export.upload_url()).map_err(|error| error.to_string())?;
+        let failure = run_export(&format!(
+            "window.TawnyExport.exportToUpload({video_id}, {upload})"
+        ))
+        .await;
+        // Finished either way: a failed export deletes its half-written file.
+        let saved = crate::video_export::finish(export, failure.is_none()).await;
+        if let Some(failure) = failure {
+            return Err(failure);
+        }
+        saved.map(|path| format!("Saved to {path}"))
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let name = serde_json::to_string(&file_name).map_err(|error| error.to_string())?;
+        let mime = serde_json::to_string(mime_type).map_err(|error| error.to_string())?;
+        match run_export(&format!(
+            "window.TawnyExport.saveInBrowser({video_id}, {name}, {mime})"
+        ))
+        .await
+        {
+            Some(failure) => Err(failure),
+            None => Ok(format!("Saved {file_name}")),
+        }
+    }
+}
+
+/// The label `TawnyDownloads` gives an audio-only download.
+const AUDIO_ONLY_LABEL: &str = "Audio only";
+
+/// Runs `call` (a promise) once the exporter has loaded, answering its error.
+async fn run_export(call: &str) -> Option<String> {
+    let script = format!(
+        r#"
+        for (let attempt = 0; attempt < 200 && !window.TawnyExport; attempt++) {{
+            await new Promise((resolve) => setTimeout(resolve, 25));
+        }}
+        try {{
+            if (!window.TawnyExport) throw new Error('The exporter has not loaded');
+            await {call};
+            dioxus.send(null);
+        }} catch (error) {{
+            dioxus.send(String(error?.message || error));
+        }}
+        "#
+    );
+    match document::eval(&script).recv::<Option<String>>().await {
+        Ok(failure) => failure,
+        Err(error) => Some(error.to_string()),
+    }
+}
+
+/// A video title as a file name every system accepts: no path separators or
+/// characters Windows and Android's storage refuse, and not too long.
+fn export_file_stem(title: &str) -> String {
+    let cleaned: String = title
+        .chars()
+        .map(|character| match character {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => ' ',
+            character if character.is_control() => ' ',
+            character => character,
+        })
+        .collect();
+    let joined = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+    let short: String = joined.chars().take(120).collect();
+    // Windows drops trailing dots and spaces, and a name of only dots is none.
+    let trimmed = short.trim_matches(|character: char| character == '.' || character == ' ');
+    if trimmed.is_empty() {
+        "Tawny video".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 /// A session that plays the kept copy of `video_id`, when there is one.
 ///
 /// Asked before the server on every play, so a downloaded video starts
@@ -370,6 +461,21 @@ mod tests {
         assert_eq!(size_label(1024 * 1024 / 2), "0.5 MB");
         assert_eq!(size_label(250 * 1024 * 1024), "250 MB");
         assert_eq!(size_label(3 * 1024 * 1024 * 1024), "3.0 GB");
+    }
+
+    #[test]
+    fn export_names_are_titles_any_system_accepts() {
+        assert_eq!(
+            export_file_stem("Clair de Lune - Debussy (Piano Tutorial)"),
+            "Clair de Lune - Debussy (Piano Tutorial)"
+        );
+        assert_eq!(
+            export_file_stem("AC/DC: \"Thunderstruck\" | Piano?*"),
+            "AC DC Thunderstruck Piano"
+        );
+        assert_eq!(export_file_stem("  ...  "), "Tawny video");
+        assert_eq!(export_file_stem("Ending in dots..."), "Ending in dots");
+        assert_eq!(export_file_stem(&"é".repeat(300)).chars().count(), 120);
     }
 
     /// The page sends what `TawnyDownloads.list()` builds.

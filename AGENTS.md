@@ -86,10 +86,14 @@ src/library_sync.rs     Refetching what another device changed; catching up a pa
 src/playback_resolver.rs Where the player gets a session: a download, the phone (Android) or the server
 src/downloads.rs        Offline downloads: starting, listing, and playing them (see docs/playback.md)
 src/local_streams.rs    Android: resolving playback on the phone (yt-dlp in the app), see docs/on-device-playback.md
-src/local_relay.rs      Android: 127.0.0.1 relay that hands phone-resolved streams to the player
+src/local_relay.rs      Android: 127.0.0.1 relay that hands phone-resolved streams to the player,
+                        and takes exported downloads back from the page
+src/video_export.rs     Android: writing an exported download into Download/Tawny
+src/android_plugin.rs   Android: calling Tawny's Kotlin classes (android/localstreams) over JNI
 src/subscriptions_io.rs Importing and exporting subscription lists
 assets/                 tawny_transport.js and tawny_player_controls.js (the player's JS side),
-                        tawny_downloads.js (Shaka offline storage for downloads)
+                        tawny_downloads.js (Shaka offline storage for downloads),
+                        tawny_export.js (a download as one MP4 file)
 database/schema/        One .surql file per table (desired state, not migrations)
 docker/extractor/       The yt-dlp sidecar image
 android/localstreams/   The Android module behind local_streams: Chaquopy Python, yt-dlp, V8 sandbox

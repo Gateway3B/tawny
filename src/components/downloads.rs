@@ -4,13 +4,14 @@
 use crate::{
     app::Route,
     downloads::{
-        DownloadEntry, DownloadQuality, DownloadState, remove_download, size_label, start_download,
+        DownloadEntry, DownloadQuality, DownloadState, export_download, remove_download,
+        size_label, start_download,
     },
     models::Video,
     state::AppState,
 };
 use dioxus::prelude::*;
-use dioxus_icons::lucide::{CircleCheck, Download, Trash2, X};
+use dioxus_icons::lucide::{CircleCheck, Download, FileOutput, Trash2, X};
 use g3_route_transitions::animated_navigate;
 use g3_ui::{
     BottomSheet, Button, ButtonExpand, ButtonFill, ButtonSize, Card, Color, Content, ContentWidth,
@@ -149,6 +150,17 @@ fn DownloadRow(entry: DownloadEntry) -> Element {
     }
 }
 
+/// Exports a kept video as a file for other apps, saying how it went.
+fn spawn_export(app_state: AppState, entry: DownloadEntry) {
+    spawn(async move {
+        app_state.show_toast("Exporting…", Color::Neutral);
+        match export_download(&entry).await {
+            Ok(saved) => app_state.show_toast(saved, Color::Success),
+            Err(error) => app_state.show_toast(format!("Could not export: {error}"), Color::Danger),
+        }
+    });
+}
+
 /// The watch page's Download button. It opens the shared [`DownloadSheet`].
 #[component]
 pub fn DownloadButton(video: ReadSignal<Video>) -> Element {
@@ -267,6 +279,19 @@ pub fn DownloadSheet() -> Element {
                                 Progress { value: entry.progress * 100.0, label: "Download progress" }
                             } else {
                                 Text { tone: TextTone::Secondary, "Plays from this device, with or without a connection." }
+                                Button {
+                                    expand: ButtonExpand::Block,
+                                    fill: ButtonFill::Outline,
+                                    start: rsx! { FileOutput { size: 17 } },
+                                    onclick: {
+                                        let entry = entry.clone();
+                                        move |_| {
+                                            app_state.download_open.set(false);
+                                            spawn_export(app_state, entry.clone());
+                                        }
+                                    },
+                                    if entry.quality == "Audio only" { "Export audio" } else { "Export video" }
+                                }
                             }
                             Button {
                                 expand: ButtonExpand::Block,

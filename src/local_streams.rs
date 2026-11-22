@@ -17,23 +17,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use jni::{
-    JavaVM,
-    objects::{GlobalRef, JClass, JObject, JString, JValue},
-};
 use serde::Deserialize;
 
 use crate::{
+    android_plugin::Plugin,
     local_relay,
     models::{PlaybackSession, PlaybackSource},
 };
-
-/// Declared for its side effect: this is what tells `dx` to build and bundle
-/// the Kotlin module. The calls go through JNI below, like g3-native-plugins'.
-#[manganis::ffi("android/localstreams")]
-unsafe extern "Kotlin" {
-    pub type LocalStreamsPlugin;
-}
 
 const PLUGIN_CLASS: &str = "net.gateway3.tawny.localstreams.LocalStreamsPlugin";
 
@@ -117,93 +107,12 @@ fn through_relay(video_id: &str, mut source: PlaybackSource) -> Result<PlaybackS
     })
 }
 
-/// The Kotlin plugin, constructed once with the Application.
-struct Plugin {
-    instance: GlobalRef,
-    vm: JavaVM,
-}
-
 static PLUGIN: OnceLock<Result<Plugin, String>> = OnceLock::new();
 
 fn call_plugin(video_id: &str) -> Result<String, String> {
-    let plugin = PLUGIN
-        .get_or_init(construct)
+    PLUGIN
+        .get_or_init(|| Plugin::construct(PLUGIN_CLASS, "device resolver"))
         .as_ref()
-        .map_err(Clone::clone)?;
-    let mut env = plugin
-        .vm
-        .attach_current_thread()
-        .map_err(|error| format!("Could not reach the device resolver: {error}"))?;
-    let argument = JObject::from(
-        env.new_string(video_id)
-            .map_err(|error| format!("Could not pass the video to the resolver: {error}"))?,
-    );
-    let value = env
-        .call_method(
-            plugin.instance.as_obj(),
-            "resolveFromRust",
-            "(Ljava/lang/String;)Ljava/lang/String;",
-            &[JValue::Object(&argument)],
-        )
-        .and_then(|value| value.l())
-        .map_err(|error| format!("The device resolver failed: {error}"))?;
-    let text = JString::from(value);
-    let answer = env
-        .get_string(&text)
-        .map_err(|error| format!("The device resolver answered unreadable text: {error}"))?;
-    Ok(answer.into())
-}
-
-/// Constructs the plugin through the app's own class loader: from a thread
-/// attached from native code, `FindClass` only sees the system's classes.
-///
-/// `ndk_context` holds the Application, not the Activity, and that is what the
-/// plugin is built with: it only needs the application context, and a cached
-/// plugin holding an Activity would outlive activity recreation (rotation,
-/// dark mode). Anything that needs the Activity itself goes through
-/// `manganis::android::with_activity`.
-fn construct() -> Result<Plugin, String> {
-    let android = ndk_context::android_context();
-    let vm = unsafe { JavaVM::from_raw(android.vm().cast()) }
-        .map_err(|error| format!("Could not reach the Android VM: {error}"))?;
-    let mut env = vm
-        .attach_current_thread_permanently()
-        .map_err(|error| format!("Could not attach to the Android VM: {error}"))?;
-    let application = unsafe { JObject::from_raw(android.context().cast()) };
-    let loader = env
-        .call_method(
-            &application,
-            "getClassLoader",
-            "()Ljava/lang/ClassLoader;",
-            &[],
-        )
-        .and_then(|value| value.l())
-        .map_err(|error| format!("Could not find the app's class loader: {error}"))?;
-    let name = JObject::from(
-        env.new_string(PLUGIN_CLASS)
-            .map_err(|error| format!("Could not name the resolver class: {error}"))?,
-    );
-    let class = env
-        .call_method(
-            loader,
-            "loadClass",
-            "(Ljava/lang/String;)Ljava/lang/Class;",
-            &[JValue::Object(&name)],
-        )
-        .and_then(|value| value.l())
-        .map_err(|error| format!("The device resolver is not in this build: {error}"))?;
-    let instance = env
-        .new_object(
-            JClass::from(class),
-            "(Landroid/content/Context;)V",
-            &[JValue::Object(&application)],
-        )
-        .map_err(|error| format!("Could not start the device resolver: {error}"))?;
-    let instance = env
-        .new_global_ref(instance)
-        .map_err(|error| format!("Could not keep the device resolver: {error}"))?;
-    // The Application reference is the host's, not this wrapper's to release.
-    std::mem::forget(application);
-    drop(env);
-    Ok(Plugin { instance, vm })
+        .map_err(Clone::clone)?
+        .call("resolveFromRust", &[video_id])
 }

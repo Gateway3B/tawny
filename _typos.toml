@@ -22,3 +22,5 @@ seeked = "seeked"
 surreal = "surreal"
 surrealdb = "surrealdb"
 tourney = "tourney"
+# The MP4 track box (assets/tawny_export.js), not a misspelling of "track".
+trak = "trak"

@@ -1,3 +1,6 @@
+#[cfg(target_os = "android")]
+mod android_plugin;
+
 mod api;
 
 mod app;
@@ -48,6 +51,9 @@ mod subscriptions_io;
 
 #[cfg(feature = "server")]
 mod telemetry;
+
+#[cfg(target_os = "android")]
+mod video_export;
 
 #[cfg(any(feature = "desktop", feature = "mobile"))]
 mod updater;

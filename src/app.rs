@@ -31,6 +31,8 @@ const TAWNY_PLAYER_CONTROLS_JS: Asset = asset!("/assets/tawny_player_controls.js
 
 const TAWNY_DOWNLOADS_JS: Asset = asset!("/assets/tawny_downloads.js");
 
+const TAWNY_EXPORT_JS: Asset = asset!("/assets/tawny_export.js");
+
 const FAVICON_SVG: Asset = asset!("/assets/favicon.svg");
 
 /// The head of the native WebView's first page, so the first paint is already
@@ -185,6 +187,7 @@ pub fn App() -> Element {
         document::Script { src: TAWNY_TRANSPORT_JS }
         document::Script { src: TAWNY_PLAYER_CONTROLS_JS }
         document::Script { src: TAWNY_DOWNLOADS_JS }
+        document::Script { src: TAWNY_EXPORT_JS }
         NativePluginsProvider {
             AppStateProvider {
                 ThemedApp {}
