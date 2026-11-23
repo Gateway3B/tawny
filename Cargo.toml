@@ -3,7 +3,7 @@ name = "tawny"
 version = "0.1.9"
 authors = ["Matthew Weisfeld <matthewedwardweisfeld@gmail.com>"]
 edition = "2024"
-rust-version = "1.90.0"
+rust-version = "1.95"
 description = "A local-first, cross-platform YouTube client built with Dioxus."
 publish = false
 repository = "https://github.com/Gateway3B/tawny"
@@ -20,7 +20,7 @@ g3-cache = "0.3"
 manganis = "=0.8.0-alpha.3"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.140"
-surrealdb-types = { version = "=3.2.4" }
+surrealdb-types = { version = "=4.0.1" }
 cfg-if = "1.0.0"
 futures-util = "0.3.31"
 
@@ -46,8 +46,8 @@ reqwest = { version = "0.13", default-features = false, features = ["form", "jso
 # `kv-surrealkv` is the library file the app's own backend keeps on the device
 # (`db::connect_embedded`): pure Rust, so it builds for phones too. A server
 # always connects to its Compose stack's SurrealDB.
-surrealdb = { version = "=3.2.4", features = ["kv-mem", "kv-surrealkv"], optional = true }
-surrealkit = { version = "=0.6.3", default-features = false, optional = true }
+surrealdb = { version = "=4.0.1", features = ["kv-mem", "kv-surrealkv"], optional = true }
+surrealkit = { version = "=1.0.0-rc.1", default-features = false, features = ["embedded"], optional = true }
 anyhow = { version = "1.0.98", optional = true }
 dotenvy = { version = "0.15.7", optional = true }
 quick-xml = { version = "0.37.5", optional = true }

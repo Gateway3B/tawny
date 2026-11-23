@@ -54,3 +54,9 @@ Tests use isolated in-memory databases and ignore deployment database credential
 Account deletion removes the account's library and sessions in one transaction,
 while preserving the shared YouTube catalog and other accounts. Back up and
 restore the SurrealDB volume using your own home-lab backup process.
+
+## Upgrading a v3 datastore
+
+For Compose, use the [platform upgrade procedure](https://github.com/g3techhq/g3-platform/blob/main/docs/surrealdb-upgrades.md) to prepare an empty bind directory.
+Set `TAWNY_SURREALDB_VOLUME` to the absolute path of the prepared directory and `SURREALDB_VERSION=4.0.1` before starting the new stack.
+On-device libraries convert when Tawny opens them. Close Tawny and copy its data directory before updating if you need to be able to return to v3.

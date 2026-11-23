@@ -107,7 +107,10 @@ pub async fn connect() -> Result<Surreal<Any>> {
 /// SurrealDB's embedded engine. It has no users to sign in as.
 pub async fn connect_embedded(data_dir: &Path) -> Result<Surreal<Any>> {
     let endpoint = format!("surrealkv://{}", data_dir.join("database").display());
-    let db = surrealdb::engine::any::connect(endpoint)
+    // SurrealDB converts an existing v3 store under its exclusive file lock.
+    let config =
+        surrealdb::opt::Config::new().datastore_option("experimental_upgrade_from_3x", true);
+    let db = surrealdb::engine::any::connect((endpoint, config))
         .await
         .map_err(|_| anyhow!("Could not open the library file."))?;
     db.use_ns("tawny").use_db("main").await?;

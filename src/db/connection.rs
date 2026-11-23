@@ -11,6 +11,14 @@ use surrealdb::{Surreal, engine::any::Any};
 surrealkit::embed_schema!("database/schema");
 
 pub async fn sync_schema(db: &Surreal<Any>) -> Result<()> {
+    let version = db
+        .version()
+        .await
+        .context("read SurrealDB server version")?;
+    anyhow::ensure!(
+        version.major >= 4,
+        "Tawny needs SurrealDB 4 or later. Upgrade the datastore before starting Tawny."
+    );
     db.query(include_str!("../../database/presync.surql"))
         .await
         .context("apply Tawny pre-sync repairs")?

@@ -10,7 +10,7 @@ services:
     restart: "no"
 
   surrealdb:
-    image: surrealdb/surrealdb:v${SURREALDB_VERSION:-3.2.4}
+    image: surrealdb/surrealdb:v${SURREALDB_VERSION:-4.0.1}
     mem_limit: ${SURREALDB_MEMORY_LIMIT:-2g}
     command:
       - start

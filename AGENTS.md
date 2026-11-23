@@ -26,7 +26,7 @@ built on the **g3 stack** (the same shape as
 | g3-native-plugins (media, storage, back button) | 0.4 | [docs/mobile.md](docs/mobile.md) |
 | g3-auth (session guard, `#[public]`, record ids) | 0.2 | [docs/authentication.md](docs/authentication.md) |
 | g3-cache (client and server caches) | 0.3 | [docs/architecture.md](docs/architecture.md#data-on-the-client) |
-| SurrealDB + SurrealKit | 3.2.4 | [database/README.md](database/README.md) |
+| SurrealDB + SurrealKit | 4.0.1 / 1.0.0-rc.1 | [database/README.md](database/README.md) |
 | rustypipe (YouTube extraction) | 0.11 | [docs/youtube.md](docs/youtube.md) |
 | yt-dlp sidecar, bgutil PO tokens | `docker/extractor` | [docs/playback.md](docs/playback.md) |
 | Shaka Player (DASH/HLS in the page) | 4.16 | [docs/playback.md](docs/playback.md) |
