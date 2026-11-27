@@ -1194,7 +1194,7 @@ mod tests {
                 vec![crate::models::SubscriptionChange {
                     channel: channel.clone(),
                     subscribed,
-                    content: crate::models::SubscriptionContent::All,
+                    content: crate::models::SubscriptionContent::ALL,
                 }],
             )
             .await
@@ -2176,7 +2176,7 @@ mod tests {
                 vec![crate::models::SubscriptionChange {
                     channel: channel.clone(),
                     subscribed: true,
-                    content: crate::models::SubscriptionContent::All,
+                    content: crate::models::SubscriptionContent::ALL,
                 }],
             )
             .await

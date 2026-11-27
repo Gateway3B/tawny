@@ -1,62 +1,142 @@
 use super::*;
 
-/// Which of a channel's uploads a subscription actually wants in the feed.
+/// Which of a channel's uploads a subscription wants in the feed: any mix of
+/// its long-form videos, its Shorts and its livestreams.
 ///
 /// A channel's Shorts and its long-form uploads are often two different shows,
-/// and subscribing is currently all-or-nothing. This narrows a subscription
-/// without unsubscribing.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, SurrealValue)]
-#[serde(rename_all = "kebab-case")]
-pub enum SubscriptionContent {
-    /// Everything the channel publishes, including livestreams.
-    #[default]
-    All,
-    /// Long-form uploads only; Shorts are dropped from the feed.
-    Videos,
-    /// Shorts only.
-    Shorts,
+/// and a channel that streams can bury both. This narrows a subscription
+/// without unsubscribing. It is never empty: following nothing is an
+/// unsubscribe, which is a different choice.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct SubscriptionContent {
+    pub videos: bool,
+    pub shorts: bool,
+    pub live: bool,
+}
+
+impl Default for SubscriptionContent {
+    fn default() -> Self {
+        Self::ALL
+    }
 }
 
 impl SubscriptionContent {
-    /// SurrealDB stores this as a plain string so the column stays readable and
-    /// an unknown value degrades to "everything" instead of failing the row.
-    /// Only the server reads and writes it.
-    #[cfg_attr(
-        not(feature = "server"),
-        allow(
-            dead_code,
-            reason = "Shared definitions are used by selected platform, server or test builds."
-        )
-    )]
+    pub const ALL: Self = Self {
+        videos: true,
+        shorts: true,
+        live: true,
+    };
+    /// What "Videos" used to mean, before each kind had its own toggle: not
+    /// Shorts, so livestreams came too.
+    pub const VIDEOS: Self = Self {
+        videos: true,
+        shorts: false,
+        live: true,
+    };
+    pub const SHORTS: Self = Self {
+        videos: false,
+        shorts: true,
+        live: false,
+    };
+
+    /// Stored, and sent, as a plain string so the column stays readable and an
+    /// unknown value degrades to everything instead of failing the row. The
+    /// three values from before the toggles keep their strings, so a server or
+    /// an export from then reads them, and every other mix is spelled out.
     pub fn from_storage(value: &str) -> Self {
-        match value {
-            "videos" => Self::Videos,
-            "shorts" => Self::Shorts,
-            _ => Self::All,
+        let value = value.trim().to_ascii_lowercase();
+        if let Some(kinds) = value.strip_prefix("only:") {
+            let has = |kind: &str| kinds.split(',').any(|part| part.trim() == kind);
+            let content = Self {
+                videos: has("videos"),
+                shorts: has("shorts"),
+                live: has("live"),
+            };
+            return if content.is_empty() {
+                Self::ALL
+            } else {
+                content
+            };
+        }
+        match value.as_str() {
+            "videos" => Self::VIDEOS,
+            "shorts" => Self::SHORTS,
+            _ => Self::ALL,
         }
     }
 
-    #[cfg_attr(
-        not(feature = "server"),
-        allow(
-            dead_code,
-            reason = "Shared definitions are used by selected platform, server or test builds."
-        )
-    )]
-    pub fn as_storage(self) -> &'static str {
+    pub fn as_storage(self) -> String {
         match self {
-            Self::All => "all",
-            Self::Videos => "videos",
-            Self::Shorts => "shorts",
+            Self::ALL => "all".into(),
+            Self::VIDEOS => "videos".into(),
+            Self::SHORTS => "shorts".into(),
+            _ => {
+                let kinds = [
+                    (self.videos, "videos"),
+                    (self.shorts, "shorts"),
+                    (self.live, "live"),
+                ]
+                .into_iter()
+                .filter_map(|(on, kind)| on.then_some(kind))
+                .collect::<Vec<_>>();
+                format!("only:{}", kinds.join(","))
+            }
         }
     }
 
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::All => "Videos & Shorts",
-            Self::Videos => "Videos only",
-            Self::Shorts => "Shorts only",
+    pub fn is_empty(self) -> bool {
+        !(self.videos || self.shorts || self.live)
+    }
+
+    /// What the feed shows, for a toast: "videos, Shorts and live".
+    pub fn label(self) -> String {
+        if self == Self::ALL {
+            return "everything".into();
         }
+        let kinds = [
+            (self.videos, "videos"),
+            (self.shorts, "Shorts"),
+            (self.live, "live"),
+        ]
+        .into_iter()
+        .filter_map(|(on, kind)| on.then_some(kind))
+        .collect::<Vec<_>>();
+        match kinds.as_slice() {
+            [] => "nothing".into(),
+            [only] => format!("{only} only"),
+            [first, second] => format!("{first} and {second}"),
+            _ => kinds.join(", "),
+        }
+    }
+}
+
+impl Serialize for SubscriptionContent {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.as_storage())
+    }
+}
+
+impl<'de> Deserialize<'de> for SubscriptionContent {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Self::from_storage(&String::deserialize(deserializer)?))
+    }
+}
+
+impl SurrealValue for SubscriptionContent {
+    fn kind_of() -> surrealdb_types::Kind {
+        String::kind_of()
+    }
+
+    fn is_value(value: &surrealdb_types::Value) -> bool {
+        String::is_value(value)
+    }
+
+    fn into_value(self) -> surrealdb_types::Value {
+        self.as_storage().into_value()
+    }
+
+    fn from_value(value: surrealdb_types::Value) -> Result<Self, surrealdb_types::Error> {
+        String::from_value(value).map(|value| Self::from_storage(&value))
     }
 }
 
@@ -160,7 +240,7 @@ mod channel_tests {
             subscribed: true,
             description: "Rich description".into(),
             banner_url: Some("rich-banner".into()),
-            subscription_content: super::SubscriptionContent::All,
+            subscription_content: super::SubscriptionContent::ALL,
         }
     }
 
@@ -188,5 +268,65 @@ mod channel_tests {
         let discovered = channel("21.1M subscribers");
         cached.merge_metadata_from(&discovered);
         assert_eq!(cached.subscriber_count, "21.1M subscribers");
+    }
+
+    #[test]
+    fn subscription_content_keeps_the_strings_older_servers_know() {
+        use super::SubscriptionContent;
+        // A 0.1.9 server stores and sends these three, with these meanings.
+        assert_eq!(
+            SubscriptionContent::from_storage("all"),
+            SubscriptionContent::ALL
+        );
+        assert_eq!(
+            SubscriptionContent::from_storage("videos"),
+            SubscriptionContent::VIDEOS
+        );
+        assert_eq!(
+            SubscriptionContent::from_storage("shorts"),
+            SubscriptionContent::SHORTS
+        );
+        assert_eq!(SubscriptionContent::ALL.as_storage(), "all");
+        assert_eq!(SubscriptionContent::VIDEOS.as_storage(), "videos");
+        assert_eq!(SubscriptionContent::SHORTS.as_storage(), "shorts");
+        // Anything unreadable still means everything rather than nothing.
+        assert_eq!(
+            SubscriptionContent::from_storage("only:"),
+            SubscriptionContent::ALL
+        );
+        assert_eq!(
+            SubscriptionContent::from_storage("???"),
+            SubscriptionContent::ALL
+        );
+    }
+
+    #[test]
+    fn every_mix_of_kinds_round_trips() {
+        use super::SubscriptionContent;
+        for bits in 1..8u8 {
+            let content = SubscriptionContent {
+                videos: bits & 1 != 0,
+                shorts: bits & 2 != 0,
+                live: bits & 4 != 0,
+            };
+            assert_eq!(
+                SubscriptionContent::from_storage(&content.as_storage()),
+                content
+            );
+            let json = serde_json::to_string(&content).unwrap();
+            assert_eq!(
+                serde_json::from_str::<SubscriptionContent>(&json).unwrap(),
+                content
+            );
+        }
+        assert_eq!(
+            SubscriptionContent {
+                videos: true,
+                shorts: false,
+                live: false
+            }
+            .as_storage(),
+            "only:videos"
+        );
     }
 }

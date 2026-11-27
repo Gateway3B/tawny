@@ -80,7 +80,7 @@ rsx! {
 | `Button` | `fill: ButtonFill::{Solid, Outline, Clear}`, `color: Color::{Accent, Neutral, Success, Warning, Danger}`, `size: ButtonSize`, `expand: ButtonExpand::{Block, Full}`, `loading`, `disabled`, `start`, `end`, `aria_label`, `onclick` | `loading: busy()` while a request runs. Icon-only buttons need `aria_label`. |
 | `Input` | `label`, `value: Signal<String>`, `input_type: InputType`, `placeholder`, `helper`, `error`, `autocomplete`, `maxlength`, `debounce_ms`, `onchange` | One field with its label, helper and error. |
 | `Searchbar` | `value`, `placeholder`, `debounce_ms`, `onchange`, `on_submit`, `end` | Explore's search; `on_submit` runs the remote search. |
-| `SegmentGroup` / `SegmentButton` | `value: Signal<T>`, `label`, `onchange`, `scrollable`; `value: T` | Generic over the value, so options are enums (`FeedFilter`, `ExploreFilter`, `SubscriptionContent`). |
+| `SegmentGroup` / `SegmentButton` | `value: Signal<T>`, `label`, `onchange`, `scrollable`; `value: T` | Generic over the value, so options are enums (`FeedFilter`, `ExploreFilter`). |
 | `Toggle`, `Checkbox` | `checked: Signal<bool>`, `label`, `helper`, `onchange` | Settings switches. |
 | `Select`, `RadioGroup` / `Radio` | `value`, `options` / children, `label` | Generic over the value. |
 

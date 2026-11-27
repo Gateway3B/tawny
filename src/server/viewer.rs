@@ -152,17 +152,22 @@ impl AppServerState {
                 .is_none_or(|group| group.channel_ids.iter().any(|id| id == channel_id)),
         };
 
-        // Each subscription wants all of a channel's uploads, or only its
-        // videos, or only its Shorts.
-        let (mut all, mut videos_only, mut shorts_only) = (Vec::new(), Vec::new(), Vec::new());
+        // Each subscription wants any mix of a channel's videos, Shorts and
+        // livestreams; a channel is in each list it wants.
+        let (mut wants_videos, mut wants_shorts, mut wants_live) =
+            (Vec::new(), Vec::new(), Vec::new());
         for (channel_id, (subscribed, content)) in &viewer_follows {
             if !subscribed || !in_group(channel_id) {
                 continue;
             }
-            match content {
-                SubscriptionContent::All => all.push(channel_id.clone()),
-                SubscriptionContent::Videos => videos_only.push(channel_id.clone()),
-                SubscriptionContent::Shorts => shorts_only.push(channel_id.clone()),
+            if content.videos {
+                wants_videos.push(channel_id.clone());
+            }
+            if content.shorts {
+                wants_shorts.push(channel_id.clone());
+            }
+            if content.live {
+                wants_live.push(channel_id.clone());
             }
         }
         let watched = if query.hide_watched {
@@ -172,7 +177,7 @@ impl AppServerState {
         };
 
         let mut base = String::from(
-            "(channel_id IN $all OR (channel_id IN $videos_only AND is_short = false) OR (channel_id IN $shorts_only AND is_short = true))",
+            "((channel_id IN $wants_videos AND is_short = false AND is_live = false) OR (channel_id IN $wants_shorts AND is_short = true AND is_live = false) OR (channel_id IN $wants_live AND is_live = true))",
         );
         base.push_str(match query.kind {
             FeedFilter::All => "",
@@ -194,9 +199,9 @@ impl AppServerState {
         macro_rules! bind {
             ($query:expr) => {
                 $query
-                    .bind(("all", all.clone()))
-                    .bind(("videos_only", videos_only.clone()))
-                    .bind(("shorts_only", shorts_only.clone()))
+                    .bind(("wants_videos", wants_videos.clone()))
+                    .bind(("wants_shorts", wants_shorts.clone()))
+                    .bind(("wants_live", wants_live.clone()))
                     .bind(("watched", watched.clone()))
                     .bind(("v_short", t.video_short_max_seconds as i64))
                     .bind(("v_medium", t.video_medium_max_seconds as i64))
@@ -1192,7 +1197,7 @@ mod tests {
             subscribed: false,
             description: String::new(),
             banner_url: None,
-            subscription_content: SubscriptionContent::All,
+            subscription_content: SubscriptionContent::ALL,
         }
     }
 
@@ -1265,8 +1270,8 @@ mod tests {
     #[tokio::test]
     async fn the_feed_holds_followed_uploads_newest_first() {
         let (state, owner) = state_and_owner().await;
-        follow(&state, &owner, "UCa", SubscriptionContent::All).await;
-        follow(&state, &owner, "UCb", SubscriptionContent::Videos).await;
+        follow(&state, &owner, "UCa", SubscriptionContent::ALL).await;
+        follow(&state, &owner, "UCb", SubscriptionContent::VIDEOS).await;
         store(
             &state,
             &[
@@ -1292,10 +1297,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_subscription_lets_in_any_mix_of_videos_shorts_and_live() {
+        let (state, owner) = state_and_owner().await;
+        let only = |videos, shorts, live| SubscriptionContent {
+            videos,
+            shorts,
+            live,
+        };
+        follow(&state, &owner, "UCa", only(false, true, true)).await;
+        follow(&state, &owner, "UCb", only(true, false, false)).await;
+        let live = |id, channel, day| Video {
+            is_live: true,
+            ..video(id, channel, day, 0, false)
+        };
+        store(
+            &state,
+            &[
+                video("a-long", "UCa", 1, 600, false),
+                video("a-short", "UCa", 2, 30, true),
+                live("a-live", "UCa", 3),
+                video("b-long", "UCb", 4, 600, false),
+                video("b-short", "UCb", 5, 30, true),
+                live("b-live", "UCb", 6),
+            ],
+        )
+        .await;
+
+        let page = state.feed_page(&owner, &query(), 0).await.unwrap();
+
+        // UCa wants its Shorts and streams; UCb its long videos alone.
+        assert_eq!(ids(&page.videos), ["b-long", "a-live", "a-short"]);
+    }
+
+    #[tokio::test]
     async fn one_account_sees_nothing_of_another() {
         let (state, first) = state_and_owner().await;
         let second = state.accounts().create_guest().await.unwrap().id;
-        follow(&state, &first, "UCa", SubscriptionContent::All).await;
+        follow(&state, &first, "UCa", SubscriptionContent::ALL).await;
         store(&state, &[video("a1", "UCa", 1, 600, false)]).await;
         state
             .save_progress(
@@ -1335,7 +1373,7 @@ mod tests {
     #[tokio::test]
     async fn hide_watched_and_the_length_filters_are_applied_by_the_server() {
         let (state, owner) = state_and_owner().await;
-        follow(&state, &owner, "UCa", SubscriptionContent::All).await;
+        follow(&state, &owner, "UCa", SubscriptionContent::ALL).await;
         store(
             &state,
             &[
@@ -1375,7 +1413,7 @@ mod tests {
     #[tokio::test]
     async fn the_feed_pages() {
         let (state, owner) = state_and_owner().await;
-        follow(&state, &owner, "UCa", SubscriptionContent::All).await;
+        follow(&state, &owner, "UCa", SubscriptionContent::ALL).await;
         let videos = (1..=30)
             .map(|day| video(&format!("v{day:02}"), "UCa", day, 600, false))
             .collect::<Vec<_>>();
@@ -1659,8 +1697,8 @@ mod tests {
     #[tokio::test]
     async fn a_group_narrows_the_feed() {
         let (state, owner) = state_and_owner().await;
-        follow(&state, &owner, "UCa", SubscriptionContent::All).await;
-        follow(&state, &owner, "UCb", SubscriptionContent::All).await;
+        follow(&state, &owner, "UCa", SubscriptionContent::ALL).await;
+        follow(&state, &owner, "UCb", SubscriptionContent::ALL).await;
         store(
             &state,
             &[

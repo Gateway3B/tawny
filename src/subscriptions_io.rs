@@ -185,7 +185,7 @@ pub fn parse_piped_json(contents: &str) -> Result<Vec<ImportedSubscription>, Str
             channel_id: channel_id_from_url(&entry.url).unwrap_or_default(),
             handle: handle_from_url(&entry.url).unwrap_or_default(),
             name: entry.name.trim().to_string(),
-            content: SubscriptionContent::All,
+            content: SubscriptionContent::ALL,
         })
         .filter(ImportedSubscription::is_usable)
         .collect())
@@ -263,7 +263,7 @@ pub fn parse_takeout_csv(contents: &str) -> Result<Vec<ImportedSubscription>, St
             channel_id,
             name,
             handle: String::new(),
-            content: SubscriptionContent::All,
+            content: SubscriptionContent::ALL,
         });
     }
     if subscriptions.is_empty() {
@@ -317,7 +317,7 @@ pub fn parse_opml(contents: &str) -> Result<Vec<ImportedSubscription>, String> {
             channel_id,
             name: name.trim().to_string(),
             handle: String::new(),
-            content: SubscriptionContent::All,
+            content: SubscriptionContent::ALL,
         });
     }
     if subscriptions.is_empty() {
@@ -639,8 +639,8 @@ mod tests {
     #[test]
     fn tawny_export_round_trips_preferences_and_groups() {
         let channels = vec![
-            channel(ID_A, "Shorts Only", SubscriptionContent::Shorts),
-            channel(ID_B, "Videos Only", SubscriptionContent::Videos),
+            channel(ID_A, "Shorts Only", SubscriptionContent::SHORTS),
+            channel(ID_B, "Videos Only", SubscriptionContent::VIDEOS),
         ];
         let groups = vec![SubscriptionGroup {
             id: "group:tech".into(),
@@ -653,8 +653,8 @@ mod tests {
 
         assert_eq!(parsed.format, SubscriptionFormat::Tawny);
         assert_eq!(parsed.subscriptions.len(), 2);
-        assert_eq!(parsed.subscriptions[0].content, SubscriptionContent::Shorts);
-        assert_eq!(parsed.subscriptions[1].content, SubscriptionContent::Videos);
+        assert_eq!(parsed.subscriptions[0].content, SubscriptionContent::SHORTS);
+        assert_eq!(parsed.subscriptions[1].content, SubscriptionContent::VIDEOS);
         assert_eq!(parsed.groups, groups);
     }
 
@@ -663,8 +663,8 @@ mod tests {
     #[test]
     fn third_party_formats_round_trip_their_channels() {
         let channels = vec![
-            channel(ID_A, "Alpha & Co", SubscriptionContent::Shorts),
-            channel(ID_B, "Name, with comma", SubscriptionContent::All),
+            channel(ID_A, "Alpha & Co", SubscriptionContent::SHORTS),
+            channel(ID_B, "Name, with comma", SubscriptionContent::ALL),
         ];
         for format in [
             SubscriptionFormat::Piped,
@@ -694,8 +694,8 @@ mod tests {
     #[test]
     fn export_covers_only_subscribed_channels() {
         let mut channels = vec![
-            channel(ID_A, "Kept", SubscriptionContent::All),
-            channel(ID_B, "Dropped", SubscriptionContent::All),
+            channel(ID_A, "Kept", SubscriptionContent::ALL),
+            channel(ID_B, "Dropped", SubscriptionContent::ALL),
         ];
         channels[1].subscribed = false;
 

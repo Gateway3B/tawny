@@ -45,7 +45,7 @@ to compile. Prefer the patterns already in `src/` over what you remember.
   `channel` and `video` tables. A video can be a **Short** or **live**; the
   feed filters on that (`FeedFilter`).
 - **Follow** (a subscription): a `user_subscription` edge from an account to a
-  channel, with a **`SubscriptionContent`** (videos, Shorts, or both).
+  channel, with a **`SubscriptionContent`**: any mix of its videos, Shorts and live.
   **Groups** sort follows into feed filters.
 - **Feed**: the followed channels' uploads, 24 at a time
   (`get_feed_page(query, page)`), filtered in SurrealDB.

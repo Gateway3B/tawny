@@ -12,8 +12,8 @@ use dioxus_icons::lucide::{Check, History, ListVideo, Play, Trash2, Tv};
 use g3_route_transitions::{ROUTE_TRANSITION_OVERLAY_REGION_CLASS, animated_navigate};
 use g3_ui::{
     Avatar, AvatarSize, BottomSheet, Button, ButtonFill, ButtonSize, Card, Chip, Color, Content,
-    EmptyState, InfiniteScroll, SegmentButton, SegmentGroup, Shelf, Space, Spinner, Stack,
-    StackAlign, Text, TextTone, TextVariant,
+    EmptyState, InfiniteScroll, Shelf, Space, Spinner, Stack, StackAlign, Text, TextTone,
+    TextVariant,
 };
 
 use super::{FeedFilterSegments, PageHeader, VideoGrid};
@@ -24,6 +24,33 @@ const HISTORY_PAGE_SIZE: usize = 24;
 
 /// Queue and History are sheets, and the sheet is the whole page - its own
 /// header included - so the header rides up with the body it belongs to.
+/// One of the kinds a subscription can let into the feed, as a toggle.
+#[derive(Clone, Copy, PartialEq)]
+enum FeedKind {
+    Videos,
+    Shorts,
+    Live,
+}
+
+impl FeedKind {
+    fn of(self, content: SubscriptionContent) -> bool {
+        match self {
+            Self::Videos => content.videos,
+            Self::Shorts => content.shorts,
+            Self::Live => content.live,
+        }
+    }
+
+    fn toggled(self, mut content: SubscriptionContent) -> SubscriptionContent {
+        match self {
+            Self::Videos => content.videos = !content.videos,
+            Self::Shorts => content.shorts = !content.shorts,
+            Self::Live => content.live = !content.live,
+        }
+        content
+    }
+}
+
 #[component]
 fn AuxiliarySheet(title: String, children: Element) -> Element {
     rsx! {
@@ -312,20 +339,44 @@ fn ChannelHero(channel: ReadSignal<Channel>) -> Element {
                 // Only meaningful once subscribed: this narrows what reaches
                 // the feed, it does not change the channel page.
                 if is_subscribed {
-                    SegmentGroup {
-                        value: content,
-                        label: "Feed shows",
-                        onchange: move |picked: SubscriptionContent| {
-                            if app_state.set_subscription_content(&content_channel_id, picked) {
-                                app_state.show_toast(
-                                    format!("Feed shows {}", picked.label().to_lowercase()),
-                                    Color::Neutral,
-                                );
+                    // Each kind on its own, in any mix. Not a choice among
+                    // presets: a channel's streams can be the show while its
+                    // Shorts are noise, or the other way round.
+                    Stack { gap: Space::Xs,
+                        Text { variant: TextVariant::Label, tone: TextTone::Secondary, "Feed shows" }
+                        div { role: "group", aria_label: "Feed shows", class: "flex flex-wrap gap-2",
+                            for (kind , label) in [(FeedKind::Videos, "Videos"), (FeedKind::Shorts, "Shorts"), (FeedKind::Live, "Live")] {
+                                {
+                                    let current = content();
+                                    let channel_id = content_channel_id.clone();
+                                    rsx! {
+                                        Chip {
+                                            key: "{label}",
+                                            selected: kind.of(current),
+                                            onclick: move |_| {
+                                                let picked = kind.toggled(current);
+                                                // None at all is an unsubscribe, which has its own button.
+                                                if picked.is_empty() {
+                                                    app_state.show_toast(
+                                                        "Keep one on, or unsubscribe",
+                                                        Color::Neutral,
+                                                    );
+                                                    return;
+                                                }
+                                                content.set(picked);
+                                                if app_state.set_subscription_content(&channel_id, picked) {
+                                                    app_state.show_toast(
+                                                        format!("Feed shows {}", picked.label()),
+                                                        Color::Neutral,
+                                                    );
+                                                }
+                                            },
+                                            "{label}"
+                                        }
+                                    }
+                                }
                             }
-                        },
-                        SegmentButton { value: SubscriptionContent::All, "Both" }
-                        SegmentButton { value: SubscriptionContent::Videos, "Videos" }
-                        SegmentButton { value: SubscriptionContent::Shorts, "Shorts" }
+                        }
                     }
                 }
             }
@@ -542,7 +593,7 @@ mod channel_tests {
                 subscribed: false,
                 description: String::new(),
                 banner_url: None,
-                subscription_content: SubscriptionContent::All,
+                subscription_content: SubscriptionContent::ALL,
             },
             videos: page(
                 ChannelMediaTab::Videos,

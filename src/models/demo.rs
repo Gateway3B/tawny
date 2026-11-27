@@ -56,7 +56,7 @@ impl DemoLibrary {
                 subscribed: true,
                 description: "Practical Rust and software architecture.".into(),
                 banner_url: None,
-                subscription_content: SubscriptionContent::All,
+                subscription_content: SubscriptionContent::ALL,
             },
             Channel {
                 id: "UC-tawny-signal".into(),
@@ -67,7 +67,7 @@ impl DemoLibrary {
                 subscribed: true,
                 description: "Signals, space, and ambitious experiments.".into(),
                 banner_url: None,
-                subscription_content: SubscriptionContent::All,
+                subscription_content: SubscriptionContent::ALL,
             },
             Channel {
                 id: "UC-tawny-field".into(),
@@ -78,7 +78,7 @@ impl DemoLibrary {
                 subscribed: true,
                 description: "Thoughtful stories from outdoors.".into(),
                 banner_url: None,
-                subscription_content: SubscriptionContent::All,
+                subscription_content: SubscriptionContent::ALL,
             },
             Channel {
                 id: "UC-tawny-slow".into(),
@@ -89,7 +89,7 @@ impl DemoLibrary {
                 subscribed: true,
                 description: "Make technology feel quieter.".into(),
                 banner_url: None,
-                subscription_content: SubscriptionContent::All,
+                subscription_content: SubscriptionContent::ALL,
             },
         ];
 

@@ -407,7 +407,7 @@ mod tests {
             subscribed: false,
             description: String::new(),
             banner_url: None,
-            subscription_content: SubscriptionContent::All,
+            subscription_content: SubscriptionContent::ALL,
         }
     }
 
@@ -446,7 +446,7 @@ mod tests {
                     .map(|id| SubscriptionChange {
                         channel: channel(id),
                         subscribed: true,
-                        content: SubscriptionContent::All,
+                        content: SubscriptionContent::ALL,
                     })
                     .to_vec(),
             )
@@ -484,7 +484,7 @@ mod tests {
                 vec![SubscriptionChange {
                     channel: channel("UCa"),
                     subscribed: true,
-                    content: SubscriptionContent::Videos,
+                    content: SubscriptionContent::VIDEOS,
                 }],
             )
             .await
@@ -518,8 +518,8 @@ mod tests {
             .map(|channel| (channel.id.as_str(), channel.subscription_content))
             .collect::<Vec<_>>();
         // The server's own choice for UCa stands.
-        assert!(follows.contains(&("UCa", SubscriptionContent::Videos)));
-        assert!(follows.contains(&("UCb", SubscriptionContent::All)));
+        assert!(follows.contains(&("UCa", SubscriptionContent::VIDEOS)));
+        assert!(follows.contains(&("UCb", SubscriptionContent::ALL)));
         assert_eq!(viewer.playlist("mine").unwrap().video_ids, vec!["v2", "v1"]);
         assert_eq!(
             viewer.playlist("watch-later").unwrap().video_ids,
