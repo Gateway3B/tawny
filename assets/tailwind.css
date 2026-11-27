@@ -797,7 +797,10 @@ body {
 .persistent-player.mini {
   --tawny-mini-gap: 0.75rem;
   --tawny-mini-top: calc(var(--g3-safe-area-top, env(safe-area-inset-top)) + 4.25rem);
-  --tawny-mini-bottom: calc(var(--g3-safe-area-bottom, env(safe-area-inset-bottom)) + var(--tawny-mini-gap));
+  --tawny-mini-bottom: calc(
+    var(--g3-safe-area-bottom, env(safe-area-inset-bottom)) +
+    var(--tawny-mini-gap)
+  );
   --tawny-mini-start: var(--tawny-mini-gap);
   touch-action: none;
   position: fixed;

@@ -10,14 +10,22 @@
 IF (INFO FOR DB).tables.user_subscription != NONE {
     -- Bind SELECT before iterating: the remote 3.2.4 protocol cannot execute
     -- this parenthesized SELECT directly as a FOR iterator on an empty table.
+    -- Counted first, ids fetched per duplicate: `array::group` flattens, so
+    -- collecting [updated_at, id] pairs with it gave every group of one row
+    -- two elements and a DELETE of NONE, which SurrealDB 4 refuses.
     LET $groups = (
-        SELECT owner, channel_id, array::sort::desc(array::group([updated_at, id])) AS rows
+        SELECT owner, channel_id, count() AS rows
         FROM user_subscription WITH NOINDEX
         GROUP BY owner, channel_id
     );
     FOR $group IN $groups {
-        IF array::len($group.rows) > 1 {
-            DELETE array::slice($group.rows, 1).map(|$row| $row[1]);
+        IF $group.rows > 1 {
+            LET $ids = (
+                SELECT VALUE id FROM user_subscription WITH NOINDEX
+                WHERE owner = $group.owner AND channel_id = $group.channel_id
+                ORDER BY updated_at DESC
+            );
+            DELETE array::slice($ids, 1);
         };
     };
 };
