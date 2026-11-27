@@ -1,9 +1,15 @@
 -- Match the reviewed g3-auth account-tracked adapter. Untracked writers must
 -- be stopped before migration; the event rejects a rollback to their format.
 DEFINE TABLE IF NOT EXISTS sessions TYPE NORMAL SCHEMAFULL PERMISSIONS NONE;
-DEFINE FIELD IF NOT EXISTS sessionstore ON sessions TYPE string;
-DEFINE FIELD IF NOT EXISTS sessionexpires ON sessions TYPE string;
-DEFINE FIELD IF NOT EXISTS sessionid ON sessions TYPE string;
+-- Before this file, g3-auth kept sessions in a schemaless table. SurrealDB 4
+-- will not type the fields of a table that already has rows unless told what
+-- the rows become: the legacy writer stored strings, so they stay as they are.
+DEFINE FIELD IF NOT EXISTS sessionstore ON sessions TYPE string
+    MIGRATE EXISTING ROWS AS legacy_sessionstore USING <string> $value FALLBACK "";
+DEFINE FIELD IF NOT EXISTS sessionexpires ON sessions TYPE string
+    MIGRATE EXISTING ROWS AS legacy_sessionexpires USING <string> $value FALLBACK "";
+DEFINE FIELD IF NOT EXISTS sessionid ON sessions TYPE string
+    MIGRATE EXISTING ROWS AS legacy_sessionid USING <string> $value FALLBACK "";
 DEFINE FIELD IF NOT EXISTS session_account ON sessions TYPE option<record<app_user>>;
 DEFINE FIELD IF NOT EXISTS account_indexed ON sessions TYPE option<bool> DEFAULT false;
 DEFINE INDEX IF NOT EXISTS sessions_sessionid_idx ON sessions FIELDS sessionid UNIQUE;

@@ -4,6 +4,11 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
 # "On this device" (src/device_backend). `just backend-desktop` builds it.
 export TAWNY_BACKEND_LIBRARY := justfile_directory() / "target" / "device-backend" / if os() == "windows" { "tawny_backend.dll" } else if os() == "macos" { "libtawny_backend.dylib" } else { "libtawny_backend.so" }
 
+# SurrealDB's query engine recurses deeply, and the server tests run it on
+# test threads. Windows gives a test thread far less stack than Linux, so schema
+# sync overflowed there in a debug build while CI passed.
+export RUST_MIN_STACK := "16777216"
+
 default:
     @just --list
 

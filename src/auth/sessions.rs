@@ -72,6 +72,14 @@ mod tests {
     async fn legacy_database() -> Surreal<Any> {
         let db = surrealdb::engine::any::connect("mem://").await.unwrap();
         db.use_ns("test").use_db("test").await.unwrap();
+        // Accounts were always defined by the schema before any existed, as
+        // here. Rows in a table with no definition are not something a real
+        // database holds, and SurrealDB 4 will not impose typed fields on them.
+        db.query(include_str!("../../database/schema/app_user.surql"))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
         db.query("DEFINE TABLE sessions SCHEMALESS PERMISSIONS NONE; CREATE app_user:kept SET display_name = 'Kept', is_guest = true, created_at = time::now(), updated_at = time::now(); CREATE app_user:other SET display_name = 'Other', is_guest = true, created_at = time::now(), updated_at = time::now();")
             .await.unwrap().check().unwrap();
         db
