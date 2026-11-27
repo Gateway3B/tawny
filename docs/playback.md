@@ -14,7 +14,7 @@ Stream URLs come from the Compose-managed yt-dlp service, joined to the extracto
 
 Source order is direct YouTube player extraction ranked by `playback_source_priority` — adaptive track sets first, then HLS, progressive, and plain manifests. The privacy-enhanced YouTube embed is **not** an automatic fallback: when every direct source fails, the player surfaces the transport's own error with a retry action, and the embed is offered only as an explicit user choice.
 
-The player is mounted in the shared application shell, expands above video details, and switches to a fixed mini-player above bottom navigation on other routes without replacing the media element. Non-embed sources and every adaptive track are registered as short-lived same-origin proxy targets. The proxy forwards byte ranges and configured request headers, streams response bodies, bounds connect and per-chunk read time so a wedged upstream surfaces as an error instead of an indefinite stall, and rewrites HLS playlists plus DASH `BaseURL` elements so child requests stay same-origin. Expired proxy registrations are pruned as new sessions are created.
+The player is mounted in the shared application shell, expands above video details, and switches to a floating mini player on other routes without replacing the media element. Non-embed sources and every adaptive track are registered as short-lived same-origin proxy targets. The proxy forwards byte ranges and configured request headers, streams response bodies, bounds connect and per-chunk read time so a wedged upstream surfaces as an error instead of an indefinite stall, and rewrites HLS playlists plus DASH `BaseURL` elements so child requests stay same-origin. Expired proxy registrations are pruned as new sessions are created.
 
 The client generates an in-memory DASH manifest for extracted representation sets and sends it to the packaged Shaka transport. Shaka handles Media Source capability negotiation, automatic bitrate selection, buffering, seeking, DASH/HLS manifests, and retry recovery. Progressive playback and native HLS are retained for platforms without Media Source support. On a fatal request, the transport records the current position, resolves fresh signed sources, and loads the renewed primary at that position before trying another protocol. The position is also retained across a final Dioxus media-element remount.
 
@@ -34,7 +34,7 @@ There is no separate host installation step. `docker compose up -d --build` star
 
 The privacy-enhanced YouTube embed is never substituted automatically. If every direct source fails, the player reports the transport's actual error and offers a retry; switching to the embed is an explicit user action.
 
-The media element lives in the shared app shell: it is full-width on a video route and changes into a compact bar above bottom navigation while the user explores the rest of the app, without being unmounted. Playback speed, captions, chapter seeking, and picture-in-picture operate on that same element. Set `TAWNY_BOTGUARD_BIN` to a compatible `rustypipe-botguard` executable for PO-token-backed browser-client streams; the extractor caches session tokens while content-bound data stays ephemeral. A `Sabr` source is played through a playable DASH/HLS bridge or a registered `TawnySabrAdapter`; raw UMP parsing and BotGuard execution remain behind that adapter boundary rather than being mislabeled as ordinary media playback.
+The media element lives in the shared app shell: it is full-width on a video route and shrinks to a floating video in a corner while the user explores the rest of the app, without being unmounted. Playback speed, captions, chapter seeking, and picture-in-picture operate on that same element. Set `TAWNY_BOTGUARD_BIN` to a compatible `rustypipe-botguard` executable for PO-token-backed browser-client streams; the extractor caches session tokens while content-bound data stays ephemeral. A `Sabr` source is played through a playable DASH/HLS bridge or a registered `TawnySabrAdapter`; raw UMP parsing and BotGuard execution remain behind that adapter boundary rather than being mislabeled as ordinary media playback.
 
 Tawny is not affiliated with or endorsed by YouTube. YouTube trademarks belong to their respective owners.
 
@@ -44,7 +44,17 @@ A video can be kept on the device and watched without a connection. The
 watch page's Download button offers a quality (Best, 1080p, 720p, 480p,
 360p, or audio only; each height means that or the closest below it), and
 the Downloads page, reached from the Playlists header, lists what is kept,
-what is under way and what failed.
+what is under way and what failed. A playlist's Download all offers one
+quality for every video on screen; Downloads offers Retry failed the same way,
+and Remove all. A failed download is tapped to try it again, with its quality
+picked afresh.
+
+Downloads run two at a time from a queue in `src/downloads.rs`
+(`AppState::download_queue`). Started all at once, a playlist shared a weak
+connection between every video and most failed. Each is resolved only when its
+turn comes, so the last of a long playlist does not wait on stream addresses
+that expired. One that could not even be resolved is still listed as failed
+(`TawnyDownloads.recordFailure`), to be retried like any other.
 
 Nothing is built on the server. A download is the player's own adaptive
 stream narrowed to one video track and one audio track, stored by Shaka's
@@ -158,6 +168,25 @@ starts, the player also reads its saved position from the server
 from where it opened and the viewer has not moved it yet: the list it was
 opened from may have been fetched on this device before the viewer stopped on
 another.
+
+Every position is kept on the device too (`src/local_progress.rs`, in local
+storage), before it is sent. A send that fails, as every one does while a
+downloaded video plays with no connection, says nothing: the position stays
+marked as owed and goes out with the next tick that reaches the server. A
+video starts from the device's own position when it has one, and the server's
+copy is not adopted while the device still owes it a newer one.
+
+## The mini player
+
+Minimized, the player is the video alone, floating in a corner (bottom right
+at first). A tap opens it: the picture is one button under the play
+controls, so the tap is a click straight away, with no wait to tell it from a
+double tap and no first tap spent raising controls. A tap that lands while the
+minimize transition is still running is remembered and opens the player as it
+ends. A drag moves the player and, on release, it settles in the corner it was
+heading for, projected along the finger's velocity; the corner is kept per
+device. The controls script owns the drag, at the document, and writes the
+corner to `html[data-mini-corner]` so a re-render cannot move the player.
 
 ## Taps on the video
 

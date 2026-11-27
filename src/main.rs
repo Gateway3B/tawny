@@ -24,6 +24,8 @@ mod health;
 mod library_move;
 
 mod library_sync;
+
+mod local_progress;
 // The relay is Android's; the server build compiles it only to test it.
 #[cfg(any(target_os = "android", all(test, feature = "server")))]
 mod local_relay;

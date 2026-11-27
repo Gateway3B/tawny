@@ -357,6 +357,21 @@ fn ShellContent() -> Element {
     let remembered = use_hook(|| Rc::new(RefCell::new(None::<Route>)));
     let base_route = page_beneath(&route, remembered.borrow().clone());
     remembered.borrow_mut().clone_from(&base_route);
+    // Where the Playlists tab was left: away on another tab, its button
+    // returns to that playlist rather than to the index. Read from the page
+    // beneath any sheet, so the player or Settings opened over a playlist
+    // does not make it forget.
+    let last_playlists = use_hook(|| Rc::new(RefCell::new(Route::Playlists {})));
+    let tab_route = route.clone();
+    let on_playlists = matches!(
+        route,
+        Route::Playlists {} | Route::PlaylistDetail { .. } | Route::Downloads {}
+    );
+    if let Some(base @ (Route::Playlists {} | Route::PlaylistDetail { .. } | Route::Downloads {})) =
+        &base_route
+    {
+        last_playlists.borrow_mut().clone_from(base);
+    }
 
     rsx! {
         NativeMediaCoordinator {}
@@ -402,9 +417,29 @@ fn ShellContent() -> Element {
                 }
                 NavItem {
                     label: "Playlists",
-                    selected: matches!(route, Route::Playlists {} | Route::PlaylistDetail { .. } | Route::Downloads {}),
+                    selected: on_playlists,
                     icon: rsx! { ListIcon { size: 22 } },
-                    onclick: move |_| { spawn(animated_navigate(Route::Playlists {})); },
+                    onclick: move |_| {
+                        // Tapped again from inside, it goes up to the index,
+                        // so the index is always one tap away.
+                        let target = if on_playlists {
+                            Route::Playlists {}
+                        } else {
+                            let last = last_playlists.borrow().clone();
+                            match &last {
+                                // A playlist deleted since, here or on another
+                                // device, would open on nothing.
+                                Route::PlaylistDetail { id }
+                                    if !app_state.with_viewer(|viewer| {
+                                        viewer.playlists.iter().any(|playlist| &playlist.id == id)
+                                    }) => Route::Playlists {},
+                                _ => last,
+                            }
+                        };
+                        if target != tab_route {
+                            spawn(animated_navigate(target));
+                        }
+                    },
                 }
                 NavItem {
                     label: "Search",

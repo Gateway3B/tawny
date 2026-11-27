@@ -11,7 +11,7 @@ use crate::{
     playback_resolver::resolve_streaming_session,
     state::AppState,
 };
-use dioxus::prelude::*;
+use dioxus::{core::spawn_forever, prelude::*};
 use g3_ui::Color;
 use serde::{Deserialize, Serialize};
 
@@ -72,6 +72,9 @@ impl DownloadQuality {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DownloadState {
+    /// Waiting its turn in [`AppState::download_queue`]. Never sent by the
+    /// page: the queue is this module's.
+    Queued,
     Downloading,
     Done,
     Failed,
@@ -109,8 +112,20 @@ impl DownloadEntry {
                     format!("Downloading {percent}%")
                 }
             }
-            DownloadState::Failed => "The download couldn't finish. Please try again.".to_string(),
+            DownloadState::Queued => format!("Waiting · {}", self.quality),
+            DownloadState::Failed => match &self.error {
+                Some(error) if !error.is_empty() => format!("Failed: {error}"),
+                _ => "The download couldn't finish. Please try again.".to_string(),
+            },
         }
+    }
+
+    /// Whether this download is still to come: waiting or under way.
+    pub fn pending(&self) -> bool {
+        matches!(
+            self.state,
+            DownloadState::Queued | DownloadState::Downloading
+        )
     }
 
     pub fn title(&self) -> String {
@@ -131,6 +146,206 @@ pub fn size_label(bytes: u64) -> String {
     } else {
         format!("{megabytes:.1} MB")
     }
+}
+
+/// Videos offered for download together, and what the sheet calls them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BulkDownload {
+    pub title: String,
+    pub videos: Vec<Video>,
+}
+
+/// A video waiting for its turn to download.
+#[derive(Clone, Debug, PartialEq)]
+pub struct QueuedDownload {
+    pub video: Video,
+    pub quality: DownloadQuality,
+    /// Its turn has come and its streams are being resolved. It stays queued
+    /// until the page lists it, as under way or failed: resolving is where a
+    /// bad connection fails, and taken off the queue first it was shown
+    /// nowhere while it did.
+    pub starting: bool,
+}
+
+impl QueuedDownload {
+    /// How the Downloads page and the download sheet show it.
+    pub fn entry(&self) -> DownloadEntry {
+        DownloadEntry {
+            video_id: self.video.id.clone(),
+            state: if self.starting {
+                DownloadState::Downloading
+            } else {
+                DownloadState::Queued
+            },
+            progress: 0.0,
+            bytes: 0,
+            quality: self.quality.label().to_string(),
+            video: Some(self.video.clone()),
+            thumbnail: None,
+            error: None,
+        }
+    }
+}
+
+/// What the page lists, with the queue laid over it: a video waiting to be
+/// retried shows as waiting rather than as its earlier failure too, and one
+/// starting gives way to the page's own entry once the page has one.
+pub fn merged_entries(listed: &[DownloadEntry], queue: &[QueuedDownload]) -> Vec<DownloadEntry> {
+    let mut entries = listed.to_vec();
+    for queued in queue {
+        let entry = queued.entry();
+        match entries
+            .iter_mut()
+            .find(|listed| listed.video_id == entry.video_id)
+        {
+            Some(listed) if queued.starting && listed.state != DownloadState::Failed => {}
+            Some(listed) => *listed = entry,
+            None => entries.push(entry),
+        }
+    }
+    entries
+}
+
+/// How many downloads run at once. A whole playlist started together shared
+/// one weak connection between all of them, and most then failed; two keep
+/// the line busy without starving each other.
+const PARALLEL_DOWNLOADS: usize = 2;
+
+/// Queues `videos` to download at `quality`, two at a time, answering how
+/// many were added. Videos already kept, under way or waiting are left as
+/// they are; a failed one is tried again.
+pub fn queue_downloads(
+    mut app_state: AppState,
+    videos: Vec<Video>,
+    quality: DownloadQuality,
+) -> usize {
+    let added = {
+        let downloads = app_state.downloads.peek();
+        let mut queue = app_state.download_queue.write();
+        let mut added = 0;
+        for video in videos {
+            let busy = downloads
+                .iter()
+                .any(|entry| entry.video_id == video.id && entry.state != DownloadState::Failed)
+                || queue.iter().any(|queued| queued.video.id == video.id);
+            if video.is_live || busy {
+                continue;
+            }
+            queue.push(QueuedDownload {
+                video,
+                quality,
+                starting: false,
+            });
+            added += 1;
+        }
+        added
+    };
+    if added > 0 && !*app_state.download_worker.peek() {
+        app_state.download_worker.set(true);
+        // Owned by no page: leaving the one that queued them must not stop
+        // the rest.
+        spawn_forever(run_queue(app_state));
+    }
+    added
+}
+
+/// Takes waiting videos off the queue while fewer than
+/// [`PARALLEL_DOWNLOADS`] are under way. Each is resolved only when its turn
+/// comes, so a long playlist does not hand its last videos stream addresses
+/// that expired while they waited.
+async fn run_queue(mut app_state: AppState) {
+    loop {
+        let (active, next) = {
+            let downloads = app_state.downloads.peek();
+            let queue = app_state.download_queue.peek();
+            let active = merged_entries(&downloads, &queue)
+                .iter()
+                .filter(|entry| entry.state == DownloadState::Downloading)
+                .count();
+            let next = queue.iter().find(|queued| !queued.starting).cloned();
+            (active, next)
+        };
+        if active >= PARALLEL_DOWNLOADS {
+            wait_for_downloads_change().await;
+            continue;
+        }
+        let Some(next) = next else {
+            if active == 0 {
+                break;
+            }
+            wait_for_downloads_change().await;
+            continue;
+        };
+        let id = next.video.id.clone();
+        if let Some(queued) = app_state
+            .download_queue
+            .write()
+            .iter_mut()
+            .find(|queued| queued.video.id == id)
+        {
+            queued.starting = true;
+        }
+        spawn_forever(async move {
+            let video = next.video.clone();
+            if let Err(error) = start_download(app_state, next.video, next.quality).await {
+                record_failure(&video, &error).await;
+            }
+            // The page lists it by now, as under way or failed.
+            app_state
+                .download_queue
+                .write()
+                .retain(|queued| !(queued.starting && queued.video.id == id));
+        });
+    }
+    app_state.download_worker.set(false);
+    // Something may have been queued between the last look and the flag
+    // coming down.
+    if !app_state.download_queue.peek().is_empty() {
+        app_state.download_worker.set(true);
+        spawn_forever(run_queue(app_state));
+    }
+}
+
+/// Returns when the page's downloads change, or after a couple of seconds.
+async fn wait_for_downloads_change() {
+    let _ = document::eval(
+        r#"
+        await new Promise((resolve) => {
+            window.addEventListener('tawnydownloadschange', resolve, { once: true });
+            setTimeout(resolve, 2000);
+        });
+        dioxus.send(true);
+        "#,
+    )
+    .recv::<bool>()
+    .await;
+}
+
+/// Lists `video` as failed with `error`, so a download that never got under
+/// way (no connection to resolve it, say) can be retried from Downloads like
+/// any other rather than vanishing with a toast.
+pub async fn record_failure(video: &Video, error: &str) {
+    let request = serde_json::json!({ "video": video, "error": error });
+    let script = format!(
+        r#"
+        for (let attempt = 0; attempt < 200 && !window.TawnyDownloads; attempt++) {{
+            await new Promise((resolve) => setTimeout(resolve, 25));
+        }}
+        window.TawnyDownloads?.recordFailure({request});
+        dioxus.send(true);
+        "#
+    );
+    let _ = document::eval(&script).recv::<bool>().await;
+}
+
+/// Stops every download, waiting or under way, and deletes every kept one.
+pub async fn remove_all_downloads(mut app_state: AppState) {
+    app_state.download_queue.write().clear();
+    let _ = document::eval(
+        "await window.TawnyDownloads?.removeAll().catch(() => {}); dioxus.send(true);",
+    )
+    .recv::<bool>()
+    .await;
 }
 
 /// Starts keeping `video` on this device. Returns once it is under way; the
@@ -184,8 +399,13 @@ pub async fn start_download(
     }
 }
 
-/// Cancels a download under way, or deletes a kept one.
-pub async fn remove_download(video_id: &str) {
+/// Takes a download off the queue, cancels one under way, or deletes a kept
+/// one.
+pub async fn remove_download(mut app_state: AppState, video_id: &str) {
+    app_state
+        .download_queue
+        .write()
+        .retain(|queued| queued.video.id != video_id);
     let Ok(video_id) = serde_json::to_string(video_id) else {
         return;
     };
@@ -407,7 +627,7 @@ async fn watch(mut app_state: AppState) {
                     format!("Download failed: {}", entry.summary()),
                     Color::Danger,
                 ),
-                DownloadState::Downloading => {}
+                DownloadState::Queued | DownloadState::Downloading => {}
             }
         }
         app_state.downloads.set(entries);
@@ -453,6 +673,62 @@ mod tests {
         assert_eq!(
             entry(DownloadState::Failed).summary(),
             "The download couldn't finish. Please try again."
+        );
+        let mut cut_off = entry(DownloadState::Failed);
+        cut_off.error = Some("The download was interrupted".into());
+        assert_eq!(cut_off.summary(), "Failed: The download was interrupted");
+        assert_eq!(entry(DownloadState::Queued).summary(), "Waiting · 720p");
+    }
+
+    fn queued(id: &str, starting: bool) -> QueuedDownload {
+        QueuedDownload {
+            video: Video {
+                id: id.into(),
+                title: id.into(),
+                channel_id: "channel".into(),
+                channel_name: "Channel".into(),
+                thumbnail_url: String::new(),
+                published_at: String::new(),
+                duration_seconds: 60,
+                view_count: String::new(),
+                progress_seconds: 0,
+                watched: false,
+                is_live: false,
+                is_short: false,
+                audio_only: false,
+                channel_avatar_url: None,
+            },
+            quality: DownloadQuality::P720,
+            starting,
+        }
+    }
+
+    #[test]
+    fn the_queue_is_shown_over_the_page_list_once_per_video() {
+        let mut failed = entry(DownloadState::Failed);
+        failed.video_id = "retried".into();
+        let mut under_way = entry(DownloadState::Downloading);
+        under_way.video_id = "started".into();
+        let queue = [
+            queued("retried", false),
+            queued("started", true),
+            queued("resolving", true),
+        ];
+        let merged = merged_entries(&[failed, under_way], &queue);
+        let states = merged
+            .iter()
+            .map(|entry| (entry.video_id.as_str(), entry.state, entry.progress))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            states,
+            vec![
+                // A retry replaces its earlier failure.
+                ("retried", DownloadState::Queued, 0.0),
+                // The page's own entry, with its progress, once it has one.
+                ("started", DownloadState::Downloading, 0.426),
+                // Resolving, not yet listed by the page: still shown.
+                ("resolving", DownloadState::Downloading, 0.0),
+            ]
         );
     }
 

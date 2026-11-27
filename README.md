@@ -16,7 +16,7 @@ This repository currently contains a working vertical slice:
 - playlists, subscriptions, queue, history, and watch progress kept per account on the server, shown at once from a device cache (`g3-cache`) and changed with set-style mutations that are safe across devices;
 - configurable swipe-left and swipe-right playlist destinations;
 - channel pages, a persistent play queue, watch history, and a full video action sheet;
-- a persistent player that expands on video pages and becomes a mini-player above navigation elsewhere, with one-tap speed controls;
+- a persistent player that expands on video pages and becomes a floating mini player you can drag to any corner elsewhere, with one-tap speed controls;
 - subscription groups with one-tap feed filters;
 - direct YouTube video details, comments, captions, chapters, recommendations, and expiring playback sources;
 - cached descriptions, chapter jumps, captions, comments, and related videos;

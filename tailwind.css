@@ -87,7 +87,9 @@ body {
 
 .video-card-frame > .video-card-swipe,
 .video-card-frame > .video-card-swipe > .g3-swipe-content,
-.video-card-frame > .video-card-swipe > .g3-swipe-content > .g3-card {
+.video-card-frame > .video-card-swipe > .g3-swipe-content > .g3-card,
+/* A download under way has no swipe layer: the card sits in the frame. */
+.video-card-frame > .g3-card {
   border-radius: inherit;
 }
 
@@ -392,40 +394,78 @@ body {
   aspect-ratio: 16 / 9;
 }
 
+/* Minimized, the player is the video alone: a 16:9 card floating over the
+   page in one of four corners, dragged between them the way YouTube's is.
+   `tawny_player_controls.js` owns the drag and writes the corner to
+   `html[data-mini-corner]`, so a re-render never moves it. The insets are
+   variables so the drag can measure where each corner is. */
 .persistent-player.mini {
-  /* A vertical drag is the dismiss flick; without this the browser claims it
-     and cancels the pointer. */
-  touch-action: pan-x;
+  --tawny-mini-gap: 0.75rem;
+  --tawny-mini-top: calc(var(--g3-safe-area-top, env(safe-area-inset-top)) + 4.25rem);
+  --tawny-mini-bottom: calc(
+    var(--g3-safe-area-bottom, env(safe-area-inset-bottom)) +
+    var(--tawny-mini-gap)
+  );
+  --tawny-mini-start: var(--tawny-mini-gap);
+  /* The drag is the player's own; the browser must not scroll the page under it. */
+  touch-action: none;
   position: fixed;
   z-index: 45;
-  right: 0;
-  bottom: calc(4rem + var(--g3-safe-area-bottom, env(safe-area-inset-bottom)));
-  left: 0;
-  display: grid;
-  grid-template-columns: 7.4rem minmax(0, 1fr) 4.25rem;
-  min-height: 4.15rem;
+  top: auto;
+  right: var(--tawny-mini-gap);
+  bottom: var(--tawny-mini-bottom);
+  left: auto;
+  width: min(58vw, 20rem);
   overflow: hidden;
-  border-top: 1px solid var(--g3-color-border);
-  border-bottom: 1px solid var(--g3-color-border);
-  background: var(--g3-color-card);
-  box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.28);
+  border-radius: var(--tawny-radius);
+  background: #000;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html[data-mini-corner^="top-"] .persistent-player.mini {
+  top: var(--tawny-mini-top);
+  bottom: auto;
+}
+
+html[data-mini-corner$="-left"] .persistent-player.mini {
+  right: auto;
+  left: var(--tawny-mini-start);
+}
+
+.persistent-player.mini.mini-dragging {
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  cursor: grabbing;
 }
 
 .persistent-player.mini .persistent-player-stage {
-  height: 4.15rem;
+  aspect-ratio: 16 / 9;
 }
 
-.mini-player-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  justify-content: center;
-  padding: 0.45rem 0.7rem;
+/* The whole picture opens the player. A real button, under the controls, so
+   a tap is a click at once: no wait to see whether it was a double tap, and no
+   first tap spent raising controls. */
+.mini-player-open {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  padding: 0;
   border: 0;
   background: transparent;
-  color: var(--g3-color-text);
-  text-align: left;
   cursor: pointer;
+}
+
+/* Doubled up to outrank `.player-control-button`, which comes later and
+   would otherwise put it back in the flow, under the picture. */
+.persistent-player-stage .mini-player-close {
+  position: absolute;
+  z-index: 5;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  background: rgba(0, 0, 0, 0.5);
 }
 
 .player-detail-content {
@@ -440,24 +480,14 @@ body {
   }
 }
 
-@container g3-app-shell (width <= 390px) {
-  .persistent-player.mini {
-    grid-template-columns: 6.8rem minmax(0, 1fr) 4rem;
-  }
-}
-
 @container g3-app-shell (width >= 48rem) {
   /* Full-bleed is right on a phone, where the bar is the bottom edge of the
      screen. On a wide layout it reads as system chrome and wastes the width, so
      the player becomes a bounded card floating in the corner instead. */
   .persistent-player.mini {
-    right: 1.25rem;
-    bottom: 1.25rem;
-    left: auto;
-    width: min(26rem, calc(100% - 6.5rem));
-    border: 1px solid var(--g3-color-border);
-    border-radius: var(--tawny-radius);
-    box-shadow: 0 18px 44px var(--g3-color-shadow);
+    --tawny-mini-gap: 1.25rem;
+    --tawny-mini-start: calc(var(--g3-nav-rail-width, 0px) + 1.25rem);
+    width: 24rem;
   }
 
   /* The player is normally comfortable for reading around it. Theater mode is
@@ -1135,27 +1165,40 @@ body {
   display: none;
 }
 
-.persistent-player.mini .player-controls-center {
+/* Play and the queue steps sit in the bottom-left corner, as the close button
+   sits in the top-right, so the middle of the picture, where a tap naturally
+   lands, opens the player instead of pausing it. */
+.g3-app-shell .persistent-player.mini .player-controls-center {
+  display: flex;
+  top: auto;
+  right: auto;
+  bottom: 0.2rem;
+  left: 0.2rem;
   gap: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  transform: none;
 }
 
 .persistent-player.mini .player-play-button {
-  width: 2.45rem;
-  height: 2.45rem;
-  background: rgba(0, 0, 0, 0.58);
+  width: 2.25rem;
+  height: 2.25rem;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .persistent-player.mini .player-play-button svg {
-  width: 1.3rem;
-  height: 1.3rem;
+  width: 1.2rem;
+  height: 1.2rem;
 }
 
 /* Queue navigation remains available in the mini player, but it should read
    as a pair of lightweight nudges beside play rather than three primary
    controls competing for the thumbnail's limited width. */
 .persistent-player.mini .player-step-button {
-  width: 1.9rem;
-  height: 1.9rem;
+  width: 2rem;
+  height: 2.25rem;
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
@@ -1168,6 +1211,21 @@ body {
 
 .persistent-player.mini .player-controls-scrim {
   background: rgba(0, 0, 0, 0.08);
+}
+
+/* The controls stay up while minimized: the first tap on a small video should
+   open it, not spend itself raising a bar. Only play and the queue steps show. */
+.persistent-player.mini .tawny-player-controls {
+  opacity: 1;
+}
+
+.persistent-player.mini .player-controls-center button {
+  pointer-events: auto;
+}
+
+/* A failure at this size is a word and a tap away from the full panel. */
+.persistent-player.mini :is(.player-stage-remedy, .player-stage-details, .player-stage-actions) {
+  display: none;
 }
 
 @container g3-app-shell (width <= 600px) {
@@ -1649,7 +1707,7 @@ html[data-android-pip="true"] .tawny-shell {
    nav regions here broke with g3-ui 0.4: the page body is now a fixed sibling
    with z-index 1, so a missed selector painted it straight over the video. */
 html[data-android-pip="true"] .tawny-shell > :not(.persistent-player),
-html[data-android-pip="true"] .mini-player-copy,
+html[data-android-pip="true"] .mini-player-open,
 html[data-android-pip="true"] .mini-player-close,
 html[data-android-pip="true"] .tawny-player-controls,
 html[data-android-pip="true"] .player-buffering-indicator,
@@ -1780,22 +1838,12 @@ html[data-android-pip="true"] .persistent-player-stage iframe {
   /* Rests on the bottom navigation bar: g3's bar is a 3.25rem item with
      0.375rem of padding above it and at least that below, plus its hairline. */
   .persistent-player.mini {
-    bottom: calc(
+    --tawny-mini-bottom: calc(
       3.625rem +
       1px +
-      max(0.375rem, var(--g3-safe-area-bottom, env(safe-area-inset-bottom)))
+      max(0.375rem, var(--g3-safe-area-bottom, env(safe-area-inset-bottom))) +
+      var(--tawny-mini-gap)
     );
-    grid-template-columns: 6.45rem minmax(0, 1fr) 4rem;
-    min-height: 3.65rem;
-  }
-
-  .persistent-player.mini .persistent-player-stage {
-    height: 3.65rem;
-  }
-
-  .has-mini-player .g3-content-scroll {
-    padding-bottom: 4.25rem !important;
-    scroll-padding-bottom: 4.25rem;
   }
 }
 
@@ -1843,8 +1891,12 @@ html[data-android-pip="true"] .persistent-player-stage iframe {
     --g3-toast-bottom: calc(var(--tawny-nav-height) + 0.75rem);
   }
 
-  .g3-app-shell:has(.tawny-shell.has-mini-player) .g3-toast-bottom {
-    --g3-toast-bottom: calc(var(--tawny-nav-height) + 3.65rem + 0.75rem);
+  /* Above the floating player when it rests in a bottom corner. Its height is
+     its 16:9 width. */
+  html:not([data-mini-corner^="top-"])
+    .g3-app-shell:has(.tawny-shell.has-mini-player)
+    .g3-toast-bottom {
+    --g3-toast-bottom: calc(var(--tawny-nav-height) + min(58vw, 20rem) * 9 / 16 + 1.5rem);
   }
 }
 
@@ -1884,4 +1936,60 @@ html[data-route-transition]::view-transition-new(mini-player) {
 
 html[data-route-transition]::view-transition-old(mini-player):not(:only-child) {
   opacity: 0;
+}
+
+/* The mini card is rounded and the full stage is square, but the morph
+   carries a snapshot of the stage alone, which the card's clip never reaches:
+   the corners were square the whole way down and snapped round on arrival
+   (and the reverse going up). The visible image takes the corners over the
+   same time and curve as the group, so the rounding travels with the box.
+   With no pair there is no card: the `:only-child` rules above rise or drop
+   the image instead, and outrank these. (`:not(:only-child)` would say so
+   directly, but no pseudo-class but `:only-child` may follow these
+   pseudo-elements, and Chrome drops the whole rule.) */
+/* A clip rather than `border-radius`: Chrome reports a radius on the
+   snapshot image but paints it square. */
+@keyframes tawny-player-round {
+  from {
+    clip-path: inset(0 round 0);
+  }
+  to {
+    clip-path: inset(0 round var(--tawny-radius));
+  }
+}
+
+@keyframes tawny-player-unround {
+  from {
+    clip-path: inset(0 round var(--tawny-radius));
+  }
+  to {
+    clip-path: inset(0 round 0);
+  }
+}
+
+html[data-route-transition="dismiss-sheet"]::view-transition-old(player) {
+  animation-name: tawny-player-round !important;
+  animation-fill-mode: both !important;
+  animation-duration: var(--route-transition-sheet-duration) !important;
+  animation-timing-function: var(--route-transition-ios-ease) !important;
+}
+
+html[data-route-transition="present-sheet"]::view-transition-new(player) {
+  animation-name: tawny-player-unround !important;
+  animation-fill-mode: both !important;
+  animation-duration: var(--route-transition-sheet-duration) !important;
+  animation-timing-function: var(--route-transition-ios-ease) !important;
+}
+
+html[data-route-transition-platform="material"][data-route-transition="dismiss-sheet"]::view-transition-old(
+  player
+) {
+  animation-duration: var(--route-transition-material-sheet-dismiss-duration) !important;
+  animation-timing-function: var(--route-transition-material-spatial-ease) !important;
+}
+
+html[data-route-transition-platform="material"][data-route-transition="present-sheet"]::view-transition-new(
+  player
+) {
+  animation-timing-function: var(--route-transition-material-decelerate) !important;
 }

@@ -63,6 +63,7 @@ pub fn AppOverlays() -> Element {
 
     rsx! {
         super::DownloadSheet {}
+        super::BulkDownloadSheet {}
 
         // As tall as its rows: the default cap left the last one or two
         // behind a scroll on a phone.

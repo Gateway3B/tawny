@@ -83,6 +83,9 @@ pub struct AppState {
     /// Where playback has reached, per video, since it was last sent. Ticks
     /// land here; [`Self::flush_progress`] sends them.
     pending_progress: Signal<HashMap<String, VideoProgress>>,
+    /// Every position recorded on this device, and which the server still
+    /// needs. See [`crate::local_progress`].
+    local_progress: Signal<crate::local_progress::LocalProgress>,
     /// Positions already sent but not yet shown on the cached lists. Rewriting
     /// every cached feed page and refetching the playlist previews on each
     /// five-second tick was most of the work of watching a video, so the
@@ -116,6 +119,10 @@ pub struct AppState {
     /// a card's menu and a swipe.
     pub download_video: Signal<Option<Video>>,
     pub download_open: Signal<bool>,
+    /// Several videos to download at one quality: a playlist, or the
+    /// downloads that failed. Picked in `components::BulkDownloadSheet`.
+    pub bulk_download: Signal<Option<crate::downloads::BulkDownload>>,
+    pub bulk_download_open: Signal<bool>,
     pub share_with_timestamp: Signal<bool>,
     pub share_timestamp_seconds: Signal<u64>,
     pub active_video: Signal<Option<Video>>,
@@ -168,6 +175,11 @@ pub struct AppState {
     /// Whether this device can keep videos. Assumed until the page says
     /// otherwise, so the controls do not flash in where it can.
     pub downloads_supported: Signal<bool>,
+    /// Downloads waiting for their turn, oldest first. See
+    /// `downloads::queue_downloads`.
+    pub download_queue: Signal<Vec<crate::downloads::QueuedDownload>>,
+    /// Whether the task working through `download_queue` is running.
+    pub download_worker: Signal<bool>,
 }
 
 impl AppState {
@@ -302,8 +314,24 @@ impl AppState {
             self.active_preview_frames.set(None);
             self.active_audio_tracks.set(Vec::new());
             self.selected_audio_track.set(None);
+            let mut video = video;
+            // This device's own position, when it has one: the list the
+            // video came from may be older, and with no connection it is the
+            // only place a position watched offline was kept.
+            if let Some(local) = self.local_progress.peek().get(&video.id) {
+                video.progress_seconds = local.progress_seconds;
+                video.watched = local.watched;
+            }
+            self.active_video.set(Some(video));
+            return;
         }
         self.active_video.set(Some(video));
+    }
+
+    /// Whether this device holds a newer position for `video_id` than the
+    /// server does: one recorded while the server could not be reached.
+    pub fn has_unsent_progress(self, video_id: &str) -> bool {
+        self.local_progress.peek().is_unsent(video_id)
     }
 
     /// Fill in what is known about the video that is playing.
@@ -382,6 +410,7 @@ impl AppState {
         self.share_video.set(None);
         self.download_open.set(false);
         self.download_video.set(None);
+        self.bulk_download_open.set(false);
     }
 
     /// Remember where playback has reached.
@@ -441,17 +470,29 @@ impl AppState {
                 video.watched = entry.watched;
             });
         }
-        if pending.is_empty() {
+        // Kept here first, so nothing is lost while the server is out of
+        // reach, then everything still owed is sent: this tick's positions
+        // and any an earlier, failed one left behind.
+        let progress = {
+            let mut local = self.local_progress.write();
+            for entry in pending.into_values() {
+                local.record(entry);
+            }
+            local.unsent()
+        };
+        if progress.is_empty() {
             return;
         }
-        let progress = pending.into_values().collect::<Vec<_>>();
         let sent = self.playing_entry(&progress);
-        // No invalidation: the lists already show what was sent.
+        // No invalidation: the lists already show what was sent. No toast on
+        // failure either: offline, with a downloaded video, every tick
+        // failed, and the position is safe here until one gets through.
         spawn(async move {
-            if api::save_progress(progress).await.is_err() {
-                self.show_toast("Could not save your place in that video", Color::Warning);
-            } else if sent.is_some() {
-                self.server_position.set(sent);
+            if api::save_progress(progress.clone()).await.is_ok() {
+                self.local_progress.write().mark_sent(&progress);
+                if sent.is_some() {
+                    self.server_position.set(sent);
+                }
             }
         });
     }
@@ -463,12 +504,16 @@ impl AppState {
             progress_seconds: video.progress_seconds,
             audio_only: video.audio_only,
         }];
+        // Owed like any position until the server takes it, so an
+        // audio-only choice made offline is not lost.
+        self.local_progress.write().record(progress[0].clone());
         let sent = self.playing_entry(&progress);
         spawn(async move {
-            if api::save_progress(progress).await.is_err() {
-                self.show_toast("Could not save that", Color::Warning);
-            } else if sent.is_some() {
-                self.server_position.set(sent);
+            if api::save_progress(progress.clone()).await.is_ok() {
+                self.local_progress.write().mark_sent(&progress);
+                if sent.is_some() {
+                    self.server_position.set(sent);
+                }
             }
         });
     }
@@ -1217,6 +1262,24 @@ impl AppState {
         self.download_open.set(true);
     }
 
+    /// Offer to download `videos` together, at one quality picked for all.
+    pub fn open_bulk_download(mut self, title: impl Into<String>, videos: Vec<Video>) {
+        if !*self.downloads_supported.peek() {
+            self.show_toast("This browser cannot keep videos offline", Color::Warning);
+            return;
+        }
+        let videos: Vec<Video> = videos.into_iter().filter(|video| !video.is_live).collect();
+        if videos.is_empty() {
+            self.show_toast("Nothing here can be downloaded", Color::Warning);
+            return;
+        }
+        self.bulk_download.set(Some(crate::downloads::BulkDownload {
+            title: title.into(),
+            videos,
+        }));
+        self.bulk_download_open.set(true);
+    }
+
     pub fn open_share(mut self, video: Video) {
         self.share_timestamp_seconds.set(0);
         self.share_with_timestamp.set(false);
@@ -1606,10 +1669,13 @@ impl AppState {
             viewer.history.insert(0, entry);
             viewer.history.truncate(HISTORY_LIMIT);
         });
-        self.send(
-            DataChange::History,
-            api::record_history(video_id.to_string()),
-        );
+        // Quietly: history is a convenience, and a video watched offline
+        // from Downloads would otherwise announce a failure each time.
+        let video_id = video_id.to_string();
+        spawn(async move {
+            let _ = api::record_history(video_id).await;
+            invalidate(DataChange::History);
+        });
     }
 
     pub fn clear_history(self) {
@@ -1646,6 +1712,12 @@ pub fn AppStateProvider(children: Element) -> Element {
     // launch refetches once its guest account exists (see `session`).
     let session = use_session_provider();
     let settings = use_persistent_signal("tawny-settings-v1", 250, AppSettings::default);
+    // Written on every five-second tick, so it waits longer to persist.
+    let local_progress = use_persistent_signal(
+        "tawny-progress-v1",
+        3000,
+        crate::local_progress::LocalProgress::default,
+    );
 
     // Whose data the device cache holds. Not told "nobody" while the session
     // is still being looked up: that empties the cache, so every launch would
@@ -1706,6 +1778,7 @@ pub fn AppStateProvider(children: Element) -> Element {
         run_playlist,
         settings,
         pending_progress: Signal::new(HashMap::new()),
+        local_progress,
         unshown_progress: Signal::new(HashMap::new()),
         server_position: Signal::new(None),
         toaster: Signal::new(None),
@@ -1723,6 +1796,8 @@ pub fn AppStateProvider(children: Element) -> Element {
         share_open: Signal::new(false),
         download_video: Signal::new(None),
         download_open: Signal::new(false),
+        bulk_download: Signal::new(None),
+        bulk_download_open: Signal::new(false),
         share_with_timestamp: Signal::new(false),
         share_timestamp_seconds: Signal::new(0),
         active_video: Signal::new(None),
@@ -1750,6 +1825,8 @@ pub fn AppStateProvider(children: Element) -> Element {
         feed_pages: Signal::new(1),
         downloads: Signal::new(Vec::new()),
         downloads_supported: Signal::new(true),
+        download_queue: Signal::new(Vec::new()),
+        download_worker: Signal::new(false),
     });
 
     rsx! {

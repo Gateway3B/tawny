@@ -241,6 +241,9 @@
     const { videoId, quality, video } = request;
     if (jobs.get(videoId)?.state === "downloading") return;
     if ((await offlineUri(videoId)) !== null) return;
+    // A retry of a download the app closed on: its half-kept record would
+    // otherwise stay listed as failed beside the new one.
+    await purgeIncomplete(videoId).catch(() => {});
 
     const options = { serverUrl: request.serverUrl };
     const session = window.TawnyTransport.normalizePlaybackSession(request.session, options);
@@ -420,6 +423,45 @@
     notify();
   }
 
+  /// Lists a download that failed before it got under way (its stream could
+  /// not be resolved, say), so it can be retried like one that failed midway.
+  function recordFailure({ video, error }) {
+    const videoId = video?.id;
+    if (!videoId || jobs.get(videoId)?.state === "downloading") return;
+    jobs.set(videoId, {
+      videoId,
+      state: "failed",
+      progress: 0,
+      bytes: 0,
+      quality: "",
+      video,
+      thumbnail: null,
+      error: error ? String(error) : null,
+      operation: null,
+    });
+    notify();
+  }
+
+  /// Cancels every download under way and deletes every kept one.
+  async function removeAll() {
+    const running = Array.from(jobs.values()).filter((job) => job.operation);
+    jobs.clear();
+    await Promise.all(running.map((job) => job.operation.abort().catch(() => {})));
+    if (supported()) {
+      const storage = newStorage({});
+      try {
+        for (const content of await storage.list()) {
+          if (content.appMetadata?.videoId) {
+            await storage.remove(content.offlineUri).catch(() => {});
+          }
+        }
+      } finally {
+        await storage.destroy().catch(() => {});
+      }
+    }
+    notify();
+  }
+
   /// The `offline:` URI of a finished download of `videoId`, or null.
   async function offlineUri(videoId) {
     if (!window.shaka) return null;
@@ -437,6 +479,8 @@
     start,
     list,
     remove,
+    removeAll,
+    recordFailure,
     offlineUri,
     pickTracks,
     supported,

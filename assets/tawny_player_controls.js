@@ -200,34 +200,177 @@
   );
   document.addEventListener("pointercancel", () => (sheetFlick = null), true);
 
-  // A downward flick on the mini bar closes it, the same as its X. Done in the
-  // page for the reason above, by clicking the X so there is one way to stop
-  // playback.
-  let miniFlick = null;
+  // The minimized player floats in a corner and is dragged between them, the
+  // way YouTube's is. Done in the page, at the document, for the reason above:
+  // a native webview's Rust pointer handlers are blocking round trips, and a
+  // drag has to follow the finger every frame. The corner lives on <html>, not
+  // the player, so a re-render of the player cannot drop it.
+  const MINI_CORNER_KEY = "tawny.miniPlayerCorner";
+  const MINI_CORNERS = ["top-left", "top-right", "bottom-left", "bottom-right"];
+  const MINI_DRAG_SLOP = 8;
+  // How far ahead a release is projected along its velocity, so a flick
+  // toward a corner lands there even when the finger lifts short of halfway.
+  const MINI_FLING_MS = 180;
+  const setMiniCorner = (corner) => {
+    document.documentElement.dataset.miniCorner = corner;
+  };
+  {
+    let saved = null;
+    try {
+      saved = localStorage.getItem(MINI_CORNER_KEY);
+    } catch (_) {}
+    setMiniCorner(MINI_CORNERS.includes(saved) ? saved : "bottom-right");
+  }
+
+  /// The corner nearest to where a released player is heading.
+  function miniCornerFor(centerX, centerY, width, height) {
+    const vertical = centerY < height / 2 ? "top" : "bottom";
+    const horizontal = centerX < width / 2 ? "left" : "right";
+    return `${vertical}-${horizontal}`;
+  }
+
+  // Glides the player from where the finger left it into its corner: the
+  // corner is applied at once, and the transform that kept it under the finger
+  // is turned into the offset it animates away from.
+  function settleMini(mini, corner) {
+    const from = mini.getBoundingClientRect();
+    setMiniCorner(corner);
+    try {
+      localStorage.setItem(MINI_CORNER_KEY, corner);
+    } catch (_) {}
+    mini.style.transition = "none";
+    mini.style.transform = "";
+    const to = mini.getBoundingClientRect();
+    mini.style.transform = `translate3d(${from.left - to.left}px, ${from.top - to.top}px, 0)`;
+    void mini.offsetWidth;
+    mini.style.transition = "transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1)";
+    mini.style.transform = "";
+    const done = () => {
+      mini.style.transition = "";
+      mini.removeEventListener("transitionend", done);
+    };
+    mini.addEventListener("transitionend", done);
+    setTimeout(done, 320);
+  }
+
+  let miniDrag = null;
+  let swallowMiniClick = false;
   document.addEventListener(
     "pointerdown",
     (event) => {
       const mini =
         event.target instanceof Element && event.target.closest(".persistent-player.mini");
-      miniFlick = mini
-        ? { pointerId: event.pointerId, x: event.clientX, y: event.clientY, at: Date.now(), mini }
-        : null;
+      if (!mini || event.button > 0) {
+        miniDrag = null;
+        return;
+      }
+      swallowMiniClick = false;
+      miniDrag = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        last: { x: event.clientX, y: event.clientY, at: performance.now() },
+        vx: 0,
+        vy: 0,
+        moved: false,
+        mini,
+      };
     },
     true,
   );
   document.addEventListener(
-    "pointerup",
+    "pointermove",
     (event) => {
-      const flick = miniFlick;
-      miniFlick = null;
-      if (!flick || flick.pointerId !== event.pointerId) return;
-      const dy = event.clientY - flick.y;
-      if (dy <= 0 || !isVerticalFlick(event.clientX - flick.x, dy, Date.now() - flick.at)) return;
-      flick.mini.querySelector(".mini-player-close")?.click();
+      const drag = miniDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const dx = event.clientX - drag.x;
+      const dy = event.clientY - drag.y;
+      if (!drag.moved) {
+        if (Math.hypot(dx, dy) < MINI_DRAG_SLOP) return;
+        drag.moved = true;
+        drag.mini.classList.add("mini-dragging");
+        drag.mini.style.transition = "none";
+        try {
+          drag.mini.setPointerCapture(event.pointerId);
+        } catch (_) {}
+      }
+      const now = performance.now();
+      const elapsed = Math.max(1, now - drag.last.at);
+      // Smoothed, so one jittery last sample does not decide the corner.
+      drag.vx = drag.vx * 0.6 + ((event.clientX - drag.last.x) / elapsed) * 0.4;
+      drag.vy = drag.vy * 0.6 + ((event.clientY - drag.last.y) / elapsed) * 0.4;
+      drag.last = { x: event.clientX, y: event.clientY, at: now };
+      drag.mini.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+      if (event.cancelable) event.preventDefault();
     },
     true,
   );
-  document.addEventListener("pointercancel", () => (miniFlick = null), true);
+  const endMiniDrag = (event, cancelled) => {
+    const drag = miniDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    miniDrag = null;
+    if (!drag.moved) return;
+    // The click this release produces would open the player.
+    swallowMiniClick = !cancelled;
+    setTimeout(() => (swallowMiniClick = false), 400);
+    drag.mini.classList.remove("mini-dragging");
+    try {
+      drag.mini.releasePointerCapture(event.pointerId);
+    } catch (_) {}
+    const box = drag.mini.getBoundingClientRect();
+    const corner = cancelled
+      ? document.documentElement.dataset.miniCorner || "bottom-right"
+      : miniCornerFor(
+          box.left + box.width / 2 + drag.vx * MINI_FLING_MS,
+          box.top + box.height / 2 + drag.vy * MINI_FLING_MS,
+          document.documentElement.clientWidth,
+          window.innerHeight,
+        );
+    settleMini(drag.mini, corner);
+  };
+  document.addEventListener("pointerup", (event) => endMiniDrag(event, false), true);
+  document.addEventListener("pointercancel", (event) => endMiniDrag(event, true), true);
+  document.addEventListener(
+    "click",
+    (event) => {
+      if (!swallowMiniClick) return;
+      swallowMiniClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    true,
+  );
+
+  // A tap on the mini player while the minimize transition is still running
+  // lands on the transition's snapshot, not the player, and was lost: the
+  // viewer had to wait it out and tap again. Remember it and open the player
+  // the moment the transition ends.
+  document.addEventListener(
+    "pointerup",
+    (event) => {
+      const root = document.documentElement;
+      if (!root.dataset.routeTransition || event.target !== root) return;
+      const mini = document.querySelector(".persistent-player.mini");
+      const box = mini?.getBoundingClientRect();
+      if (
+        !box ||
+        event.clientX < box.left ||
+        event.clientX > box.right ||
+        event.clientY < box.top ||
+        event.clientY > box.bottom
+      )
+        return;
+      const open = () => {
+        if (root.dataset.routeTransition) {
+          requestAnimationFrame(open);
+          return;
+        }
+        document.querySelector(".persistent-player.mini [data-player-expand]")?.click();
+      };
+      requestAnimationFrame(open);
+    },
+    true,
+  );
 
   function attach(video) {
     if (!video) return;

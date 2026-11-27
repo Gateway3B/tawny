@@ -42,7 +42,7 @@ test("player controls update without replacing media when minimized and reopened
     await original.evaluate((video) => video === document.querySelector("#tawny-player-media")),
   ).toBe(true);
 
-  await appPage.locator(".mini-player-copy").click();
+  await appPage.locator("[data-player-expand]").click();
   await expect(appPage.locator(".persistent-player")).toHaveClass(/\bexpanded\b/);
   await expect(autoplay).toHaveAttribute("aria-pressed", String(before !== "true"));
   expect(

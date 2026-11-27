@@ -1023,6 +1023,11 @@ pub fn PersistentPlayer(expanded: ReadSignal<bool>) -> Element {
         let Some((opened_at, opened_video)) = opened else {
             return;
         };
+        // This device has a newer position than the server: one recorded
+        // while it could not be reached, not yet sent.
+        if resume_state.has_unsent_progress(&video_id) {
+            return;
+        }
         spawn(async move {
             let Ok(Some(saved)) = get_video_progress(video_id.clone()).await else {
                 return;
@@ -1431,26 +1436,26 @@ pub fn PersistentPlayer(expanded: ReadSignal<bool>) -> Element {
                     }
                 }
                 PlayerChapters {}
-            }
-            if !expanded() {
-                button {
-                    class: "mini-player-copy",
-                    aria_label: "Open {video.title}",
-                    onclick: move |_| { spawn(animated_navigate(Route::VideoDetail { id: open_video_id.clone() })); },
-                    Text { variant: TextVariant::Label, class: "truncate", "{video.title}" }
-                    Text { variant: TextVariant::Caption, class: "truncate", "{video.channel_name}" }
-                }
-
-                // Large and off the screen edge: a small X in the corner was
-                // missed for the title beside it, which opens the player.
-                Button {
-                    class: "mini-player-close self-center justify-self-start",
-                    fill: ButtonFill::Clear,
-                    color: Color::Neutral,
-                    size: ButtonSize::Lg,
-                    aria_label: "Close player",
-                    onclick: move |_| app_state.stop_playback(),
-                    X { size: 26 }
+                // Minimized, the player is the video alone. The picture is one
+                // button that opens it, beneath the play controls; a drag on it
+                // moves the player between corners instead (the controls script
+                // swallows the click a drag ends in).
+                if !expanded() {
+                    button {
+                        r#type: "button",
+                        class: "mini-player-open",
+                        "data-player-expand": "",
+                        aria_label: "Open {video.title}",
+                        onclick: move |_| { spawn(animated_navigate(Route::VideoDetail { id: open_video_id.clone() })); },
+                    }
+                    button {
+                        r#type: "button",
+                        class: "player-control-button mini-player-close",
+                        aria_label: "Close player",
+                        title: "Close player",
+                        onclick: move |_| app_state.stop_playback(),
+                        X { size: 18 }
+                    }
                 }
             }
         }

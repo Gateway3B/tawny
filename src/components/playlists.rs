@@ -192,10 +192,11 @@ fn DownloadsCard() -> Element {
             .filter(|entry| entry.state == DownloadState::Done);
         let kept_count = kept.clone().count();
         let kept_bytes = kept.map(|entry| entry.bytes).sum::<u64>();
-        let under_way = downloads
-            .iter()
-            .filter(|entry| entry.state == DownloadState::Downloading)
-            .count();
+        let under_way =
+            crate::downloads::merged_entries(&downloads, &app_state.download_queue.read())
+                .iter()
+                .filter(|entry| entry.pending())
+                .count();
         let subtitle = match (kept_count, under_way) {
             (0, 0) => "Videos kept on this device".to_string(),
             (count, 0) => format!("{} · {}", video_count(count), size_label(kept_bytes)),
@@ -305,33 +306,35 @@ pub fn Playlists() -> Element {
     };
 
     rsx! {
-        PageHeader {
-            end_slot: rsx! {
-                if playlist_count > 1 {
-                    // An icon like the header's other buttons: a word here
-                    // crowded the title on a phone.
+        PageHeader {}
+
+        Content { on_refresh: refresh, refreshing: previews.pending(),
+            // In a row over the covers, as a playlist and Downloads carry
+            // theirs: in the header they crowded Queue, History and Settings.
+            if !rows.is_empty() {
+                Stack { class: "playlist-actions mb-3", horizontal: true, gap: Space::Sm, align: StackAlign::Center,
                     Button {
-                        fill: ButtonFill::Clear,
-                        aria_label: if arranging { "Done arranging" } else { "Arrange playlists" },
-                        onclick: move |_| editing.toggle(),
-                        if arranging {
-                            Check { size: 22 }
-                        } else {
-                            ArrowUpDown { size: 22 }
+                        start: rsx! { Plus { size: 17 } },
+                        onclick: move |_| create_open.set(true),
+                        "New playlist"
+                    }
+                    if playlist_count > 1 {
+                        Button {
+                            fill: if arranging { ButtonFill::Solid } else { ButtonFill::Outline },
+                            color: Color::Neutral,
+                            start: rsx! {
+                                if arranging {
+                                    Check { size: 17 }
+                                } else {
+                                    ArrowUpDown { size: 17 }
+                                }
+                            },
+                            onclick: move |_| editing.toggle(),
+                            if arranging { "Done" } else { "Arrange" }
                         }
                     }
                 }
-
-                Button {
-                    fill: ButtonFill::Clear,
-                    aria_label: "New playlist",
-                    onclick: move |_| create_open.set(true),
-                    Plus { size: 22 }
-                }
-            },
-        }
-
-        Content { on_refresh: refresh, refreshing: previews.pending(),
+            }
             if rows.is_empty() {
                 EmptyState {
                     title: "No playlists yet",
@@ -663,6 +666,12 @@ pub fn PlaylistDetail(id: String) -> Element {
     // out, by `shown`.
     let remaining = videos.len().saturating_sub(visible_count());
     let shuffle_run = run.clone();
+    // What is on screen, as arranged and filtered: the same videos Play all
+    // would walk.
+    let download_videos = videos.clone();
+    let download_title = format!("Download {}", playlist.name);
+    let can_download =
+        (app_state.downloads_supported)() && videos.iter().any(|video| !video.is_live);
     let filtered = view.is_filtered();
     let clear_id = playlist.id.clone();
     let play_all_id = playlist.id.clone();
@@ -812,6 +821,18 @@ pub fn PlaylistDetail(id: String) -> Element {
                         disabled: shuffle_run.len() < 2,
                         start: rsx! { Shuffle { size: 17 } },
                         onclick: move |_| play_run(app_state, shuffled(shuffle_run.clone()), "Shuffling"),
+                    }
+                    if can_download {
+                        Button {
+                            class: "playlist-icon-only",
+                            aria_label: "Download all",
+                            fill: ButtonFill::Outline,
+                            color: Color::Neutral,
+                            start: rsx! { Download { size: 17 } },
+                            onclick: move |_| {
+                                app_state.open_bulk_download(download_title.clone(), download_videos.clone());
+                            },
+                        }
                     }
                     if watched_count > 0 {
                         Button {

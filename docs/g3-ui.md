@@ -109,7 +109,7 @@ Built on g3-ui; reuse them rather than rebuilding a variant:
 | `PageHeader` (`shell.rs`) | Every page's header: Back or the brand, title, toolbar, Queue/History/Settings |
 | `VideoGrid`, `VideoGridSkeleton`, `VideoCard` (`video_card.rs`) | Videos in a grid, with swipe actions and the action sheet |
 | `FeedFilterSegments` (`feed.rs`) | All / Videos / Shorts / Live, for the feed and a channel |
-| `PersistentPlayer` (`player.rs`) | The one media element, full-width on a video and a mini-player elsewhere |
+| `PersistentPlayer` (`player.rs`) | The one media element, full-width on a video and a floating mini player elsewhere |
 | `AppOverlays` (`overlays.rs`) | The video action sheet, Save to playlist, New playlist and Share sheets |
 
 ## Upgrading g3-ui
