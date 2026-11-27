@@ -330,10 +330,11 @@
   };
   document.addEventListener("pointerup", (event) => endMiniDrag(event, false), true);
   document.addEventListener("pointercancel", (event) => endMiniDrag(event, true), true);
+  // Only a real click: the player is opened below with a scripted one.
   document.addEventListener(
     "click",
     (event) => {
-      if (!swallowMiniClick) return;
+      if (!swallowMiniClick || !event.isTrusted) return;
       swallowMiniClick = false;
       event.preventDefault();
       event.stopPropagation();
@@ -341,25 +342,59 @@
     true,
   );
 
-  // A tap on the mini player while the minimize transition is still running
-  // lands on the transition's snapshot, not the player, and was lost: the
-  // viewer had to wait it out and tap again. Remember it and open the player
-  // the moment the transition ends.
+  // A tap on the picture opens the player, decided from the press rather than
+  // from the click the browser makes of it. That click needs the press and the
+  // lift on one element, and two quick taps had neither: one just after a drag
+  // pressed the card and lifted where it had glided from, and one during the
+  // minimize pressed the transition's snapshot and lifted on the card.
+  const insideBox = (box, x, y) =>
+    !!box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+  let miniTap = null;
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      miniTap = null;
+      if (event.button > 0) return;
+      const root = document.documentElement;
+      const mini = document.querySelector(".persistent-player.mini");
+      if (!mini) return;
+      const { clientX: x, clientY: y } = event;
+      const target = event.target instanceof Element ? event.target : null;
+      // Mid transition the press lands on the snapshot, so it is hit-tested
+      // against the player as laid out, sparing its own buttons.
+      const opens = root.dataset.routeTransition
+        ? target === root &&
+          insideBox(mini.getBoundingClientRect(), x, y) &&
+          ![...mini.querySelectorAll("button:not(.mini-player-open)")].some((button) =>
+            insideBox(button.getBoundingClientRect(), x, y),
+          )
+        : !!target?.closest(".mini-player-open") && mini.contains(target);
+      if (opens) miniTap = { pointerId: event.pointerId, x, y };
+    },
+    true,
+  );
+  document.addEventListener(
+    "pointermove",
+    (event) => {
+      if (!miniTap || miniTap.pointerId !== event.pointerId) return;
+      // Past the slop it is a drag, which the handlers above own.
+      if (Math.hypot(event.clientX - miniTap.x, event.clientY - miniTap.y) >= MINI_DRAG_SLOP) {
+        miniTap = null;
+      }
+    },
+    true,
+  );
+  document.addEventListener("pointercancel", () => (miniTap = null), true);
   document.addEventListener(
     "pointerup",
     (event) => {
+      if (!miniTap || miniTap.pointerId !== event.pointerId) return;
+      miniTap = null;
+      // The browser's own click, if it makes one, would open it a second time.
+      swallowMiniClick = true;
+      setTimeout(() => (swallowMiniClick = false), 400);
       const root = document.documentElement;
-      if (!root.dataset.routeTransition || event.target !== root) return;
-      const mini = document.querySelector(".persistent-player.mini");
-      const box = mini?.getBoundingClientRect();
-      if (
-        !box ||
-        event.clientX < box.left ||
-        event.clientX > box.right ||
-        event.clientY < box.top ||
-        event.clientY > box.bottom
-      )
-        return;
+      // Opened once the transition, if any, has let go of the page.
       const open = () => {
         if (root.dataset.routeTransition) {
           requestAnimationFrame(open);
@@ -367,7 +402,7 @@
         }
         document.querySelector(".persistent-player.mini [data-player-expand]")?.click();
       };
-      requestAnimationFrame(open);
+      open();
     },
     true,
   );
@@ -1489,11 +1524,18 @@
       // The tap then landed on whichever button had appeared, which is how
       // reaching for the controls paused the video.
       if (event.pointerType !== "mouse" || !canHover()) return;
+      // The mini player shows its few controls regardless. Raised there, the
+      // full bar came up over the morph when the mini player was clicked open.
+      if (root.closest(".persistent-player.mini")) return;
       showControls(false);
     });
-    listen(root, "pointerleave", () => {
+    listen(root, "pointerleave", (event) => {
       timelineHovering = false;
       hideScrubPreview();
+      // A mouse leaving takes a bar it raised down sooner. A finger "leaves"
+      // on every lift, and raising the bar here put the controls over the
+      // morph each time the mini player was tapped open.
+      if (event.pointerType !== "mouse" || !controls.classList.contains("controls-visible")) return;
       showControls(false, CONTROLS_LEAVE_HIDE_MS);
     });
     listen(root, "keydown", (event) => {
