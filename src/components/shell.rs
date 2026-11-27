@@ -5,8 +5,9 @@ use dioxus_icons::lucide::{History, House, List as ListIcon, ListVideo, Search, 
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use g3_native_plugins::NativePlugins;
 use g3_route_transitions::{
-    ROUTE_TRANSITION_PERSISTENT_REGION_CLASS, RouteTransitionPageRegion, animated_back_or_navigate,
-    animated_navigate, use_native_back_navigation_with_layer,
+    NavigationTransition, ROUTE_TRANSITION_PERSISTENT_REGION_CLASS, RouteTransitionPageRegion,
+    animated_back_or_navigate, animated_navigate, animated_navigate_with,
+    use_native_back_navigation_with_layer,
 };
 use g3_ui::{
     AdaptiveNav, BackButton, Button, ButtonFill, Color, Header, NavItem, Space, Stack, StackAlign,
@@ -436,9 +437,30 @@ fn ShellContent() -> Element {
                                 _ => last,
                             }
                         };
-                        if target != tab_route {
-                            spawn(animated_navigate(target));
+                        if target == tab_route {
+                            return;
                         }
+                        if target == (Route::Playlists {}) {
+                            spawn(animated_navigate(target));
+                            return;
+                        }
+                        // Back from a playlist the tab returned to must reach
+                        // the index, as it would had the playlist been opened
+                        // from there, not the tab that was left. The helper
+                        // captures the old page before it changes the route,
+                        // so it can push only the playlist: once it has, its
+                        // entry becomes the index and the playlist is pushed
+                        // on top. Both land before the next render, so the
+                        // index is never drawn.
+                        spawn(async move {
+                            animated_navigate_with(target.clone(), NavigationTransition::CrossFade)
+                                .await;
+                            if router().current::<Route>() == target {
+                                let navigator = navigator();
+                                navigator.replace(Route::Playlists {});
+                                navigator.push(target);
+                            }
+                        });
                     },
                 }
                 NavItem {
