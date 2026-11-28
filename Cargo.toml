@@ -11,7 +11,7 @@ repository = "https://github.com/Gateway3B/tawny"
 [dependencies]
 dioxus = { version = "=0.8.0-alpha.4", features = ["router", "fullstack"] }
 dioxus-fullstack = "=0.8.0-alpha.4"
-dioxus-icons = "=0.2.0-alpha.3"
+dioxus-icons = "=0.2.0-alpha.4"
 g3-route-transitions = { version = "0.6", features = ["native-back"] }
 g3-native-plugins = { version = "0.4.4", features = ["external-url", "appearance", "back-button", "clipboard", "deep-links", "media", "safe-area", "storage"] }
 g3-ui = { version = "0.7", features = ["transitions"] }
@@ -223,14 +223,13 @@ manganis = { git = "https://github.com/Gateway3B/dioxus", branch = "main" }
 # dioxus-icons asks for these two by name from crates.io.
 dioxus-vdom-template = { git = "https://github.com/Gateway3B/dioxus", branch = "main" }
 lazy-js-bundle = { git = "https://github.com/Gateway3B/dioxus", branch = "main" }
-# Published 0.2.0-alpha.3 still depends on `dioxus-core-template`, which the
-# upstream rename removed.
-dioxus-icons = { git = "https://github.com/Gateway3B/dioxus-icons", branch = "main" }
+# dioxus-icons 0.2.0-alpha.4 asks crates.io for these.
+dioxus-core = { git = "https://github.com/Gateway3B/dioxus", branch = "main" }
+dioxus-vdom = { git = "https://github.com/Gateway3B/dioxus", branch = "main" }
 # g3-auth's desktop and mobile cookie stores; no 0.8 release upstream.
 dioxus-cookie = { git = "https://github.com/Gateway3B/dioxus-cookie", branch = "main" }
-# g3-ui uses it. Published 0.8.0-alpha.3 still names the old
-# `dioxus::dioxus_core` paths, which the fork no longer has.
-dioxus-sdk-time = { git = "https://github.com/Gateway3B/sdk", branch = "main" }
+# Replaces dioxus-sdk-time; part of the Dioxus repo since 0.8.0-alpha.4.
+dioxus-timers = { git = "https://github.com/Gateway3B/dioxus", branch = "main" }
 # g3 crates are not published until Dioxus 0.8.0:
 g3-auth = { git = "https://github.com/g3techhq/g3-auth", branch = "main" }
 g3-cache = { git = "https://github.com/g3techhq/g3-cache", branch = "main" }
