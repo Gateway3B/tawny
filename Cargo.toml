@@ -9,15 +9,15 @@ publish = false
 repository = "https://github.com/Gateway3B/tawny"
 
 [dependencies]
-dioxus = { version = "=0.8.0-alpha.3", features = ["router", "fullstack"] }
-dioxus-fullstack = "=0.8.0-alpha.3"
+dioxus = { version = "=0.8.0-alpha.4", features = ["router", "fullstack"] }
+dioxus-fullstack = "=0.8.0-alpha.4"
 dioxus-icons = "=0.2.0-alpha.3"
 g3-route-transitions = { version = "0.6", features = ["native-back"] }
 g3-native-plugins = { version = "0.4.4", features = ["external-url", "appearance", "back-button", "clipboard", "deep-links", "media", "safe-area", "storage"] }
 g3-ui = { version = "0.7", features = ["transitions"] }
 g3-auth = { version = "0.2", features = ["record-id"] }
 g3-cache = "0.3"
-manganis = "=0.8.0-alpha.3"
+manganis = "=0.8.0-alpha.4"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.140"
 surrealdb-types = { version = "=4.0.1" }
@@ -239,7 +239,7 @@ g3-route-transitions = { git = "https://github.com/g3techhq/g3-route-transitions
 g3-ui = { git = "https://github.com/g3techhq/g3-ui", branch = "main" }
 
 [dev-dependencies]
-dioxus-ssr = "=0.8.0-alpha.3"
+dioxus-ssr = "=0.8.0-alpha.4"
 # The server build compiles the Android relay to test it.
 webpki-root-certs = "1"
 tower = { version = "0.5", features = ["util"] }
